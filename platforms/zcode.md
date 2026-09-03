@@ -1,0 +1,45 @@
+# effort-router — ZCode (GLM 백엔드) 어댑터
+
+대상: ZCode 클라이언트를 GLM Coding Plan(Z.ai) 백엔드로 연결해 쓰는 환경.
+ZCode는 Claude Code가 아닌 별도 하니스다 → 백엔드 교체 매핑(glm.md)의 '하니스 불변' 전제는 여기 적용되지 않는다. 백엔드가 GLM이므로 본문 §2의 gpt-5.6 모델 정책도 그대로 쓰지 않는다.
+
+삽입처: 스킬은 사용자 스코프 `~/.zcode/skills/effort-router/`(ZCode 우선) 또는 `~/.agents/skills/effort-router/`(타 도구 공유)에 설치한다. 전역 발동 규칙은 `~/.zcode/AGENTS.md`에, 프로젝트 규칙은 `<repo>/AGENTS.md`에 병합한다. 커스텀 에이전트 디렉터리는 없다 — 설치 파일 없음, 역할 계약은 스폰 프롬프트 주입으로 대체한다.
+
+> 본 문서는 effort-router SKILL.md(§1 티어·§3 제약·§6 매핑)의 파생 축약 이식본이다 — 규칙 충돌 시 본문이 우선한다. 본문 갱신 시 본 파일도 파생 갱신한다.
+
+## 티어 판정 (본문 §1 축약)
+
+- **S** 단일 파일·텍스트/스타일 · **M** 2~10파일·~1000줄 이하·위험 지표 음성 · **L** 10파일·1000줄 초과 또는 위험 지표 양성(규모 무관) · **XL** 코어 엔진·전면 리팩터링 · **보안감사** 별도 트랙
+- **폴백**: 지표 충돌 시 상위 티어 — 하향 예외는 실질이 국소·기계적 변경임이 확인될 때 근거와 함께만.
+- **은닉 변수**(해당 시 1티어 상향): 요청 경로 동작 변경 / 보안 통제 자체 변경 / 코드만으로 판별 불가 변수(확인 질문 1개 선행).
+
+## 실행 계약 (본문 §3·Output Contract 축약)
+
+- 작업 착수 전 티어 판정·실행 지침 요약을 먼저 출력한다.
+- 적용 에이전트 라인 = `general-purpose (주입 역할: plan-high 상당)` 형태 또는 `없음(메인 세션 직접)`. 팬아웃 라인은 `ON: general-purpose × 3 (완전성/기술적오류/위험)` 형태. 단계 상태 라인은 인계를 실제 운반할 때만 기입.
+- **스폰 타입 화이트리스트 = 빌트인만** — `general-purpose`(일반·멀티스텝), `Explore`(읽기 전용 탐색), `judge`(렌더링 산출물 시각 검수). Claude 에이전트명(`plan-high`, `implement-med`, `review-pr-high` 등)을 subagent_type으로 지목하지 않는다 — 존재 ≠ 허가.
+- **judge는 시각 검수 전용** — 계획 적대 검증·PR 리뷰에 쓰지 않는다(②검토·④리뷰는 `general-purpose`).
+- 증거기반 보고·§5 state.json 계약은 하니스 무관 — 그대로 적용한다.
+
+## ZCode 대응 (본문 §6)
+
+- 서브에이전트: 빌트인 3종만 스폰 가능. 커스텀 에이전트 파일(`~/.claude/agents/` 상당)은 설치 불가 — 역할 분리는 동봉 `agents/*.md`의 역할 계약(산출물 필수 요소·금지 행동)을 스폰 프롬프트에 원문 주입해 구현한다.
+- effort·모델: 스폰 인자에 없음 — 서브에이전트는 백엔드(GLM) 모델을 공유한다. glm.md의 원칙이 그대로 성립: 라우팅의 본질은 effort 수치가 아니라 **역할·산출물 분리**. 메인 세션 model·effort는 UI 또는 `/model`로만 변경(본문 §3).
+- 팬아웃(§2): **ON 가능** — 한 메시지에 `general-purpose` 병렬 스폰, 프롬프트마다 렌즈 1개 주입(L=3렌즈, XL=5렌즈). 병합 주체는 메인 세션. 반려 게이트·라운드 상한은 본문 그대로.
+- 상태·인계(§5): `state.json`·증거번들을 과업 루트에 둔다. writer는 메인 세션 단일 — 서브에이전트는 완료 보고만.
+- 컨텍스트 등재: 스킬(`~/.zcode/skills/` 우선 → `~/.agents/skills/`) + `~/.zcode/AGENTS.md`(전역) → `<repo>/AGENTS.md`(프로젝트 — 나중 로드가 전역을 좁혀 덮는다).
+- 설치 검증: 동봉 `verify_global_install.py`는 `~/.codex` 전용이라 이 환경에서 무효 — 설치본 SKILL.md 존재·`~/.zcode/AGENTS.md` 병합 단편 존재를 수동 확인한다.
+
+## role↔스폰 매핑표 (원본 `agents/*.md` 역할 증류)
+
+| 본문 §2 역할 | ZCode 스폰 | 비고 |
+|--------------|-----------|------|
+| ①계획(M) | 메인 세션 (얇은 계획) | 계약 요소 확정이 ① 최소 완료 |
+| ①계획(L/XL) | `general-purpose` + `plan-high`/`plan-xhigh` 계약 주입 | Phase 분해·검증 claims 산출 |
+| ②검토(L/XL) | `general-purpose` ×3/×5 병렬 + 렌즈 1개씩 주입 | 팬아웃 ON, 병합=메인 |
+| ③구현 | 메인 / `general-purpose` + `implement-med` 계약 주입 | 보존 제약 verbatim 복사 |
+| ③구현(XL 임계경로) | `general-purpose` + `implement-xhigh`/`core-xhigh` 계약 주입 | |
+| ④리뷰 | `general-purpose` + `review-pr-*` 계약·claims 전문 주입 | merge 권위는 메인 |
+| 보안감사 | `general-purpose` + `security-audit` 계약 주입 + 교차 검증 1건 이상 | CRITICAL 즉시 최상단 |
+
+- 모델·effort 열 없음 — 서브에이전트는 백엔드 모델을 공유하며 스폰 시 제어할 수 없다.

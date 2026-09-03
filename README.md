@@ -96,6 +96,7 @@ Claude Code와 기타 환경에서는 티어 판정·증거 계약·Output Contr
 | Qwen Code | `platforms/qwen.md` | QWEN.md 병합 단편 |
 | Gemini CLI | `platforms/gemini.md` | GEMINI.md 병합 단편 |
 | GLM Coding Plan | `platforms/glm.md` | 백엔드 교체 매핑(Claude Code 하니스 유지) |
+| ZCode (GLM 백엔드) | `platforms/zcode.md` | 빌트인 스폰 + 역할 계약 주입 매핑. 백엔드 교체(Claude Code+GLM)는 glm.md |
 | ChatGPT 앱 | `platforms/chat-app.md` | Codex 화면/Work/일반 Chat 구분 |
 | Grok Bot (Cursor) | `platforms/grok.md` | 스킬 저장 + Task/CloudAgent 매핑. xAI grok.com은 chat-app.md |
 
