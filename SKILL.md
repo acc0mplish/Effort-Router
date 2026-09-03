@@ -1,17 +1,17 @@
 ---
 name: effort-router
-description: 작업 티어(S/M/L/XL) 판정·단계별(계획/검토/구현/리뷰/검증) 모델·에포트 배정 스킬; 화이트리스트 서브에이전트로만 라우팅. Claude Code 전용.
+description: Codex와 ChatGPT에서 작업 티어(S/M/L/XL)와 단계별 모델·에포트를 판정한다. 명세·검토·난제는 GPT-5.6 Sol, 명확한 일반 실행은 GPT-5.6 Luna max로 라우팅할 때 사용한다.
 ---
 
 # Effort Router
 
-작업의 규모·위험도를 티어로 판정하고, 단계별(계획/검토/구현/리뷰/검증) 모델·에포트를 정해진 서브에이전트로 배정하는 스킬이다. 판정을 출력한 뒤 작업을 수행한다.
+작업의 규모·위험도를 티어로 판정하고, 단계별(계획/검토/구현/리뷰/검증) 모델·에포트를 배정하는 스킬이다. Codex와 ChatGPT를 1급 대상으로 삼고 판정을 출력한 뒤 작업을 수행한다.
 
 ```text
 Decision(티어 판정) → Requirement → Acceptance → Task → Evidence → Learning
 ```
 
-> 라우팅(§2 화이트리스트·스폰)은 Claude Code 서브에이전트 시스템(~/.claude/agents/)에 의존한다. 다른 하니스에서는 티어 판정(§1)·실행 제약(§3)·Output Contract가 유효하고, 라우팅·팬아웃·상태 계약은 §6 매핑을 따른다.
+> OpenAI 클라이언트는 §2의 모델 정책과 `~/.codex/agents/*.toml`을 사용한다. ChatGPT 데스크톱 앱의 Codex 화면과 Codex CLI는 같은 로컬 설정을 공유한다. ChatGPT Work에서는 같은 정책을 모델 선택기에 적용하되 로컬 custom-agent TOML은 사용하지 않는다. Claude Code는 동봉 `agents/*.md`의 슬롯 매핑을 유지한다.
 
 ## When to Use
 
@@ -20,6 +20,18 @@ Decision(티어 판정) → Requirement → Acceptance → Task → Evidence →
 - 단계 사이 인계 형식·진행 상태 운반이 필요할 때 (계획→구현→리뷰)
 - 모델·에포트 배정 근거가 필요할 때
 - 보안 감사·출시 검토를 준비할 때
+
+## 설치·업데이트 요청 계약
+
+Codex 또는 ChatGPT 데스크톱 앱에 이 Skill을 설치·업데이트해 달라는 요청에는 파일 복사만 안내하지 않는다. 아래 5가지를 모두 제시해야 설치 안내 완료다.
+
+1. Skill을 `~/.codex/skills/effort-router/`에 설치
+2. custom-agent TOML을 `~/.codex/agents/`에 설치
+3. `~/.codex/config.toml`에 기본 `gpt-5.6-luna / max`와 subagent 활성 설정을 **병합**
+4. `~/.codex/AGENTS.md`에 전역 발동·승격 규칙을 **병합**
+5. Codex/ChatGPT 앱 재시작 후 설치 검증 실행
+
+기존 `config.toml`과 `AGENTS.md` 전체를 덮어쓰지 않는다. 필요한 키·단편만 병합하며, 동일 TOML table을 중복 생성하지 않는다. Skill 파일 존재와 전역 활성화는 별도 상태로 구분해 보고한다. 정확한 설정 단편과 검증 명령은 `platforms/codex.md`를 따른다.
 
 ## 프로젝트 티어 ≠ 작업 티어
 
@@ -43,38 +55,49 @@ Decision(티어 판정) → Requirement → Acceptance → Task → Evidence →
 
 **긴급 트랙**: **사용자가 운영 장애 핫픽스로 명시 지시한 경우만** — 티어 판정 후 ③구현을 선행하고 ②검토·④리뷰를 사후 수행한다(사후 절차는 §5). 장애 복구를 검토 대기시키지 않는다.
 
-## 2. 라우팅 테이블 (에이전트 화이트리스트)
+## 2. 라우팅 테이블
 
-아래 테이블의 에이전트만 호출한다. `~/.claude/agents/`에 테이블 밖 파일이 있어도 무시한다 — **존재 ≠ 허가**.
+아래 역할만 호출한다. Codex는 `~/.codex/agents/*.toml`, Claude Code는 `~/.claude/agents/*.md`의 동명 역할을 사용한다. 테이블 밖 파일이 있어도 무시한다 — **존재 ≠ 허가**.
 
 **테이블 확장 판정**: 신규 에이전트 등재는 독립된 권한과 별도 검증 가능한 판단을 내놓을 때만 한다.
+
+### OpenAI 기본 모델 정책
+
+| 작업 성격 | 모델·에포트 | 적용 역할 |
+|---|---|---|
+| 요구와 완료 조건이 확정된 일반 구현·반복 실행 | `gpt-5.6-luna / max` | `coder-medium`, `implement-med` |
+| 명세 작성·계획·스펙 검토·문제 분석·해결안 판단·PR 판정 | `gpt-5.6-sol / high~xhigh` | `plan-*`, `plan-adversary-xhigh`, `review-pr-*` |
+| XL 임계경로·보안 감사·동일 접근 2회 실패한 미해결 문제 | `gpt-5.6-sol / max` | `core-xhigh`, `security-audit`, 메인 세션 승격 |
+| 구현 중 설계 판단이 계속 필요한 XL 작업 | `gpt-5.6-sol / xhigh` | `implement-xhigh` |
+
+`gpt-5.6-terra`는 기본 라우팅에 쓰지 않는다. `max`는 단일 작업의 깊이이며 멀티에이전트를 뜻하지 않는다. `ultra`는 독립 하위 작업이 있고 병렬 이득이 실제로 클 때만 별도 선택한다.
 
 ### S
 - ① 계획: 생략
 - ② 검토: 셀프 재실행 확인(§3) — '자기 산출물 검토는 검토가 아니다'(§2 규칙)는 §5 계약이 적용되는 M+의 검토 위임에 대한 규칙, S는 폭발 반경이 작아 예외
-- ③ 구현: 메인 세션 직접 / 위임 시 `coder-medium` (haiku)
-- ④ 리뷰: `review-pr-high` (텍스트·스타일만 변경 시 생략)
+- ③ 구현: 메인 세션 직접 / 위임 시 `coder-medium` (OpenAI: Luna/max)
+- ④ 리뷰: `review-pr-high` (OpenAI: Sol/high, 텍스트·스타일만 변경 시 생략)
 
 ### M
-- ① 계획: `plan-high` (기본 = 얇은 계획 §5 — 계약 요소 우선 확정)
+- ① 계획: `plan-high` (OpenAI: Sol/high, 기본 = 얇은 계획 §5 — 계약 요소 우선 확정)
 - ② 검토: 생략 (plan-high 재호출 금지 — 자기 산출물 검토는 검토가 아니다)
-- ③ 구현: `implement-med`
-- ④ 리뷰: `review-pr-high`
+- ③ 구현: `implement-med` (OpenAI: Luna/max)
+- ④ 리뷰: `review-pr-high` (OpenAI: Sol/high)
 
 ### L
-- ① 계획: `plan-high` (Phase 분해 필수 — 깊이는 위험에 비례, 임계경로·위험 지표 양성 스코프에 심층 §5)
-- ② 검토: `plan-adversary-xhigh` 팬아웃 ●●● (기본 3렌즈)
-- ③ 구현: `implement-med` (Phase당 ≤5파일, 격리 필요 시 worktree)
-- ④ 리뷰: `review-pr-xhigh` → 최종 merge 판정 권위는 메인 세션
+- ① 계획: `plan-high` (OpenAI: Sol/high, Phase 분해 필수 — 깊이는 위험에 비례, 임계경로·위험 지표 양성 스코프에 심층 §5)
+- ② 검토: `plan-adversary-xhigh` (OpenAI: Sol/xhigh) 팬아웃 ●●● (기본 3렌즈)
+- ③ 구현: `implement-med` (OpenAI: Luna/max, Phase당 ≤5파일, 격리 필요 시 worktree)
+- ④ 리뷰: `review-pr-xhigh` (OpenAI: Sol/xhigh) → 최종 merge 판정 권위는 메인 세션
 
 ### XL
-- ① 계획: `plan-xhigh`
-- ② 검토: `plan-adversary-xhigh` 팬아웃 ●●● (5렌즈)
-- ③ 구현: `implement-xhigh` / 직렬 임계경로 코어만 `core-xhigh` (기준: plan-xhigh 산출물의 임계경로 식별)
-- ④ 리뷰: `review-pr-xhigh` → 최종 merge 판정 권위는 메인 세션
+- ① 계획: `plan-xhigh` (OpenAI: Sol/xhigh)
+- ② 검토: `plan-adversary-xhigh` (OpenAI: Sol/xhigh) 팬아웃 ●●● (5렌즈)
+- ③ 구현: `implement-xhigh` (OpenAI: Sol/xhigh) / 직렬 임계경로 코어만 `core-xhigh` (OpenAI: Sol/max, 기준: plan-xhigh 산출물의 임계경로 식별)
+- ④ 리뷰: `review-pr-xhigh` (OpenAI: Sol/xhigh) → 최종 merge 판정 권위는 메인 세션
 
 ### 보안감사
-- `security-audit` + 교차 검증 1건 이상 (`review-pr-xhigh` 재판정 또는 상위 세션 직접). CRITICAL 즉시 최상단 보고.
+- `security-audit` (OpenAI: Sol/max) + 교차 검증 1건 이상 (`review-pr-xhigh` 재판정 또는 상위 세션 직접). CRITICAL 즉시 최상단 보고.
 
 ## ●●● 팬아웃
 
@@ -99,16 +122,17 @@ Decision(티어 판정) → Requirement → Acceptance → Task → Evidence →
 
 ## 3. 실행 메커니즘 (제약)
 
-- **effort는 에이전트 파일 frontmatter에 고정** — 호출 시 변경 불가. 다른 조합은 파일 추가.
-- **effort의 실발효는 환경 의존이며 조용히 강등될 수 있다** — 검증됨: 카탈로그 미수록 모델(GLM 프록시)에서 xhigh는 high로 자동 강등 (스폰된 에이전트 내 `CLAUDE_EFFORT` 프로브로 확인). 강등되면 xhigh와 high 계획의 차이는 프롬프트 내용뿐이다. 라우팅의 본질은 effort 수치가 아니라 **역할·산출물 분리**다. Output Contract의 effort는 설정값이며 실발효 값과 다를 수 있음을 전제한다.
-- **model은 호출 시 덮어쓰기 가능** — `Agent(model: 슬롯명)`. 슬롯(sonnet/opus/haiku/fable)의 실체는 환경별 프록시 매핑을 따른다.
+- **OpenAI model·effort는 Codex custom-agent TOML에 고정**한다. ChatGPT Work에서는 에이전트 스폰 전 모델 선택기에서 같은 조합을 선택한다.
+- **Claude Code effort는 에이전트 파일 frontmatter에 고정**되며 호출 시 변경할 수 없다. 프록시 환경에서는 조용히 강등될 수 있다.
+- **model override 금지** — 역할 파일의 모델과 다른 모델을 스폰 인자로 덮어쓰지 않는다. 매핑 변경은 역할 파일과 본 표를 함께 고친다.
 - **호출 허가는 화이트리스트** — 테이블 밖 에이전트명(tdd-guide, code-reviewer 등)은 설치 여부와 무관하게 호출 금지.
 - **라우터는 메인 세션 전용** — 구현·리뷰·감사 서브에이전트는 effort-router를 재호출하지 않는다(역할은 이미 배정됐다).
 - **증거기반 보고** — 구현 에이전트 완료 보고는 테스트 '결과 서술'이 아니라 실행 명령 원문 + exit code. 상위 세션은 핵심 테스트 1회 재실행을 기본 절차로. 핵심 테스트가 없는 과제(문서·설정)는 계획 단계에서 대체 확인 수단(grep 문구 일치·diff·스키마 검증)을 claims에 지정한다.
 - **리컨 병렬화** — ①계획 스폰 직후 메인 세션은 계획 도착을 기다리지 않고 확정 필요한 read-only 리컨을 병렬 수행한다: 백업 스냅샷, grep 대상·문구 위치 확정, 파일 지도, 테스트 목록. 결과는 계획 번들 병합 또는 claims evidence 대상 등록(병합 주체 = 메인 세션). 스폰 없음 — 메인 세션 직접(화이트리스트 불변). 리컨은 검증 준비이지 선행 게이트가 아니다 — 계획 도착 전 미완료분은 수령 후 완료한다.
 - **계약은 인계·상태·증지만 규정** — 서브에이전트 내부 실행(도구 사용·구현 경로·디버깅 전략)은 규정하지 않는다.
-- **메인 세션 effort는 `/effort`(대화형)로만 변경** — S티어 상향은 사용자 안내로 처리. '막힘' = 동일 접근 2회 연속 실패 또는 테스트 재적화.
-- 에이전트 파일은 본 스킬 디렉터리 `agents/`에 동봉. 스킬 갱신 시 **사본 2곳**(`~/.claude/skills/effort-router/`·등록본 `~/.claude/agents/`)으로 재반영 후 `diff -r`(진행 중 과업 디렉토리를 `-x`로 명시 제외) 빈 출력으로 동기화 확인.
+- **미해결 승격** — 동일 접근 2회 연속 실패, 재현 불안정, 또는 테스트가 반복 실패하면 루틴 실행을 중단하고 메인/후속 역할을 `gpt-5.6-sol / max`로 승격해 원인 분석과 해결안 판정을 다시 한다.
+- **메인 세션 model·effort는 UI 또는 `/model`로만 변경**한다. 에이전트는 변경했다고 주장하지 않고 필요한 전환을 안내한다.
+- 스킬 갱신 시 원본과 설치본(`~/.codex/skills/effort-router/`, `~/.codex/agents/*.toml`)의 매핑을 비교하고 검증한다. Claude Code 배포 시에는 기존 사본 2곳도 별도로 동기화한다.
 
 ## 4. 리뷰 판정과 merge 권한
 
@@ -176,18 +200,21 @@ verify(검증) = ④리뷰 통과 후 done 전 **메인 세션의 핵심 테스�
 
 ¹ Harness-of-Harness (Shanghai AI Lab, 2026) — 계획자/개발자/QA 3역할·증거번들·계보. ² ④리뷰(review-pr 2종)·보안감사(security-audit)는 Edit·Write 미부여 — Bash 포함이라 절대적 차단은 아니며 메인의 무결성 확인이 보완한다. 상태계약 원형: SKILL.state (arXiv 2608.26263).
 
-## 6. 타 하니스 매핑 (문서 기준)
+## 6. 환경 매핑
 
-본 섹션은 실행 계약이 아니라 문서 매핑이다. §2 화이트리스트는 Claude Code 전용 — 다른 하니스에서 티어 판정(§1)·§3 제약·Output Contract는 그대로 적용하고, 라우팅은 아래 대응물로 치환한다. 화이트리스트 계약이 없는 하니스에서 역할 분리가 필요하면 하니스 고유 스폰 수단을 쓰되 본 스킬의 에이전트명(plan-high 등)은 지목하지 않는다.
+Codex와 ChatGPT는 §2의 OpenAI 모델 정책을 직접 적용한다. 다른 하니스는 티어 판정(§1)·증거 계약·Output Contract만 유지하고 고유 모델 체계로 치환한다.
 
 | 개념 | Claude Code (기준) | Codex CLI | Qwen Code | Gemini CLI |
 |------|--------------------|-----------|-----------|------------|
 | 서브에이전트 | `~/.claude/agents/` + Agent 스폰 | 멀티에이전트 도구(`spawn_agent` 등, 기본 on)·커스텀 에이전트 TOML(`~/.codex/agents/`·`.codex/agents/`) | `/fork` 배경 에이전트(전체 대화 상속) — 역할별 스폰 미확인 | 빌트인 서브에이전트(`@이름` 지정·자동 위임) + `settings.json` `agents.overrides` |
-| effort | 에이전트 파일 frontmatter 고정 | `model_reasoning_effort`(minimal~xhigh, xhigh는 모델 의존)·스폰 기본값 `agents.default_subagent_reasoning_effort` | settings `model.*` — effort 상당 키 미확인 | thinking budget(생성 설정) — effort와 직접 대응 없음 |
+| effort | 에이전트 파일 frontmatter 고정 | `model_reasoning_effort`(low~max, 지원 범위는 모델 의존)·스폰 기본값 `agents.default_subagent_reasoning_effort` | settings `model.*` — effort 상당 키 미확인 | thinking budget(생성 설정) — effort와 직접 대응 없음 |
 | 모델 지정 | 호출 시 `Agent(model:)` 덮어쓰기 | 스폰 시 명시(없으면 `agents.default_subagent_model`) | `settings.json`(프로젝트 > 사용자) | `agents.overrides.<에이전트>.modelConfig.model` |
-| 팬아웃(§2) | `plan-adversary-xhigh` 병렬 | 스폰 가능하나 화이트리스트 계약 없음 → 본 스킬 렌즈 팬아웃 미적용 | 미확인 | 위임 가능하나 렌즈 팬아웃 계약 없음 → 미적용 |
+| 팬아웃(§2) | `plan-adversary-xhigh` 병렬 | 독립성이 있을 때 동명 custom agent를 스폰하며 L=3렌즈, XL=5렌즈 | 미확인 | 위임 가능하나 렌즈 팬아웃 계약 없음 → 미적용 |
 | 상태·인계(§5) | state.json + 증거번들(스폰 간 인계) | 파일 계약은 하니스 무관 — 수동 운반 시에만 성립 | 좌동 | 좌동 |
-| 컨텍스트 등재 | CLAUDE.md·스킬 | AGENTS.md(`~/.codex/` → 리포 → 하위 디렉터리) | QWEN.md(+AGENTS.md 판독) | GEMINI.md(글로벌 → 워크스페이스 → JIT) |
+| 컨텍스트 등재 | CLAUDE.md·스킬 | AGENTS.md(`~/.codex/` → 리포 → 하위 디렉터리) + 로컬 Skill | QWEN.md(+AGENTS.md 판독) | GEMINI.md(글로벌 → 워크스페이스 → JIT) |
+
+- **ChatGPT 데스크톱 앱 Codex 화면**: Codex CLI와 같은 로컬 Skill·`config.toml`·custom agents를 사용한다.
+- **ChatGPT Work**: Skill은 사용할 수 있으나 로컬 Codex custom-agent TOML을 전제로 하지 않는다. 에디터의 모델·reasoning control에서 §2 조합을 선택하고, 호스팅 subagent는 실제 독립 병렬 작업이 있을 때만 요청한다.
 
 - **GLM Coding Plan(Z.ai)**: 하니스가 아니라 Claude Code의 백엔드 교체다 — 적용 대상에 Claude Code가 공식 포함됨. 슬롯 실체가 프록시 매핑을 따르고 effort 강등(§3 실측)이 발생할 수 있다.
 - 표의 '미확인'은 공식 문서에서 확인하지 못한 항목이다 — 확인 전까지 단정하지 않는다.
@@ -209,7 +236,7 @@ verify(검증) = ④리뷰 통과 후 done 전 **메인 세션의 핵심 테스�
 
 실제 Agent 호출의 subagent_type·model 파라미터는 Contract에 명시한 값과 일치해야 한다. 불일치 = 라우팅 위반.
 
-타 하니스에서는 적용 에이전트 라인에 하니스 대응물 또는 `없음(단일 세션)`, 팬아웃 라인에 `OFF`(화이트리스트 없음 — §6), 단계 상태 라인은 §5 인계를 실제로 운반할 때만 기입한다.
+ChatGPT Work에서는 적용 에이전트 라인에 `없음(ChatGPT Work 단일 세션)`과 선택한 모델·에포트를 적는다. 다른 하니스에서는 대응물 또는 `없음(단일 세션)`을 적고, 단계 상태 라인은 §5 인계를 실제로 운반할 때만 기입한다.
 
 ## 자주 하는 실패
 
@@ -229,4 +256,4 @@ verify(검증) = ④리뷰 통과 후 done 전 **메인 세션의 핵심 테스�
 | gap 판정 후 재구현 없이 done 선언 | gap이 다음 라운드를 만든다 — done은 claims 전부 verified일 때만(폐기·대체는 evidence superseded 표기) |
 | ①계획 대기 중 메인 세션이 가만히 대기 | 리컨 병렬화(§3) — 백업·grep 확정·파일 지도·테스트 목록으로 대기를 검증 준비로 전환 |
 | 모든 스코프에 균일한 깊이의 계획 요구 | 얇은 계획(§5) — 깊이는 위험에 비례, 계약 요소 확정이 ① 최소 완료, 심층은 임계경로·코어 모듈에만 |
-| 타 하니스에서 plan-high 등 Claude Code 에이전트명 그대로 지목 | §6 매핑으로 대응물 확인 — 없으면 `없음(단일 세션)`. §2 화이트리스트는 Claude Code 전용 |
+| custom agent가 없는 환경에서 plan-high 등을 실제 agent처럼 지목 | §6 매핑 확인 — ChatGPT Work는 `없음(ChatGPT Work 단일 세션)`, Codex는 설치된 동명 TOML만 사용 |

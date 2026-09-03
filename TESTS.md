@@ -217,6 +217,75 @@ round-3 적대검토 병합 발견 26건(HIGH 9/MEDIUM 11/LOW 6) 전부 반영. 
 
 **변경**: SKILL.md §6 Codex 서브에이전트 셀, platforms/codex.md(메커니즘·매핑표 표기·주의), 본 섹션. agents/ 10파일 무변경.
 
+## r7 OpenAI Sol/Luna-max 라우팅 (2026-09-03)
+
+사용자 운용 기준을 Codex와 ChatGPT 앱에 반영했다. 기본 실행은 `gpt-5.6-luna / max`, 명세·검토·문제 해결·판정은 `gpt-5.6-sol`, 동일 접근 2회 실패·임계경로·보안 감사는 `gpt-5.6-sol / max`다. Terra는 기본 라우팅에서 제외했다.
+
+### 정적 검증
+
+- `uv run --with pyyaml python ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py .` → exit 0, `Skill is valid!`
+- Python `tomllib`로 `platforms/codex-agents/*.toml`과 `~/.codex/agents/*.toml` 각 10개 파싱 → 전부 성공.
+- 두 집합의 role→model→effort 매핑 → 10/10 일치.
+- 기본 매핑의 `gpt-5.6-terra` agent → 0건.
+- `~/.codex/config.toml` TOML 파싱 → 성공; 최상위 기본값 `gpt-5.6-luna / max` 확인. 기존 명시적 profile 값은 보존.
+- `~/.codex/AGENTS.md`의 구 `Terra·medium/high`, `Luna·low/medium` 라우팅 문구 → 0건.
+- `agents/openai.yaml` Ruby YAML 파싱 → 성공; `allow_implicit_invocation: true` 확인.
+- 첫 validator 직접 실행은 로컬 Python의 `ModuleNotFoundError: No module named 'yaml'`로 exit 1. 코드 결함이 아니므로 임시 `uv --with pyyaml` 환경에서 재실행해 통과했다.
+
+### Codex 실동작
+
+Codex CLI `0.153.0`, `--ephemeral --sandbox read-only`, `gpt-5.6-luna / max`, explicit `$effort-router`, subagent 금지 조건으로 대표 3건을 판정했다. exit 0.
+
+| 입력 | 관측 라우팅 |
+|---|---|
+| 승인된 명확한 4파일 스펙 구현 | `implement-med` → `gpt-5.6-luna / max` |
+| 모호한 cross-stack 스펙 작성·검토 | `plan-high` Sol/high → `plan-adversary-xhigh` Sol/xhigh |
+| 동일 수정 2회 실패 진단 | 메인 세션 `gpt-5.6-sol / max` 승격 |
+
+### Codex custom-agent 실제 호출 (2026-09-03, n=10)
+
+사용자 요청으로 `spawn_agent(agent_type=<role>)`를 역할별 1회 실행했다. 각 probe는 도구·파일 수정 없이 `ROLE_OK <role>`만 반환하도록 제한했다.
+
+| role | 설정 model/effort | 관측 |
+|---|---|---|
+| `coder-medium` | Luna/max | `ROLE_OK coder-medium` |
+| `implement-med` | Luna/max | `ROLE_OK implement-med` |
+| `plan-high` | Sol/high | `ROLE_OK plan-high` |
+| `plan-xhigh` | Sol/xhigh | `ROLE_OK plan-xhigh` |
+| `plan-adversary-xhigh` | Sol/xhigh | `ROLE_OK plan-adversary-xhigh` |
+| `review-pr-high` | Sol/high | `ROLE_OK review-pr-high` |
+| `review-pr-xhigh` | Sol/xhigh | `ROLE_OK review-pr-xhigh` |
+| `implement-xhigh` | Sol/xhigh | `ROLE_OK implement-xhigh` |
+| `core-xhigh` | Sol/max | `ROLE_OK core-xhigh` |
+| `security-audit` | Sol/max | `ROLE_OK security-audit` |
+
+결과: 등록·스폰·응답·정상 종료 10/10. probe 전후 Git 상태 동일, `git diff --check` exit 0. 단, `spawn_agent` 결과는 실제 backend model/effort telemetry를 노출하지 않으므로 model/effort는 TOML 파싱·라우팅 메타데이터로 검증했으며 런타임 과금/추론 telemetry 검증으로 확대 해석하지 않는다.
+
+### ChatGPT 앱 검증 범위
+
+- 공식 OpenAI 문서상 ChatGPT 데스크톱 앱 Codex 화면은 로컬 Codex Skill·설정·subagent 활동을 지원하며, `agents/openai.yaml`은 앱 Skill UI 메타데이터다.
+- 로컬 설치본의 `agents/openai.yaml` 존재·YAML 파싱은 확인했다.
+- 앱 UI 직접 확인은 Computer Use가 `com.openai.codex` 제어를 안전 정책으로 차단해 **not run**. 앱의 Skills 새로고침 후 목록 노출은 사용자 화면에서 확인이 필요하다.
+
+## r8 전역 설치 계약·검증 (2026-09-03)
+
+설치 안내가 Skill 복사에서 끝나지 않도록 `~/.codex/config.toml`, `~/.codex/AGENTS.md`, custom agents, 재시작, 검증 절차를 README·SKILL·Codex 어댑터에 필수 계약으로 추가했다. 기존 설정 파일은 전체 덮어쓰기 없이 필요한 키만 병합하도록 제한했다.
+
+```text
+python3 scripts/verify_global_install.py
+PASS global effort-router installation
+- CODEX_HOME: /Users/yong/.codex
+- default: gpt-5.6-luna/max
+- custom agents: 10/10
+exit 0
+```
+
+추가 검증:
+
+- 원본·설치본 `quick_validate.py` → 각각 exit 0, `Skill is valid!`
+- `SKILL.md`, `README.md`, `platforms/codex.md`, `platforms/README.md`, 검증 스크립트의 원본↔설치본 diff → 차이 0건
+- `git diff --check` → exit 0
+
 ## 재현 절차
 
 ```bash

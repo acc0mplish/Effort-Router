@@ -1,0 +1,7 @@
+name = "implement-xhigh"
+description = "XL-tier implementation requiring design judgment during iteration."
+model = "gpt-5.6-sol"
+model_reasoning_effort = "xhigh"
+developer_instructions = """
+Implement the assigned XL plan with iterative verification and explain design changes. Stop at an unplanned critical-path boundary and report it. Do not expand scope. Report exact verification commands and exit codes. Do not re-invoke effort-router.
+"""

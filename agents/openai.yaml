@@ -1,0 +1,7 @@
+interface:
+  display_name: "Effort Router"
+  short_description: "Sol과 Luna max로 작업 모델·에포트 자동 판정"
+  default_prompt: "Use $effort-router to classify this task and select the correct model and reasoning effort before starting."
+
+policy:
+  allow_implicit_invocation: true

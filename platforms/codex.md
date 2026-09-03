@@ -1,42 +1,74 @@
-# effort-router — Codex CLI 어댑터
+# effort-router — Codex 어댑터
 
-삽입처: `~/.codex/AGENTS.md`(글로벌) 또는 리포 루트 `AGENTS.md`. 설치(붙여넣기)는 사용자 실행 — 본 파일은 병합용 단편 콘텐츠만 제공한다.
+대상: Codex CLI, IDE extension, ChatGPT 데스크톱 앱의 Codex 화면. 세 클라이언트는 로컬 Codex Skill·`config.toml`·custom-agent TOML을 공유한다.
 
-> 본 문서는 effort-router SKILL.md(§1 티어·§3 제약·§6 매핑)의 파생 축약 이식본이다 — 규칙 충돌 시 본문이 우선한다. 본문 갱신 시 본 파일도 파생 갱신한다.
+## 설치 위치
 
-## 티어 판정 (본문 §1 축약)
+- Skill: `~/.codex/skills/effort-router/`
+- custom agents: `platforms/codex-agents/*.toml`을 `~/.codex/agents/`로 설치
+- 전역 기본값·subagent 활성화: `~/.codex/config.toml`
+- 전역 발동 규칙: `~/.codex/AGENTS.md`
+- 프로젝트 예외: 리포의 가까운 `AGENTS.md`가 전역 규칙보다 우선
 
-- **S** 단일 파일·텍스트/스타일 · **M** 2~10파일·~1000줄 이하·위험 지표 음성 · **L** 10파일·1000줄 초과 또는 위험 지표 양성(규모 무관) · **XL** 코어 엔진·전면 리팩터링 · **보안감사** 별도 트랙
-- **폴백**: 지표 충돌 시 상위 티어 — 하향 예외는 실질이 국소·기계적 변경임이 확인될 때 근거와 함께만.
-- **은닉 변수**(해당 시 1티어 상향): 요청 경로 동작 변경 / 보안 통제 자체 변경 / 코드만으로 판별 불가 변수(확인 질문 1개 선행).
+## 전역 설정
 
-## 실행 계약 (본문 §3·Output Contract 축약)
+`~/.codex/config.toml` 전체를 덮어쓰지 말고 다음 값을 병합한다. root key는 첫 `[table]`보다 위에 둔다.
 
-- 작업 착수 전 티어 판정·실행 지침 요약을 먼저 출력한다.
-- 타 하니스 표기: 적용 에이전트 라인 = 아래 대응물 또는 `없음(단일 세션)`, 팬아웃 라인 = `OFF`, 단계 상태 라인은 인계를 실제 운반할 때만 기입.
-- **적용 제외: §2 화이트리스트·팬아웃·state.json(§5)** — Claude Code 전용 계약이다.
+```toml
+model = "gpt-5.6-luna"
+model_reasoning_effort = "max"
 
-## Codex 대응 (본문 §6)
+[agents]
+enabled = true
+```
 
-- 서브에이전트: 멀티에이전트 도구(`spawn_agent`·`send_input`·`resume_agent`·`wait_agent`·`close_agent` — stable, 기본 on). 커스텀 에이전트는 독립 TOML 파일 — `~/.codex/agents/`(개인)·`.codex/agents/`(프로젝트), 파일당 1 에이전트. 필수 `name`·`description`·`developer_instructions`, 선택 `model`·`model_reasoning_effort`·`sandbox_mode`·`mcp_servers`·`skills.config`. 빌트인 `default`·`worker`·`explorer`(동명 커스텀이 우선). 우선순위: 명시 스폰 > `config.toml` `[agents]` 기본(`default_subagent_model`·`default_subagent_reasoning_effort`) > 커스텀 파일 > 부모 상속.
-- effort: `model_reasoning_effort` = minimal|low|medium|high|xhigh(xhigh는 모델 의존). 스폰 기본값 `agents.default_subagent_reasoning_effort`·`agents.default_subagent_model` — 스폰 시 명시가 우선. 서브에이전트 안내 페이지는 모델 의존 상위 단계 `max`·`ultra`도 언급한다.
-- 컨텍스트 등재: AGENTS.md 계층 `~/.codex/AGENTS.md` → 리포 루트 → 하위 디렉터리. 프로필 전환은 `$CODEX_HOME/<name>.config.toml` + `--profile`(user-level).
-- 역할 분리가 필요하면 본 스킬의 에이전트명(plan-high 등)을 지목하지 않고, 아래 표를 참조해 커스텀 에이전트 파일(`agents/<역할>.toml` — `~/.codex/` 또는 `.codex/` 기준)을 직접 정의한다.
+- 기존 `[agents]` table이 있으면 중복 생성하지 말고 `enabled`만 추가·수정한다.
+- 기존 profiles, MCP, sandbox, projects 설정은 보존한다.
+- `[features]`의 `multi_agent = true`를 사용하는 기존 설치가 정상 작동하면 호환 설정으로 인정하며 억지로 중복 추가하지 않는다.
+- custom agent의 `model`과 `model_reasoning_effort`는 각 `~/.codex/agents/*.toml`이 전역 기본값보다 우선한다.
 
-## role↔설정 매핑표 (원본 `agents/*.md` frontmatter 증류)
+`~/.codex/AGENTS.md`에는 아래 「AGENTS.md 삽입 단편」을 기존 내용과 병합한다. 설치 후 Codex CLI·IDE·ChatGPT 앱을 재시작한다.
 
-| 본문 §2 역할 | 커스텀 에이전트 파일 | effort |
-|--------------|------------------------|--------|
-| ①계획(M/L) | `agents/plan-high.toml` | high |
-| ①계획(XL) | `agents/plan-xhigh.toml` | xhigh |
-| ②검토(적대 리뷰) | `agents/plan-adversary-xhigh.toml` | xhigh |
-| ③구현(S 위임) | `agents/coder-medium.toml` | medium |
-| ③구현(M) | `agents/implement-med.toml` | medium |
-| ③구현(XL) | `agents/implement-xhigh.toml` | xhigh |
-| ③구현(XL 임계경로) | `agents/core-xhigh.toml` | xhigh |
-| ④리뷰(S/M) | `agents/review-pr-high.toml` | high |
-| ④리뷰(L/XL) | `agents/review-pr-xhigh.toml` | xhigh |
-| 보안감사 | `agents/security-audit.toml` | xhigh |
+## 설치 완료 검증
 
-- 모델 열 없음 — 원본의 슬롯명(haiku/sonnet/opus)은 Claude Code 프록시 슬롯이라 Codex 모델명과 대응하지 않는다. 모델은 Codex 설정의 모델 지정을 따른다.
-- 현장 주의(커뮤니티 실측 2026-09, Codex 0.144.5): multi_agent v2 세션에서 스폰 시 모델·effort 제어가 동작하지 않는 회귀 보고가 있다(openai/codex 이슈 트래킹 중). 공식 문서 기준이 우선이되 설치 후 커스텀 에이전트 1회 스폰 프루브를 권장한다.
+```bash
+python3 ~/.codex/skills/effort-router/scripts/verify_global_install.py
+```
+
+성공 기준은 `PASS global effort-router installation`이다. 이 검사는 Skill·UI metadata·전역 기본 모델/effort·subagent 활성화·전역 AGENTS 규칙·10개 custom-agent TOML을 함께 확인한다. 실제 역할 호출 검증은 `TESTS.md`의 Codex runtime protocol을 따른다.
+
+## OpenAI 모델 정책
+
+| 역할 | 모델 | effort | 선택 근거 |
+|---|---|---|---|
+| `coder-medium` | `gpt-5.6-luna` | `max` | 명확한 S 구현·테스트 |
+| `implement-med` | `gpt-5.6-luna` | `max` | 확정 계획의 일반 구현 |
+| `plan-high` | `gpt-5.6-sol` | `high` | M/L 명세·계획 작성 |
+| `plan-xhigh` | `gpt-5.6-sol` | `xhigh` | XL 아키텍처·명세 작성 |
+| `plan-adversary-xhigh` | `gpt-5.6-sol` | `xhigh` | 스펙·계획 적대 검토 |
+| `review-pr-high` | `gpt-5.6-sol` | `high` | S/M 문제 판정·PR 리뷰 |
+| `review-pr-xhigh` | `gpt-5.6-sol` | `xhigh` | L/XL 심층 판정 |
+| `implement-xhigh` | `gpt-5.6-sol` | `xhigh` | 구현 중 설계 판단이 필요한 XL 작업 |
+| `core-xhigh` | `gpt-5.6-sol` | `max` | XL 직렬 임계경로 |
+| `security-audit` | `gpt-5.6-sol` | `max` | 보안·출시 판정 |
+
+`gpt-5.6-terra`는 기본 라우팅에서 제외한다. 일반 실행량은 Luna/max가 담당하고, 명세·검토·문제 해결·문제 판정은 Sol이 담당한다.
+
+## 승격 규칙
+
+- 동일 접근 2회 실패, 재현 불안정, 반복 테스트 실패: 현재 구현을 중단하고 `gpt-5.6-sol / max`로 원인 분석·해결안 판정을 다시 한다.
+- `max`는 단일 에이전트의 reasoning depth다. 이것만으로 subagent를 늘리지 않는다.
+- `ultra`는 서로 독립적인 하위 작업을 병렬화할 때만 선택한다.
+
+## 실행 계약
+
+- 작업 시작 전에 SKILL.md Output Contract를 출력한다.
+- custom agent를 쓸 때 실제 role·model·effort는 위 표와 일치해야 한다. 호출 시 다른 모델로 override하지 않는다.
+- 멀티에이전트는 사용자나 상위 지침이 허용하고, 독립성·병렬 이득이 모두 있을 때만 사용한다.
+- 완료 보고는 실행 명령 원문과 exit code를 포함한다. 메인 세션이 핵심 검증을 1회 재실행한다.
+
+## AGENTS.md 삽입 단편
+
+```markdown
+코딩 작업 착수 전 설치된 `effort-router`를 사용한다. Output Contract로 티어·단계·모델·effort를 먼저 밝힌다. 명세 작성·스펙 검토·문제 분석·해결안 판단·PR 판정·고난도 작업은 GPT-5.6 Sol, 요구가 확정된 일반 구현은 GPT-5.6 Luna max를 사용한다. 동일 접근 2회 실패 시 Sol max로 승격한다. max를 이유로 멀티에이전트를 자동 사용하지 않는다.
+```

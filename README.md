@@ -1,6 +1,6 @@
 # effort-router
 
-작업의 규모·위험도를 티어(S/M/L/XL)로 판정하고, 단계별(계획/검토/구현/리뷰/검증) 모델·에포트를 정해진 서브에이전트에 배정하는 Claude Code 스킬. 판정을 Output Contract로 출력한 뒤 작업을 수행한다.
+작업의 규모·위험도를 티어(S/M/L/XL)로 판정하고 단계별 모델·에포트를 배정하는 Codex·ChatGPT Skill. 명세·검토·난제는 GPT-5.6 Sol, 요구가 확정된 일반 실행은 GPT-5.6 Luna max로 보낸다.
 
 ```text
 Decision(티어 판정) → Requirement → Acceptance → Task → Evidence → Learning
@@ -17,33 +17,70 @@ Decision(티어 판정) → Requirement → Acceptance → Task → Evidence →
 | 경로 | 내용 |
 |------|------|
 | `SKILL.md` | 스킬 본체 — 티어 판정(§1)·라우팅 테이블(§2)·실행 제약(§3)·merge 권한(§4)·상태·인계 계약(§5)·타 하니스 매핑(§6)·Output Contract |
-| `agents/` | 화이트리스트 서브에이전트 정의 10종(plan·implement·review·security 계열) |
-| `platforms/` | 타 하니스 어댑터 — codex·qwen·gemini·glm·chat-app(ChatGPT/GLM 앱 paste 카드)·grok(Grok Bot)·README |
+| `agents/` | Claude Code 역할 정의 10종 + ChatGPT 데스크톱 UI 메타데이터 `openai.yaml` |
+| `platforms/` | Codex·ChatGPT 실행 어댑터와 기타 하니스 파생 문서 |
 | `TESTS.md` | 검증 프로토콜·측정 결과·라운드별 개정 이력·재현 절차 |
 
-## 설치 (Claude Code)
+## 설치 (Codex + ChatGPT 데스크톱 앱)
+
+### 1. Skill·custom agents 설치
 
 ```bash
-# 스킬 설치
-cp -r SKILL.md TESTS.md agents platforms ~/.claude/skills/effort-router/
+mkdir -p ~/.codex/skills/effort-router
+cp -R SKILL.md TESTS.md README.md agents platforms scripts ~/.codex/skills/effort-router/
 
-# 에이전트 등록본
-cp agents/*.md ~/.claude/agents/
+mkdir -p ~/.codex/agents
+cp platforms/codex-agents/*.toml ~/.codex/agents/
 ```
 
-`~/.claude/CLAUDE.md`에 발동 규칙 추가:
+### 2. `~/.codex/config.toml` 전역 설정
+
+기존 파일을 통째로 교체하지 말고 다음 값을 병합한다. `model`과 `model_reasoning_effort`는 첫 TOML table보다 위의 root 영역에 둔다.
+
+```toml
+model = "gpt-5.6-luna"
+model_reasoning_effort = "max"
+
+[agents]
+enabled = true
+```
+
+이미 `[agents]`가 있으면 table을 다시 만들지 말고 `enabled = true`만 추가·수정한다. 기존 설치가 `[features]`의 `multi_agent = true`를 쓰며 정상 작동한다면 그대로 유지해도 된다.
+
+### 3. `~/.codex/AGENTS.md` 전역 발동 규칙
+
+기존 내용을 보존하고 다음 단편을 추가한다.
 
 ```markdown
-코딩 작업 착수 전 `effort-router` 스킬을 먼저 호출한다 — 티어 판정(S/M/L/XL) →
-Output Contract 출력 → 화이트리스트 서브에이전트 라우팅·state.json 상태 계약 준수.
-단순 질문·대화·조회는 제외.
+코딩 작업 착수 전 설치된 `effort-router`를 사용한다. 명세·검토·난제는 GPT-5.6 Sol,
+요구가 확정된 일반 구현은 GPT-5.6 Luna max를 사용한다. 동일 접근 2회 실패 시 Sol max로 승격한다.
 ```
 
-스킬 갱신 시 사본 2곳(`~/.claude/skills/effort-router/`·`~/.claude/agents/`)에 재반영 후 `diff -r` 빈 출력으로 동기화 확인한다(진행 중 과업 디렉터리는 `-x` 제외).
+### 4. 재로드·검증
+
+ChatGPT 데스크톱 앱의 Codex 화면은 같은 로컬 Skill과 `~/.codex` 설정을 공유한다. ChatGPT Work는 Skill을 사용할 수 있지만 로컬 custom-agent TOML을 전제로 하지 않으므로 앱의 model/reasoning control에서 같은 매핑을 직접 선택한다. 자세한 구분은 `platforms/chat-app.md`.
+
+설치 후 Codex CLI·IDE·ChatGPT 앱을 재시작하고 검사한다.
+
+```bash
+python3 ~/.codex/skills/effort-router/scripts/verify_global_install.py
+```
+
+`PASS global effort-router installation`이 나와야 로컬 Skill, 전역 모델·effort, subagent 활성화, 전역 발동 규칙, 10개 custom agent가 모두 설치된 상태다. 상세 병합법은 `platforms/codex.md` 참조.
+
+## 모델 매핑
+
+| 작업 | 모델·effort |
+|---|---|
+| 확정 요구의 일반 구현·반복 실행 | `gpt-5.6-luna / max` |
+| 명세 작성·계획·스펙 검토·문제 분석·PR 판정 | `gpt-5.6-sol / high~xhigh` |
+| 미해결 문제·XL 임계경로·보안 감사 | `gpt-5.6-sol / max` |
+
+`gpt-5.6-terra`는 기본 라우팅에서 제외한다. `max`는 단일 작업 깊이이며, `ultra`는 독립 병렬 작업이 있을 때만 쓴다.
 
 ## 다른 하니스에서 쓰기
 
-라우팅(§2 화이트리스트·스폰)은 Claude Code 서브에이전트 시스템에 의존한다. 다른 환경에서는 티어 판정(§1)·실행 제약(§3)·Output Contract가 그대로 유효하고 라우팅은 §6 매핑을 따른다.
+Claude Code와 기타 환경에서는 티어 판정·증거 계약·Output Contract를 유지하고 각 하니스의 모델 체계로 치환한다.
 
 | 환경 | 어댑터 | 형태 |
 |------|--------|------|
@@ -51,7 +88,7 @@ Output Contract 출력 → 화이트리스트 서브에이전트 라우팅·stat
 | Qwen Code | `platforms/qwen.md` | QWEN.md 병합 단편 |
 | Gemini CLI | `platforms/gemini.md` | GEMINI.md 병합 단편 |
 | GLM Coding Plan | `platforms/glm.md` | 백엔드 교체 매핑(Claude Code 하니스 유지) |
-| ChatGPT 앱·GLM 앱 | `platforms/chat-app.md` | 붙여넣기 프롬프트 카드 |
+| ChatGPT 앱 | `platforms/chat-app.md` | Codex 화면/Work/일반 Chat 구분 |
 | Grok Bot (Cursor) | `platforms/grok.md` | 스킬 저장 + Task/CloudAgent 매핑. xAI grok.com은 chat-app.md |
 
 설치·붙여넣기 절차는 `platforms/README.md`. 어댑터는 본문의 파생 축약 이식본이다 — 규칙 충돌 시 SKILL.md가 우선한다.
