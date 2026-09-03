@@ -1,0 +1,6 @@
+# 라운드 과업 디렉터리(계획 번들·state.json·백업 등 내부 프로세스 산출물)
+# 과업 기록까지 공개하려면 아래 줄을 삭제하라
+r3-adversarial/
+r4-fix/
+recon-thin/
+harness-compat/
