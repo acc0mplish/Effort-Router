@@ -18,7 +18,7 @@ Decision(티어 판정) → Requirement → Acceptance → Task → Evidence →
 |------|------|
 | `SKILL.md` | 스킬 본체 — 티어 판정(§1)·라우팅 테이블(§2)·실행 제약(§3)·merge 권한(§4)·상태·인계 계약(§5)·타 하니스 매핑(§6)·Output Contract |
 | `agents/` | 화이트리스트 서브에이전트 정의 10종(plan·implement·review·security 계열) |
-| `platforms/` | 타 하니스 어댑터 — codex·qwen·gemini·glm·chat-app(ChatGPT/GLM 앱 paste 카드)·README |
+| `platforms/` | 타 하니스 어댓터 — codex·qwen·gemini·glm·chat-app(ChatGPT/GLM 앱 paste 카드)·grok(Grok Bot)·README |
 | `TESTS.md` | 검증 프로토콜·측정 결과·라운드별 개정 이력·재현 절차 |
 
 ## 설치 (Claude Code)
@@ -39,21 +39,22 @@ Output Contract 출력 → 화이트리스트 서브에이전트 라우팅·stat
 단순 질문·대화·조회는 제외.
 ```
 
-스킬 갱신 시 사본 2곳(`~/.claude/skills/effort-router/`·`~/.claude/agents/`)에 재반영 후 `diff -r` 빈 출력으로 동기화 확인한다(진행 중 과업 디렉터리는 `-x` 제외).
+스킬 갱신 시 사본 2곳(`~/.claude/skills/effort-router/`·등록본 `~/.claude/agents/`)에 재반영 후 `diff -r` 빈 출력으로 동기화 확인한다(진행 중 과업 디렉터리는 `-x` 제외).
 
 ## 다른 하니스에서 쓰기
 
 라우팅(§2 화이트리스트·스폰)은 Claude Code 서브에이전트 시스템에 의존한다. 다른 환경에서는 티어 판정(§1)·실행 제약(§3)·Output Contract가 그대로 유효하고 라우팅은 §6 매핑을 따른다.
 
-| 환경 | 어댑터 | 형태 |
+| 환경 | 어댓터 | 형태 |
 |------|--------|------|
 | Codex CLI | `platforms/codex.md` | AGENTS.md 병합 단편 + 커스텀 에이전트 TOML(`~/.codex/agents/`) role↔effort 매핑표 |
 | Qwen Code | `platforms/qwen.md` | QWEN.md 병합 단편 |
 | Gemini CLI | `platforms/gemini.md` | GEMINI.md 병합 단편 |
 | GLM Coding Plan | `platforms/glm.md` | 백엔드 교체 매핑(Claude Code 하니스 유지) |
 | ChatGPT 앱·GLM 앱 | `platforms/chat-app.md` | 붙여넣기 프롬프트 카드 |
+| Grok Bot (Cursor) | `platforms/grok.md` | 스킬 저장 + Task/CloudAgent 매핑. xAI grok.com은 chat-app.md |
 
-설치·붙여넣기 절차는 `platforms/README.md`. 어댑터는 본문의 파생 축약 이식본이다 — 규칙 충돌 시 SKILL.md가 우선한다.
+설치·붙여넣기 절차는 `platforms/README.md`. 어댓터는 본문의 파생 축약 이식본이다 — 규칙 충돌 시 SKILL.md가 우선한다.
 
 ## 핵심 원칙
 
@@ -88,4 +89,4 @@ FrontierSWE·ProgramBench는 [1]의 평가 벤치마크다(개별 링크는 [1] 
 | `books/하니스의_하니스_harness-of-harness-ko.pdf` | [1] HoH |
 | `books/에이전트는_대화로_일하지_않는다_skill-state-ko.pdf` | [2] SKILL.state |
 | `books/에이전트는 하니스를 배운다.pdf` | [4] EvoHarness-RL |
-| `books/많이_줄수록_여럿일수록_정말_더_잘할까_agent-papers-2026-ko.pdf` | 멀티 에이전트 논문집(번역 시리즈) |
+| `books/많이_줄수록_여럿일수록_정말_더_잘할까_agent-papers-2026-ko.pdf` | 맬티 에이전트 논문집(번역 시리즈) |

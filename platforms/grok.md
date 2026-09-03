@@ -1,4 +1,4 @@
-# effort-router — Grok Bot (Cursor) 어댑터
+# effort-router — Grok Bot (Cursor) 어댓터
 
 대상: Cursor Grok Bot(채팅 에이전트 + 박스 파일시스템 + Task/CloudAgent 스폰).
 xAI grok.com 웹앱은 파일시스템·서브에이전트 스폰이 없다 → `chat-app.md`.
@@ -32,7 +32,7 @@ xAI grok.com 웹앱은 파일시스템·서브에이전트 스폰이 없다 → 
 
 | 본문 §2 역할 | Grok Bot 스폰 | 비고 |
 |--------------|---------------|------|
-| ①계획(M/L/XL) | 메인 세션 (얄은 계획) | 수정 대상·보존 제약·검증 claims |
+| ①계획(M/L/XL) | 메인 세션 (얕은 계획) | 수정 대상·보존 제약·검증 claims |
 | ②검토(적대 리뷰) | 없음 — 팬아웃 OFF | 렌즈 계약 없음 |
 | ③구현(조회·박스) | 메인 / `Task executor` | |
 | ③구현(리포 코드) | `CloudAgent` | 플랜에 Cloud Agent가 없으면 메인+GitHub 원격 쓰기 |
