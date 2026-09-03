@@ -286,6 +286,18 @@ exit 0
 - `SKILL.md`, `README.md`, `platforms/codex.md`, `platforms/README.md`, 검증 스크립트의 원본↔설치본 diff → 차이 0건
 - `git diff --check` → exit 0
 
+## r9 Guide file 실패 원장 (2026-09-03)
+
+사용자 지시에 따라 `AGENTS.md`, `CLAUDE.md`, `.cursorrules`를 주요 agent guide file로 명시하고, 관측·재현된 과거 실패 1건을 영구 예방 규칙 1줄로 바꾸는 누적 계약을 추가했다. 추측 규칙 금지, 기존 규칙 중복 금지, 전역/프로젝트 범위 분리를 함께 고정했다.
+
+검증 결과:
+
+- 실제 `~/.codex/AGENTS.md`에 「실패 기반 영구 예방 규칙」 병합 → 제목 1건, 핵심 규칙 1건
+- `python3 scripts/verify_global_install.py` → exit 0, `PASS global effort-router installation`
+- 원본·설치본 `quick_validate.py` → 각각 exit 0, `Skill is valid!`
+- 수정된 원본↔설치본 diff → 차이 0건
+- `git diff --check` → exit 0
+
 ## 재현 절차
 
 ```bash

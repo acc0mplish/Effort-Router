@@ -27,7 +27,7 @@ enabled = true
 - `[features]`의 `multi_agent = true`를 사용하는 기존 설치가 정상 작동하면 호환 설정으로 인정하며 억지로 중복 추가하지 않는다.
 - custom agent의 `model`과 `model_reasoning_effort`는 각 `~/.codex/agents/*.toml`이 전역 기본값보다 우선한다.
 
-`~/.codex/AGENTS.md`에는 아래 「AGENTS.md 삽입 단편」을 기존 내용과 병합한다. 설치 후 Codex CLI·IDE·ChatGPT 앱을 재시작한다.
+`~/.codex/AGENTS.md`에는 아래 「AGENTS.md 삽입 단편」을 기존 내용과 병합한다. 라우팅 규칙과 실패 원장 규칙이 모두 있어야 한다. 설치 후 Codex CLI·IDE·ChatGPT 앱을 재시작한다.
 
 ## 설치 완료 검증
 
@@ -71,4 +71,12 @@ python3 ~/.codex/skills/effort-router/scripts/verify_global_install.py
 
 ```markdown
 코딩 작업 착수 전 설치된 `effort-router`를 사용한다. Output Contract로 티어·단계·모델·effort를 먼저 밝힌다. 명세 작성·스펙 검토·문제 분석·해결안 판단·PR 판정·고난도 작업은 GPT-5.6 Sol, 요구가 확정된 일반 구현은 GPT-5.6 Luna max를 사용한다. 동일 접근 2회 실패 시 Sol max로 승격한다. max를 이유로 멀티에이전트를 자동 사용하지 않는다.
+
+## 실패 기반 영구 예방 규칙
+
+- 주요 agent guide file은 Codex의 `AGENTS.md`, Claude Code의 `CLAUDE.md`, Cursor의 `.cursorrules`다.
+- 관측되거나 재현된 과거 실패 1건을 영구 예방 규칙 1줄로 변환한다.
+- 규칙은 실패 트리거와 필수/금지 행동을 포함하고, 다음 작업에서 준수 여부를 판정할 수 있어야 한다.
+- 같은 실패의 기존 규칙이 있으면 새 줄을 만들지 말고 기존 규칙을 더 정확하게 고친다.
+- 모든 저장소에 적용되는 규칙만 전역 파일에 두고, 프로젝트 고유 규칙은 가장 가까운 프로젝트 guide file에 둔다.
 ```

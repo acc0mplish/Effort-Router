@@ -65,7 +65,15 @@ def main() -> int:
         failures.append(f"missing {global_agents}")
     else:
         text = global_agents.read_text(encoding="utf-8")
-        for marker in ("effort-router", "GPT-5.6-Luna", "GPT-5.6-Sol"):
+        for marker in (
+            "effort-router",
+            "GPT-5.6-Luna",
+            "GPT-5.6-Sol",
+            "실패 기반 영구 예방 규칙",
+            "과거 실패 1건",
+            "CLAUDE.md",
+            ".cursorrules",
+        ):
             if marker not in text:
                 failures.append(f"AGENTS.md missing marker: {marker}")
 

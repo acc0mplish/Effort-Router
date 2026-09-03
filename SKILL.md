@@ -28,10 +28,20 @@ Codex 또는 ChatGPT 데스크톱 앱에 이 Skill을 설치·업데이트해 �
 1. Skill을 `~/.codex/skills/effort-router/`에 설치
 2. custom-agent TOML을 `~/.codex/agents/`에 설치
 3. `~/.codex/config.toml`에 기본 `gpt-5.6-luna / max`와 subagent 활성 설정을 **병합**
-4. `~/.codex/AGENTS.md`에 전역 발동·승격 규칙을 **병합**
+4. `~/.codex/AGENTS.md`에 전역 발동·승격 규칙과 실패 원장 규칙을 **병합**
 5. Codex/ChatGPT 앱 재시작 후 설치 검증 실행
 
 기존 `config.toml`과 `AGENTS.md` 전체를 덮어쓰지 않는다. 필요한 키·단편만 병합하며, 동일 TOML table을 중복 생성하지 않는다. Skill 파일 존재와 전역 활성화는 별도 상태로 구분해 보고한다. 정확한 설정 단편과 검증 명령은 `platforms/codex.md`를 따른다.
+
+## 가이드 파일 = 실패 원장
+
+주요 agent guide file은 Codex의 `AGENTS.md`, Claude Code의 `CLAUDE.md`, Cursor의 `.cursorrules`다. 이 파일에 새로 누적하는 예방 규칙은 **관측되거나 재현된 과거 실패 1건을 영구 예방 장치 1줄로 변환한 것**이어야 한다.
+
+- 한 실패에는 한 규칙만 추가한다. 원인·트리거와 필수/금지 행동이 한 줄에서 실행 가능해야 한다.
+- 추가 전에 기존 규칙을 검색한다. 같은 실패를 다루면 새 줄을 만들지 않고 기존 규칙을 더 정확하게 고친다.
+- 추측성 예방책, 일반론, 사건 서사는 넣지 않는다. 규칙은 다음 작업에서 준수 여부를 판정할 수 있어야 한다.
+- 모든 저장소에 적용되는 실패만 전역 guide file에 둔다. 프로젝트 고유 실패는 가장 가까운 프로젝트 guide file에 둔다.
+- 설치·업데이트 요청에서 기존 파일을 덮어쓰지 않고 해당 하니스의 guide file에 실패 원장 단편을 병합한다.
 
 ## 프로젝트 티어 ≠ 작업 티어
 
