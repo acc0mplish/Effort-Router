@@ -18,7 +18,7 @@ Decision(티어 판정) → Requirement → Acceptance → Task → Evidence →
 |------|------|
 | `SKILL.md` | 스킬 본체 — 티어 판정(§1)·라우팅 테이블(§2)·실행 제약(§3)·merge 권한(§4)·상태·인계 계약(§5)·타 하니스 매핑(§6)·Output Contract |
 | `agents/` | 화이트리스트 서브에이전트 정의 10종(plan·implement·review·security 계열) |
-| `platforms/` | 타 하니스 어댑터 — codex·qwen·gemini·glm·chat-app(ChatGPT/GLM 앱 paste 카드)·README |
+| `platforms/` | 타 하니스 어댑터 — codex·qwen·gemini·glm·chat-app(ChatGPT/GLM 앱 paste 카드)·grok(Grok Bot)·README |
 | `TESTS.md` | 검증 프로토콜·측정 결과·라운드별 개정 이력·재현 절차 |
 
 ## 설치 (Claude Code)
@@ -52,6 +52,7 @@ Output Contract 출력 → 화이트리스트 서브에이전트 라우팅·stat
 | Gemini CLI | `platforms/gemini.md` | GEMINI.md 병합 단편 |
 | GLM Coding Plan | `platforms/glm.md` | 백엔드 교체 매핑(Claude Code 하니스 유지) |
 | ChatGPT 앱·GLM 앱 | `platforms/chat-app.md` | 붙여넣기 프롬프트 카드 |
+| Grok Bot (Cursor) | `platforms/grok.md` | 스킬 저장 + Task/CloudAgent 매핑. xAI grok.com은 chat-app.md |
 
 설치·붙여넣기 절차는 `platforms/README.md`. 어댑터는 본문의 파생 축약 이식본이다 — 규칙 충돌 시 SKILL.md가 우선한다.
 

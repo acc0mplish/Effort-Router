@@ -18,9 +18,11 @@ effort-router 본문(SKILL.md)은 Claude Code 실행 계약이고, 본 디렉터
 | gemini.md | Gemini CLI | `~/.gemini/GEMINI.md` 또는 워크스페이스 `GEMINI.md` | 병합용 단편 |
 | glm.md | GLM Coding Plan | 설치 불필요 — Claude Code 백엔드 교체 시 참조 | 안내 문서 |
 | chat-app.md | ChatGPT 앱·GLM 앱 | 앱 지침 계층(ChatGPT) 또는 첫 턴 붙여넣기 | paste 카드 |
+| grok.md | Grok Bot (Cursor) | 사용자 스킬로 저장 | 어댑터 문서 |
 
 ## 참고
 
 - Gemini 메모리 파일명은 `context.fileName` 설정으로 변경 가능 — 변경 시 삽입처도 따라간다.
 - **glm.md와 chat-app.md는 다른 대상이다** — Claude Code 백엔드를 GLM으로 바꾸면 glm.md, GLM 웹앱(chat.z.ai)이면 chat-app.md.
+- **grok.md와 chat-app.md는 다른 대상이다** — Cursor Grok Bot이면 grok.md, xAI grok.com 웹앱이면 chat-app.md.
 - 어댑터의 '미확인' 표기 항목은 공식 문서에서 확인하지 못한 것 — 현장 확인 후 갱신한다.
