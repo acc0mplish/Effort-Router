@@ -22,6 +22,8 @@ ChatGPT Work에서도 Skill을 사용할 수 있지만, 로컬 Codex custom-agen
 
 `Max`는 한 문제를 깊게 푸는 모드다. `Ultra`는 독립 하위 작업이 있어 호스팅 subagent 병렬화가 유효할 때만 선택한다.
 
+문서 산출 과제(설계·디자인·계획 문서)도 §1 L 고정 승격 대상이다 — Work는 스폰 병렬화가 없어 본문 ●●● 폴백(메인 세션 셀프 3렌즈 순차 검토, 팬아웃 라인 `ON: 셀프 3렌즈 순차` 표기)로 이행한다.
+
 ChatGPT Work Output Contract의 에이전트 줄은 다음처럼 쓴다.
 
 ```text
