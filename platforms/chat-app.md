@@ -2,6 +2,8 @@
 
 ChatGPT 앱에는 두 실행면이 있다. 혼동하지 않는다.
 
+> 2026-07-09 OpenAI가 데스크톱 앱 명칭을 ChatGPT로 통일했다(구 Codex 앱 → ChatGPT, 구 ChatGPT 인터페이스 → ChatGPT Classic). 본 문서의 'ChatGPT 데스크톱 앱'은 통일 앱을, 'Codex 화면'은 그 안의 코딩 인터페이스를 가리킨다.
+
 ## 1. 데스크톱 앱의 Codex 화면
 
 로컬 Codex 클라이언트다. 설치된 `effort-router` Skill, `~/.codex/config.toml`, `~/.codex/agents/*.toml`을 Codex CLI와 공유한다. 모델·effort·역할 매핑은 [codex.md](codex.md)를 그대로 적용한다.
@@ -31,6 +33,6 @@ ChatGPT Work Output Contract의 에이전트 줄은 다음처럼 쓴다.
 - 실행 지침 요약: 명세 작성은 Sol, 구현 전 검증 가능한 claims 확정
 ```
 
-## 3. 일반 Chat
+## 3. ChatGPT Classic(구 일반 Chat)
 
-파일·실행 증거가 없는 일반 Chat에서는 모델 선택 조언만 적용한다. `state.json`, custom-agent role, 테스트 실행을 했다고 주장하지 않는다.
+파일·실행 증거가 없는 ChatGPT Classic에서는 모델 선택 조언만 적용한다. `state.json`, custom-agent role, 테스트 실행을 했다고 주장하지 않는다.

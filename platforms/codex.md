@@ -66,6 +66,7 @@ python3 ~/.codex/skills/effort-router/scripts/verify_global_install.py
 - custom agent를 쓸 때 실제 role·model·effort는 위 표와 일치해야 한다. 호출 시 다른 모델로 override하지 않는다.
 - 멀티에이전트는 사용자나 상위 지침이 허용하고, 독립성·병렬 이득이 모두 있을 때만 사용한다.
 - 완료 보고는 실행 명령 원문과 exit code를 포함한다. 메인 세션이 핵심 검증을 1회 재실행한다.
+- 스폰 워치독(§3): 장기 스폰을 10분 간격으로 점검한다 — Codex 스폰 정지 수단이 확인되지 않으면 스폰 프롬프트에 종료 시한을 사전 명시하는 폴백을 쓴다.
 
 ## AGENTS.md 삽입 단편
 

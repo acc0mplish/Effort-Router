@@ -16,9 +16,9 @@ ZCode는 Claude Code가 아닌 별도 하니스다 → 백엔드 교체 매핑(g
 ## 실행 계약 (본문 §3·Output Contract 축약)
 
 - 작업 착수 전 티어 판정·실행 지침 요약을 먼저 출력한다.
-- 적용 에이전트 라인 = `general-purpose (주입 역할: plan-high 상당)` 형태 또는 `없음(메인 세션 직접)`. 팬아웃 라인은 `ON: general-purpose × 3 (완전성/기술적오류/위험)` 형태. 단계 상태 라인은 인계를 실제 운반할 때만 기입.
-- **스폰 타입 화이트리스트 = 빌트인만** — `general-purpose`(일반·멀티스텝), `Explore`(읽기 전용 탐색), `judge`(렌더링 산출물 시각 검수). Claude 에이전트명(`plan-high`, `implement-med`, `review-pr-high` 등)을 subagent_type으로 지목하지 않는다 — 존재 ≠ 허가.
-- **judge는 시각 검수 전용** — 계획 적대 검증·PR 리뷰에 쓰지 않는다(②검토·④리뷰는 `general-purpose`).
+- 적용 에이전트 라인 = `general-purpose (주입 역할: plan-high 상당)` 형태 또는 `없음(메인 세션 직접)`. 팬아웃 라인은 실제 실행 구성을 적는다(예: `ON: 심층 general-purpose ×1 + 경량 Explore ×2 병렬 (완전성/기술적오류/위험)`). 단계 상태 라인은 인계를 실제 운반할 때만 기입.
+- **스폰 타입 화이트리스트 = 빌트인만** — `general-purpose`(일반·멀티스텝), `Explore`(읽기 전용 탐색·경량 검증 렌즈), `judge`(렌더링 산출물 시각 검수). Claude 에이전트명(`plan-high`, `implement-med`, `review-pr-high` 등)을 subagent_type으로 지목하지 않는다 — 존재 ≠ 허가.
+- **judge는 시각 검수 전용** — 계획 적대 검증·PR 리뷰에 쓰지 않는다(②검토의 심층 렌즈·④리뷰는 `general-purpose`, ②검토의 경량 렌즈는 `Explore`).
 - 증거기반 보고·§5 state.json 계약은 하니스 무관 — 그대로 적용한다.
 
 ## ZCode 대응 (본문 §6)
@@ -27,8 +27,9 @@ ZCode는 Claude Code가 아닌 별도 하니스다 → 백엔드 교체 매핑(g
 - effort·모델: 스폰 인자에 없음 — 서브에이전트는 메인 세션이 선택한 모델을 공유한다. 라우팅의 본질은 effort 수치가 아니라 **역할·산출물 분리**인 것은 그대로다.
 - **이원 모델 정책**: GLM Coding Plan의 모든 플랜이 GLM-5.3과 GLM-5.3-Flash를 함께 지원한다(docs.z.ai/devpack). 메인 세션은 UI 또는 `/model`로 선택(본문 §3) — 치환 기준은 하단 모델 정책 표. 심야(23:00–09:00) Flash 무제한 캠페인은 대량 반복 과제 타이밍으로 쓸 수 있다(조건은 공식 문서 확인).
 - **비전**: 시각 이해 MCP가 GLM-5.3-Flash에 번들된다. ZCode의 `judge`·스크린샷 경로가 이 비전 MCP를 타는지는 미확인 — 확인 전까지 단정하지 않는다.
-- 팬아웃(§2): **ON 가능** — 한 메시지에 `general-purpose` 병렬 스폰, 프롬프트마다 렌즈 1개 주입(L=3렌즈, XL=5렌즈). 병합 주체는 메인 세션. 반려 게이트·라운드 상한은 본문 그대로.
-- 상태·인계(§5): `state.json`·증거번들을 과업 루트에 둔다. writer는 메인 세션 단일 — 서브에이전트는 완료 보고만.
+- 팬아웃(§2): **ON 가능 — GLM-5.3 심층 스폰 동시 상한 1**(본문 §6) — 심층 렌즈는 `general-purpose` 1개만 띄우고, 잔여 렌즈는 직렬 스폰 또는 `Explore` 경량 렌즈 병렬로 치환한다(L=3렌즈, XL=5렌즈). 렌즈별 모델 혼합은 스폰 인자에 모델이 없어 불가능하다. 병합 주체는 메인 세션. 반려 게이트·라운드 상한은 본문 그대로.
+- **워치독(§3)**: 백그라운드 스폰(`run_in_background`)은 `TaskOutput(block=false)`로 10분 간격 점검한다 — 진행 신호 = 작업 상태·출력 파일 성장. 연속 2회 무진행 시 `TaskStop` 후 재스폰·역할 재분배 판정(동일 역할 1회 한정). 장기 스폰을 다른 스폰의 대기 사유로 쓰지 않는다.
+- 상태·인계(§5): `state.json`·증거번들은 본문 계약대로 저장소 `docs/task-id/<task-id>/`에 둔다(`.gitignore` 등록). writer는 메인 세션 단일 — 서브에이전트는 완료 보고만.
 - 컨텍스트 등재: 스킬(`~/.zcode/skills/` 우선 → `~/.agents/skills/`) + `~/.zcode/AGENTS.md`(전역) → `<repo>/AGENTS.md`(프로젝트 — 나중 로드가 전역을 좁혀 덮는다).
 - 설치 검증: 동봉 `verify_global_install.py`는 `~/.codex` 전용이라 이 환경에서 무효 — 설치본 SKILL.md 존재·`~/.zcode/AGENTS.md` 병합 단편 존재를 수동 확인한다.
 
@@ -39,8 +40,10 @@ ZCode는 Claude Code가 아닌 별도 하니스다 → 백엔드 교체 매핑(g
 | 명세 작성·계획·검토·PR 판정·난제·XL 임계경로 (Sol 상당) | `GLM-5.3` | Flash 대비 크레딧 3배 소모 |
 | 확정 요구의 일반 구현·반복 실행 (Luna/max 상당) | `GLM-5.3-Flash` 선택 가능 | 크레딧 1/3·주간 토큰 약 3배 — 비용 우선 트랙 |
 | 비전·시각 이해 | `GLM-5.3-Flash` | 시각 이해 MCP 번들 |
+| 심층(xhigh급) 스폰 동시성 | 상한 1 (GLM-5.3) | 잔여 심층 렌즈는 직렬 — 본문 §6 단서 |
 
-- 선택 주체는 메인 세션 단일 — 스폰에 모델 인자가 없으므로 모델 전환은 과업 단위로 메인이 한다.
+- 선택 주체는 메인 세션 단일 — 스폰에 모델 인자가 없으므로 모델 전환은 과업 단위로 메인이 한다(렌즈별 스폰 치환 불가).
+- **Flash 구간 산출물 적대검토**: Flash로 돌린 구간(반복 구현·리컨·대량 소비)의 산출물에는 GLM-5.3(메인 재전환·심층 렌즈)의 교차검증 1건 이상을 추가한다 — 경량 구간의 품질 회귀를 잡는다.
 
 ## role↔스폰 매핑표 (원본 `agents/*.md` 역할 증류)
 
@@ -48,7 +51,7 @@ ZCode는 Claude Code가 아닌 별도 하니스다 → 백엔드 교체 매핑(g
 |--------------|-----------|------|
 | ①계획(M) | 메인 세션 (얇은 계획) | 계약 요소 확정이 ① 최소 완료 |
 | ①계획(L/XL) | `general-purpose` + `plan-high`/`plan-xhigh` 계약 주입 | Phase 분해·검증 claims 산출 |
-| ②검토(L/XL) | `general-purpose` ×3/×5 병렬 + 렌즈 1개씩 주입 | 팬아웃 ON, 병합=메인 |
+| ②검토(L/XL) | 심층 `general-purpose` ×1 + 경량 `Explore` ×2/×4 (렌즈 1개씩 주입) | 심층 동시 1 — 병합=메인 |
 | ③구현 | 메인 / `general-purpose` + `implement-med` 계약 주입 | 보존 제약 verbatim 복사 |
 | ③구현(XL 임계경로) | `general-purpose` + `implement-xhigh`/`core-xhigh` 계약 주입 | |
 | ④리뷰 | `general-purpose` + `review-pr-*` 계약·claims 전문 주입 | merge 권위는 메인 |

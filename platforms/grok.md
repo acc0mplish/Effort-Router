@@ -24,7 +24,7 @@ xAI grok.com 웹앱은 파일시스템·서브에이전트 스폰이 없다 → 
 - 서브에이전트: `Task`의 `executor`(일반 작업)·`browserUse`·`computerUse`(GUI). 리포 코드 변경은 `CloudAgent`(브랜치/PR). 역할 분리가 필요하면 하니스 고유 스폰을 쓰고 본 스킬의 에이전트명은 지목하지 않는다.
 - effort: 메인 세션에 effort 파라미터 없음. CloudAgent `model`/`model_params`는 사용자가 명시할 때만.
 - 팬아웃(§2): `OFF`. executor 병렬 조사는 가능하나 렌즈 팬아웃 계약은 없다.
-- 상태·인계(§5): 박스에 파일시스템이 있다 — `state.json`·증거번들을 과업 루트에 둘 수 있다(chat-app과 다름). writer는 메인 세션 단일. 서브에이전트·CloudAgent는 완료 보고만.
+- 상태·인계(§5): 박스에 파일시스템이 있다 — `state.json`·증거번들을 둔다(chat-app과 다름). git 저장소면 본문 계약대로 `docs/task-id/<task-id>/`(+`.gitignore` 등록), 비git 박스 루트면 `.gitignore` 규칙은 미적용한다. writer는 메인 세션 단일. 서브에이전트·CloudAgent는 완료 보고만. 스폰 워치독(§3)도 본문 그대로 준용한다.
 - 컨텍스트 등재: 사용자 스킬 + 에이전트 메모리 + Cursor 프로젝트의 `.cursorrules`. 실패 기반 규칙은 관측된 실패 1건당 검증 가능한 예방 규칙 1줄로 누적한다.
 - 설치: 어시스턴트가 스킬로 저장하면 채팅에서 `/effort-router`로 호출할 수 있다.
 

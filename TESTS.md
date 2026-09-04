@@ -298,6 +298,25 @@ exit 0
 - 수정된 원본↔설치본 diff → 차이 0건
 - `git diff --check` → exit 0
 
+## r10 워치독·GLM 동시성·과업 루트 계약 (2026-09-04)
+
+ZCode(GLM 백엔드)·ChatGPT 앱(2026-07-09 명칭 통일)·Claude Code CLI+GLM 운용 피드백 반영. 이번 라운드부터 스킬 자체 계약(`docs/task-id/<task-id>/` 상태·②팬아웃 3렌즈 → 반려 → r2 수정안 → 재검토 통과 → ④리뷰 PASS)을 실전 적용했다(round.adversary 1/2, spawns 5).
+
+추가 계약:
+
+1. **§3 스폰 워치독** — 장기·비동기 스폰 10분 간격 점검, 연속 2회 무진행(무응답·진행 신호 부재) 시 정지 후 재스폰·역할 재분배(동일 역할 1회 한정, 초과 `phase: escalated` — 재스폰으로 round 예산 회복 금지). 독립 후속 스폰 대기 금지(병렬 유지는 경량·리컨으로). 정지 수단 없는 하니스는 종료 시한 사전 명시.
+2. **§5 과업 루트** — `docs/task-id/<task-id>/state.json` + 저장소 `.gitignore`에 `docs/task-id/` 등록. worktree 격리 시 본체 저장소 경로 고정.
+3. **GLM-5.3 동시성 상한(§6 단서)** — 심층(xhigh급) 스폰 동시 1. 팬아웃 렌즈는 직렬화·경량 병렬 치환. Flash 대체는 과업 단위(메인 모델 전환)로 한정 — 렌즈별 스폰 치환은 model override 금지로 불가. Flash 구간 산출물엔 GLM-5.3 교차검증(적대검토) 1건 이상.
+4. **ChatGPT Classic 명칭** — 2026-07-09 데스크톱 앱 통일 반영(chat-app.md 노트·README 병기).
+5. zcode·glm·codex·qwen·gemini·grok 파생 갱신 + SKILL.md 실패 표 2행·Output Contract 혼합 팬아웃 표기.
+
+검증 결과:
+
+- ②팬아웃(심층 general-purpose ×1 + 경량 Explore ×2 병렬 — 신규 동시성 규칙 선적용): 반려 3건 HIGH(§2 병렬 스폰 vs 상한 충돌·렌즈별 Flash 혼합 구조 불가·재스폰 예산 결함) 독립 확인 → r2 수정안 반영 → 재검토 1렌즈 통과(HIGH 잔존 0)
+- ④리뷰: claims 1-8 verified(grep·git diff 헝크·check-ignore 채증) + 보존 제약 위반 0(§2·§5 예산·롤백 원문 무변경, 기존 .gitignore 항목 유지) + LOW 2건 → 반영
+- `git diff --check` → exit 0
+- 원본↔설치본(`~/.agents/skills/effort-router/`) diff → 차이 0건(books·.git 제외)
+
 ## 재현 절차
 
 ```bash

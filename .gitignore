@@ -5,3 +5,5 @@ r4-fix/
 recon-thin/
 harness-compat/
 r7-openai-routing/
+# 과업 상태 루트(§5) — task-id별 하위 폴더, 과업 상태는 커밋 금지
+docs/task-id/
