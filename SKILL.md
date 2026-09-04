@@ -237,7 +237,7 @@ Codex와 ChatGPT는 §2의 OpenAI 모델 정책을 직접 적용한다. 다른 �
 - **ChatGPT 데스크톱 앱 Codex 화면**: Codex CLI와 같은 로컬 Skill·`config.toml`·custom agents를 사용한다.
 - **ChatGPT Work**: Skill은 사용할 수 있으나 로컬 Codex custom-agent TOML을 전제로 하지 않는다. 에디터의 모델·reasoning control에서 §2 조합을 선택하고, 호스팅 subagent는 실제 독립 병렬 작업이 있을 때만 요청한다.
 
-- **GLM Coding Plan(Z.ai)**: 하니스가 아니라 Claude Code의 백엔드 교체다 — 적용 대상에 Claude Code가 공식 포함됨. 슬롯 실체가 프록시 매핑을 따르고 effort 강등(§3 실측)이 발생할 수 있다. 심층(xhigh급) 스폰은 백엔드 동시성 상한 내에서만 병렬한다(GLM-5.3 상한 1 — 팬아웃은 렌즈 직렬화·경량 렌즈 병렬로 치환, `platforms/glm.md`).
+- **GLM Coding Plan(Z.ai)**: 하니스가 아니라 Claude Code의 백엔드 교체다 — 적용 대상에 Claude Code가 공식 포함됨. 슬롯 실체가 프록시 매핑을 따르고 effort 강등(§3 실측)이 발생할 수 있다. 이원 모델 정책으로 모든 플랜이 GLM-5.3과 GLM-5.3-Flash를 함께 지원한다 — 치환 기준과 비전(시각 이해 MCP 번들)은 `platforms/glm.md`·`platforms/zcode.md`를 따른다. 심층(xhigh급) 스폰은 백엔드 동시성 상한 내에서만 병렬한다(GLM-5.3 상한 1 — 팬아웃은 렌즈 직렬화·경량 렌즈 병렬로 치환, `platforms/glm.md`).
 - 표의 '미확인'은 공식 문서에서 확인하지 못한 항목이다 — 확인 전까지 단정하지 않는다.
 - 하니스별 삽입 단편과 설치 절차는 동봉 `platforms/`(codex·qwen·gemini·glm·grok·zcode·chat-app·README)에 둔다 — 본문이 우선, 어댑터는 파생이다.
 
