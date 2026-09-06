@@ -1,6 +1,6 @@
 ---
 name: effort-router
-description: Codex와 ChatGPT에서 작업 티어(S/M/L/XL)와 단계별 모델·에포트를 판정한다. 명세·검토·난제는 GPT-5.6 Sol, 명확한 일반 실행은 GPT-5.6 Luna max로 라우팅할 때 사용한다.
+description: Codex와 ChatGPT에서 작업 티어(S/M/L/XL)와 단계별 모델·에포트를 판정한다. 계획은 GPT-6 Astra medium, 검토는 GPT-6 Astra high, 모든 실무 실행은 GPT-5.6 Luna max로 라우팅할 때 사용한다.
 ---
 
 # Effort Router
@@ -74,41 +74,44 @@ Codex 또는 ChatGPT 데스크톱 앱에 이 Skill을 설치·업데이트해 �
 
 ### OpenAI 기본 모델 정책
 
+**Codex 요금제 분기 우선:** 아래 검토의 Astra/high는 Pro 기준이다. Plus는 계획 검토·문제 판정·PR 리뷰·보안 감사·미해결 검토 모두 Astra/medium을 사용한다. 계획 Astra/medium과 실무 Luna/max는 동일하다. 이 규칙은 모든 티어와 실패 후 검토에도 우선한다.
+
+Codex 작업 시작 및 계정 변경 후 `python3 <skill-dir>/scripts/configure_codex_plan.py`로 현재 로그인 요금제를 확인한다 (`<skill-dir>`은 이 SKILL.md의 디렉터리). `changed_roles`가 있으면 `--apply`로 적용하고, `restart_required: true`이면 Codex 재시작 후 custom role을 호출한다. 감지 실패·미지원 요금제는 high로 추정하지 않고 중단하며 사용자 명시 `--plan plus|pro`를 사용한다. Output Contract에는 감지 출처·요금제와 실제 적용 effort를 명시한다. 실행 중 메인/role의 설정을 변경했다고 주장하지 않는다. 상세 절차는 `platforms/codex.md`의 요금제 절을 따른다.
+
 | 작업 성격 | 모델·에포트 | 적용 역할 |
 |---|---|---|
-| 요구와 완료 조건이 확정된 일반 구현·반복 실행 | `gpt-5.6-luna / max` | `coder-medium`, `implement-med` |
-| 명세 작성·계획·스펙 검토·문제 분석·해결안 판단·PR 판정 | `gpt-5.6-sol / high~xhigh` | `plan-*`, `plan-adversary-xhigh`, `review-pr-*` |
-| XL 임계경로·보안 감사·동일 접근 2회 실패한 미해결 문제 | `gpt-5.6-sol / max` | `core-xhigh`, `security-audit`, 메인 세션 승격 |
-| 구현 중 설계 판단이 계속 필요한 XL 작업 | `gpt-5.6-sol / xhigh` | `implement-xhigh` |
+| 모든 실무 실행·구현·수정·테스트·검증 (XL 임계경로 포함) | `gpt-5.6-luna / max` | `coder-medium`, `implement-med`, `implement-xhigh`, `core-xhigh` |
+| 명세 작성·계획·아키텍처 설계 | `gpt-6-astra / medium` | `plan-high`, `plan-xhigh` |
+| 계획·스펙 검토·문제 분석·해결안 판단·PR 판정·보안 감사 | `gpt-6-astra / high` | `plan-adversary-xhigh`, `review-pr-*`, `security-audit` |
 
-`gpt-5.6-terra`는 기본 라우팅에 쓰지 않는다. `max`는 단일 작업의 깊이이며 멀티에이전트를 뜻하지 않는다. `ultra`는 독립 하위 작업이 있고 병렬 이득이 실제로 클 때만 별도 선택한다.
+Codex CLI 기준 정책이며, role 이름의 `high`·`xhigh`·`medium`은 호환용 식별자다. 실제 effort는 위 표와 TOML을 따른다. `gpt-5.6-sol`과 `gpt-5.6-terra`는 기본 라우팅에 쓰지 않는다. `max`는 단일 작업의 깊이이며 멀티에이전트를 뜻하지 않는다. `ultra`는 독립 하위 작업이 있고 병렬 이득이 실제로 클 때만 별도 선택한다.
 
 ### S
 - ① 계획: 생략
 - ② 검토: 셀프 재실행 확인(§3) — '자기 산출물 검토는 검토가 아니다'(§2 규칙)는 §5 계약이 적용되는 M+의 검토 위임에 대한 규칙, S는 폭발 반경이 작아 예외
 - ③ 구현: 메인 세션 직접 / 위임 시 `coder-medium` (OpenAI: Luna/max)
-- ④ 리뷰: `review-pr-high` (OpenAI: Sol/high, 텍스트·스타일만 변경 시 생략)
+- ④ 리뷰: `review-pr-high` (OpenAI: Astra/high, 텍스트·스타일만 변경 시 생략)
 
 ### M
-- ① 계획: `plan-high` (OpenAI: Sol/high, 기본 = 얇은 계획 §5 — 계약 요소 우선 확정)
+- ① 계획: `plan-high` (OpenAI: Astra/medium, 기본 = 얇은 계획 §5 — 계약 요소 우선 확정)
 - ② 검토: 생략 (plan-high 재호출 금지 — 자기 산출물 검토는 검토가 아니다)
 - ③ 구현: `implement-med` (OpenAI: Luna/max)
-- ④ 리뷰: `review-pr-high` (OpenAI: Sol/high)
+- ④ 리뷰: `review-pr-high` (OpenAI: Astra/high)
 
 ### L
-- ① 계획: `plan-high` (OpenAI: Sol/high, Phase 분해 필수 — 깊이는 위험에 비례, 임계경로·위험 지표 양성 스코프에 심층 §5)
-- ② 검토: `plan-adversary-xhigh` (OpenAI: Sol/xhigh) 팬아웃 ●●● (기본 3렌즈)
+- ① 계획: `plan-high` (OpenAI: Astra/medium, Phase 분해 필수 — 깊이는 위험에 비례, 임계경로·위험 지표 양성 스코프에 심층 §5)
+- ② 검토: `plan-adversary-xhigh` (OpenAI: Astra/high) 팬아웃 ●●● (기본 3렌즈)
 - ③ 구현: `implement-med` (OpenAI: Luna/max, Phase당 ≤5파일, 격리 필요 시 worktree)
-- ④ 리뷰: `review-pr-xhigh` (OpenAI: Sol/xhigh) → 최종 merge 판정 권위는 메인 세션
+- ④ 리뷰: `review-pr-xhigh` (OpenAI: Astra/high) → 최종 merge 판정 권위는 메인 세션
 
 ### XL
-- ① 계획: `plan-xhigh` (OpenAI: Sol/xhigh)
-- ② 검토: `plan-adversary-xhigh` (OpenAI: Sol/xhigh) 팬아웃 ●●● (5렌즈)
-- ③ 구현: `implement-xhigh` (OpenAI: Sol/xhigh) / 직렬 임계경로 코어만 `core-xhigh` (OpenAI: Sol/max, 기준: plan-xhigh 산출물의 임계경로 식별)
-- ④ 리뷰: `review-pr-xhigh` (OpenAI: Sol/xhigh) → 최종 merge 판정 권위는 메인 세션
+- ① 계획: `plan-xhigh` (OpenAI: Astra/medium)
+- ② 검토: `plan-adversary-xhigh` (OpenAI: Astra/high) 팬아웃 ●●● (5렌즈)
+- ③ 구현: `implement-xhigh` (OpenAI: Luna/max) / 직렬 임계경로 코어만 `core-xhigh` (OpenAI: Luna/max, 기준: plan-xhigh 산출물의 임계경로 식별)
+- ④ 리뷰: `review-pr-xhigh` (OpenAI: Astra/high) → 최종 merge 판정 권위는 메인 세션
 
 ### 보안감사
-- `security-audit` (OpenAI: Sol/max) + 교차 검증 1건 이상 (`review-pr-xhigh` 재판정 또는 상위 세션 직접). CRITICAL 즉시 최상단 보고.
+- `security-audit` (OpenAI: Astra/high) + 교차 검증 1건 이상 (`review-pr-xhigh` 재판정 또는 상위 세션 직접). CRITICAL 즉시 최상단 보고.
 
 ## ●●● 팬아웃
 
@@ -150,7 +153,7 @@ Codex 또는 ChatGPT 데스크톱 앱에 이 Skill을 설치·업데이트해 �
 - **리컨 병렬화** — ①계획 스폰 직후 메인 세션은 계획 도착을 기다리지 않고 확정 필요한 read-only 리컨을 병렬 수행한다: 백업 스냅샷, grep 대상·문구 위치 확정, 파일 지도, 테스트 목록. 결과는 계획 번들 병합 또는 claims evidence 대상 등록(병합 주체 = 메인 세션). 스폰 없음 — 메인 세션 직접(화이트리스트 불변). 리컨은 검증 준비이지 선행 게이트가 아니다 — 계획 도착 전 미완료분은 수령 후 완료한다.
 - **스폰 워치독** — 메인 세션은 스폰을 방치하지 않는다. 비동기·장기 스폰은 10분 간격으로 점검한다(하니스의 상태 조회·출력 확인 수단). 무진행 = 무응답 또는 하니스 진행 신호의 연속 2회 부재 → 정지 후 재스폰·역할 재분배를 판정한다. 재스폰은 round 예산과 별개로 동일 역할 1회 한정, 초과 시 `phase: escalated`로 사용자 에스컬레이션한다(재스폰으로 round 예산을 회복하지 않는다). 한 스폰의 장기화로 독립 후속 스폰을 대기시키지 않는다 — 병렬 유지는 경량 작업·리컨으로(백엔드 동시성 상한이 우선). 정지 수단이 없는 하니스는 스폰 프롬프트에 종료 시한을 사전 명시한다.
 - **계약은 인계·상태·증지만 규정** — 서브에이전트 내부 실행(도구 사용·구현 경로·디버깅 전략)은 규정하지 않는다.
-- **미해결 승격** — 동일 접근 2회 연속 실패, 재현 불안정, 또는 테스트가 반복 실패하면 루틴 실행을 중단하고 메인/후속 역할을 `gpt-5.6-sol / max`로 승격해 원인 분석과 해결안 판정을 다시 한다.
+- **미해결 검토** — 동일 접근 2회 연속 실패, 재현 불안정, 또는 테스트가 반복 실패하면 실행을 중단하고 `gpt-6-astra / high`로 원인 분석과 해결안을 검토한다. 재계획은 `gpt-6-astra / medium`, 확정된 수정·테스트 실행은 `gpt-5.6-luna / max`로 복귀한다.
 - **메인 세션 model·effort는 UI 또는 `/model`로만 변경**한다. 에이전트는 변경했다고 주장하지 않고 필요한 전환을 안내한다.
 - 스킬 갱신 시 원본과 설치본(`~/.codex/skills/effort-router/`, `~/.codex/agents/*.toml`)의 매핑을 비교하고 검증한다. Claude Code 배포 시에는 기존 사본 2곳도 별도로 동기화한다.
 

@@ -37,26 +37,47 @@ python3 ~/.codex/skills/effort-router/scripts/verify_global_install.py
 
 성공 기준은 `PASS global effort-router installation`이다. 이 검사는 Skill·UI metadata·전역 기본 모델/effort·subagent 활성화·전역 AGENTS 규칙·10개 custom-agent TOML을 함께 확인한다. 실제 역할 호출 검증은 `TESTS.md`의 Codex runtime protocol을 따른다.
 
+## 요금제 자동 감지와 적용
+
+이 프로젝트의 사용자 지정 정책: Plus는 검토·문제 판정·보안 감사도 `gpt-6-astra / medium`, Pro는 `gpt-6-astra / high`를 사용한다. 계획은 항상 Astra/medium, 모든 실무 실행은 Luna/max다. 이는 요금제의 공식 모델 제한을 주장하는 규칙이 아니다. 아래 표와 기본 TOML은 Pro 기준이며 Plus 적용 시 검토 4개 role의 effort를 medium으로 바꾼다.
+
+```bash
+# 조회·변경 예정 role 확인 (파일 변경 없음)
+python3 scripts/configure_codex_plan.py
+# 감지 결과 적용 (기존 파일 백업 후 모델·effort 키만 변경)
+python3 scripts/configure_codex_plan.py --apply
+# 오프라인 또는 자동 감지 불가 환경에서 명시적으로 선택
+python3 scripts/configure_codex_plan.py --plan plus --apply
+# 감지된 요금제를 기준으로 설치 검증
+python3 scripts/verify_global_install.py
+```
+
+설치된 Skill에서는 위 `scripts/`를 `~/.codex/skills/effort-router/scripts/`로 바꾼다. 기본 대상은 `$CODEX_HOME/agents` 또는 `~/.codex/agents`; `--agents-dir PATH`로 별도 설치 디렉터리를 지정할 수 있다. 없는 role은 동봉 템플릿으로 생성한다. 기존 role은 기타 설정과 지시문을 보존하므로 구 정책의 지시문이 남은 설치는 먼저 현재 Skill·role 템플릿으로 병합 업데이트한다.
+
+감지는 `codex app-server`의 `initialize` → `initialized` → `account/read` (`refreshToken: false`) 순서다. 현재 로그인 정보의 `planType`만 사용하고 토큰·이메일·계정 원문은 출력하지 않는다. 강제 토큰 갱신은 하지 않는다. 로그아웃·API 키 로그인·Plus/Pro 외 요금제·오류·15초 타임아웃에는 파일을 변경하지 않고 exit 1로 중단한다. 이 경우 사용자가 `--plan plus|pro`를 명시할 수 있다. [공식 OpenAI account/read 문서](https://learn.chatgpt.com/docs/app-server).
+
+계정·요금제 변경 후 적용 명령을 다시 실행한다. `restart_required: true`이면 Codex CLI를 재시작한 뒤 역할을 호출한다. 실행 중인 메인 모델이나 이미 로드된 custom agent를 자동 전환했다고 간주하지 않는다. 변경 파일 원본은 대상 디렉터리의 `.effort-router-backups/` 아래에 보관한다. 동일 설정 재적용은 새 백업이나 변경을 만들지 않는다. 전역 `config.toml`·`AGENTS.md` 병합은 기존 설치 절차를 따른다.
+
 ## OpenAI 모델 정책
 
 | 역할 | 모델 | effort | 선택 근거 |
 |---|---|---|---|
 | `coder-medium` | `gpt-5.6-luna` | `max` | 명확한 S 구현·테스트 |
 | `implement-med` | `gpt-5.6-luna` | `max` | 확정 계획의 일반 구현 |
-| `plan-high` | `gpt-5.6-sol` | `high` | M/L 명세·계획 작성 |
-| `plan-xhigh` | `gpt-5.6-sol` | `xhigh` | XL 아키텍처·명세 작성 |
-| `plan-adversary-xhigh` | `gpt-5.6-sol` | `xhigh` | 스펙·계획 적대 검토 |
-| `review-pr-high` | `gpt-5.6-sol` | `high` | S/M 문제 판정·PR 리뷰 |
-| `review-pr-xhigh` | `gpt-5.6-sol` | `xhigh` | L/XL 심층 판정 |
-| `implement-xhigh` | `gpt-5.6-sol` | `xhigh` | 구현 중 설계 판단이 필요한 XL 작업 |
-| `core-xhigh` | `gpt-5.6-sol` | `max` | XL 직렬 임계경로 |
-| `security-audit` | `gpt-5.6-sol` | `max` | 보안·출시 판정 |
+| `plan-high` | `gpt-6-astra` | `medium` | M/L 명세·계획 작성 |
+| `plan-xhigh` | `gpt-6-astra` | `medium` | XL 아키텍처·명세 작성 |
+| `plan-adversary-xhigh` | `gpt-6-astra` | `high` | 스펙·계획 적대 검토 |
+| `review-pr-high` | `gpt-6-astra` | `high` | S/M 문제 판정·PR 리뷰 |
+| `review-pr-xhigh` | `gpt-6-astra` | `high` | L/XL 심층 판정 |
+| `implement-xhigh` | `gpt-5.6-luna` | `max` | 확정 계획의 XL 구현; 설계 변경은 계획·검토로 분리 |
+| `core-xhigh` | `gpt-5.6-luna` | `max` | XL 직렬 임계경로 |
+| `security-audit` | `gpt-6-astra` | `high` | 보안·출시 판정 |
 
-`gpt-5.6-terra`는 기본 라우팅에서 제외한다. 일반 실행량은 Luna/max가 담당하고, 명세·검토·문제 해결·문제 판정은 Sol이 담당한다.
+`gpt-5.6-terra`는 기본 라우팅에서 제외한다. 모든 실무 실행은 Luna/max, 계획·명세 작성은 Astra/medium, 검토·문제 판정·보안 감사는 Astra/high가 담당한다. role 이름은 호환용 식별자이며 실제 effort는 표와 TOML을 따른다.
 
 ## 승격 규칙
 
-- 동일 접근 2회 실패, 재현 불안정, 반복 테스트 실패: 현재 구현을 중단하고 `gpt-5.6-sol / max`로 원인 분석·해결안 판정을 다시 한다.
+- 동일 접근 2회 실패, 재현 불안정, 반복 테스트 실패: 현재 구현을 중단하고 `gpt-6-astra / high`로 원인 분석·해결안을 검토한다. 재계획은 Astra/medium, 확정된 수정·테스트 실행은 Luna/max로 복귀한다.
 - `max`는 단일 에이전트의 reasoning depth다. 이것만으로 subagent를 늘리지 않는다.
 - `ultra`는 서로 독립적인 하위 작업을 병렬화할 때만 선택한다.
 
@@ -71,7 +92,7 @@ python3 ~/.codex/skills/effort-router/scripts/verify_global_install.py
 ## AGENTS.md 삽입 단편
 
 ```markdown
-코딩 작업 착수 전 설치된 `effort-router`를 사용한다. Output Contract로 티어·단계·모델·effort를 먼저 밝힌다. 명세 작성·스펙 검토·문제 분석·해결안 판단·PR 판정·고난도 작업은 GPT-5.6 Sol, 요구가 확정된 일반 구현은 GPT-5.6 Luna max를 사용한다. 동일 접근 2회 실패 시 Sol max로 승격한다. max를 이유로 멀티에이전트를 자동 사용하지 않는다.
+코딩 작업 착수 전 설치된 `effort-router`를 사용한다. Output Contract로 티어·단계·모델·effort를 먼저 밝힌다. 모든 실무 실행은 GPT-5.6-Luna max, 계획·명세 작성은 GPT-6-Astra medium, 검토·문제 판정·보안 감사는 Plus에서 GPT-6-Astra medium, Pro에서 GPT-6-Astra high를 사용한다. 역할 호출 전 configure_codex_plan.py로 요금제를 확인하고 불일치 시 --apply 적용 및 Codex 재시작 후 진행한다. 동일 접근 2회 실패 시 요금제별 Astra effort로 검토하고, 재계획은 Astra medium, 확정된 실행은 Luna max로 복귀한다. max를 이유로 멀티에이전트를 자동 사용하지 않는다.
 
 ## 실패 기반 영구 예방 규칙
 

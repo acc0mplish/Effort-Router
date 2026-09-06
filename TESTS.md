@@ -344,3 +344,38 @@ ZCode(GLM 백엔드)·ChatGPT 앱(2026-07-09 명칭 통일)·Claude Code CLI+GLM
 # 3. 조건 B (green): SKILL.md 전문을 프롬프트에 주입해 투입
 # 4. 응답에서 3개 지표 산출 (위 표 형식으로 본 문서에 추가)
 ```
+
+## r8 Codex CLI Luna/Astra 단계별 라우팅 (2026-09-06)
+
+현재 Codex 정책은 r7의 Sol 매핑을 대체한다. r7 런타임 기록은 당시 결과이며 새 매핑의 런타임 증거가 아니다.
+
+- 모든 실무 실행·구현·수정·테스트: `gpt-5.6-luna / max` (XL 구현·임계경로 포함).
+- 계획·명세 작성: `gpt-6-astra / medium`.
+- 계획 검토·문제 판정·PR 리뷰·보안 감사: `gpt-6-astra / high`.
+- 기존 role 이름은 유지한다. 접미사가 아닌 TOML의 모델·effort가 실제 매핑이다.
+- 동일 접근 2회 실패 시 Astra/high 검토 → 필요 시 Astra/medium 재계획 → Luna/max 실행.
+
+저장소 검증:
+
+- `python3 scripts/test_codex_routing.py` → exit 0. 임시 설치에서 10개 role 통과, 변경된 8개 role 각각의 구 Sol 모델 거부 확인.
+- `uv run --with pyyaml /Users/yong/.codex/skills/.system/skill-creator/scripts/quick_validate.py .` → exit 0, `Skill is valid!`.
+- `git diff --check` → exit 0.
+
+전역 설치·재시작·새 모델의 실제 role 스폰은 이 개정에서 수행하지 않았다. 설치 후 위 매핑으로 runtime protocol을 다시 실행해야 한다.
+
+## r9 Codex 요금제 자동 분기 (2026-09-06)
+
+- `scripts/configure_codex_plan.py`: 공식 app-server `account/read`로 로그인 요금제 조회. Plus 검토 medium, Pro 검토 high; 계획 medium·실무 Luna/max 유지.
+- 기본은 읽기 전용. `--apply`에서 role TOML의 모델·effort만 반영하고 기존 파일 백업. 계정 전환 후 재적용 및 변경 시 Codex 재시작 필요.
+- 자동 감지 불가·미지원 요금제는 exit 1. `--plan plus|pro`로 명시 가능. API 키에서 ChatGPT 요금제를 추정하지 않음.
+- `verify_global_install.py`도 같은 요금제 매핑 사용. `--plan` 미지정 시 자동 조회.
+
+검증 명령과 결과:
+
+- `python3 scripts/test_plan_routing.py` → exit 0, 4 tests. Plus/Pro 왕복, 백업·사용자 설정 보존·멱등성, 읽기 전용, app-server handshake, Plus/Pro/API 키/미지원/null 계정, 타임아웃, 잘못된 TOML의 무변경 중단 검증.
+- `python3 scripts/test_codex_routing.py` → exit 0, 1 test. Pro 설치 및 구 Sol 거부, Plus 적용 후 Plus 검증 통과·Pro 검증 거부.
+- `python3 scripts/configure_codex_plan.py --agents-dir platforms/codex-agents` → exit 0. 실제 Codex CLI 0.153.0: `plan=pro`, `review_effort=high`, `source=account/read`, `changed_roles=[]`, `applied=false`.
+- `uv run --with pyyaml /Users/yong/.codex/skills/.system/skill-creator/scripts/quick_validate.py .` → exit 0, `Skill is valid!`.
+- `git diff --check` → exit 0.
+
+Plus는 격리된 표본으로 검증했으며 실제 Plus 계정 로그인은 수행하지 않았다. 이번 작업에서 전역 설치나 실제 모델 role 스폰은 수행하지 않았다.

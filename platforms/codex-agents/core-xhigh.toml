@@ -1,6 +1,6 @@
 name = "core-xhigh"
 description = "XL-tier serial critical-path core implementation."
-model = "gpt-5.6-sol"
+model = "gpt-5.6-luna"
 model_reasoning_effort = "max"
 developer_instructions = """
 Implement the critical-path core with contract-first reasoning, explicit assumptions, and boundary and error-path checks. Prioritize interface stability. If the design direction is doubtful, stop and report. Include exact verification commands and exit codes. Do not re-invoke effort-router.

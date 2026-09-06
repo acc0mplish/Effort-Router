@@ -3,5 +3,5 @@ description = "S-tier routine implementation, refactoring, and tests."
 model = "gpt-5.6-luna"
 model_reasoning_effort = "max"
 developer_instructions = """
-Implement the specified task accurately using surrounding conventions. Do not expand scope. Stop and report uncertainty or two failed attempts for Sol/max escalation. Report changed files and exact test commands with exit codes. Do not re-invoke effort-router.
+Implement the specified task accurately using surrounding conventions. Do not expand scope. Stop and report uncertainty or two failed attempts for Astra review (Plus: medium; Pro: high); resume implementation with Luna/max after the plan is confirmed. Report changed files and exact test commands with exit codes. Do not re-invoke effort-router.
 """

@@ -3,24 +3,15 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 import tomllib
 from pathlib import Path
 
 
-EXPECTED_AGENTS = {
-    "coder-medium": ("gpt-5.6-luna", "max"),
-    "implement-med": ("gpt-5.6-luna", "max"),
-    "plan-high": ("gpt-5.6-sol", "high"),
-    "plan-xhigh": ("gpt-5.6-sol", "xhigh"),
-    "plan-adversary-xhigh": ("gpt-5.6-sol", "xhigh"),
-    "review-pr-high": ("gpt-5.6-sol", "high"),
-    "review-pr-xhigh": ("gpt-5.6-sol", "xhigh"),
-    "implement-xhigh": ("gpt-5.6-sol", "xhigh"),
-    "core-xhigh": ("gpt-5.6-sol", "max"),
-    "security-audit": ("gpt-5.6-sol", "max"),
-}
+from configure_codex_plan import expected_agents, resolve_plan
+
 
 
 def load_toml(path: Path) -> dict:
@@ -29,6 +20,16 @@ def load_toml(path: Path) -> dict:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--plan', choices=('auto', 'plus', 'pro'), default='auto')
+    parser.add_argument('--codex-bin', default='codex')
+    args = parser.parse_args()
+    try:
+        plan = resolve_plan(args.plan, args.codex_bin)
+    except (OSError, ValueError) as error:
+        print(f"FAIL global effort-router installation: {error}")
+        return 1
+    expected = expected_agents(plan)
     codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")).expanduser()
     failures: list[str] = []
 
@@ -68,7 +69,7 @@ def main() -> int:
         for marker in (
             "effort-router",
             "GPT-5.6-Luna",
-            "GPT-5.6-Sol",
+            "GPT-6-Astra",
             "실패 기반 영구 예방 규칙",
             "과거 실패 1건",
             "CLAUDE.md",
@@ -78,7 +79,7 @@ def main() -> int:
                 failures.append(f"AGENTS.md missing marker: {marker}")
 
     agent_dir = codex_home / "agents"
-    for name, (model, effort) in EXPECTED_AGENTS.items():
+    for name, (model, effort) in expected.items():
         path = agent_dir / f"{name}.toml"
         if not path.is_file():
             failures.append(f"missing agent {path}")
@@ -103,7 +104,8 @@ def main() -> int:
     print("PASS global effort-router installation")
     print(f"- CODEX_HOME: {codex_home}")
     print("- default: gpt-5.6-luna/max")
-    print(f"- custom agents: {len(EXPECTED_AGENTS)}/{len(EXPECTED_AGENTS)}")
+    print(f"- plan: {plan}; review effort: {expected['review-pr-high'][1]}")
+    print(f"- custom agents: {len(expected)}/{len(expected)}")
     return 0
 
 

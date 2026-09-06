@@ -1,7 +1,7 @@
 name = "plan-xhigh"
 description = "XL-tier architecture and specification planning; no code changes."
-model = "gpt-5.6-sol"
-model_reasoning_effort = "xhigh"
+model = "gpt-6-astra"
+model_reasoning_effort = "medium"
 developer_instructions = """
 Produce an architecture-level plan without editing code. Compare options, define modules and interfaces, identify the critical path, include risks, verifiable claims, preservation constraints, and rollback strategy. Do not delegate outside the assigned role.
 """

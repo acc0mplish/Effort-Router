@@ -1,6 +1,6 @@
 # effort-router
 
-작업의 규모·위험도를 티어(S/M/L/XL)로 판정하고 단계별 모델·에포트를 배정하는 Codex·ChatGPT Skill. 명세·검토·난제는 GPT-5.6 Sol, 요구가 확정된 일반 실행은 GPT-5.6 Luna max로 보낸다.
+작업의 규모·위험도를 티어(S/M/L/XL)로 판정하고 단계별 모델·에포트를 배정하는 Codex·ChatGPT Skill. Codex CLI 기준 모든 실무 실행은 GPT-5.6-Luna max, 계획은 GPT-6-Astra medium, 검토는 GPT-6-Astra high로 보낸다.
 
 ```text
 Decision(티어 판정) → Requirement → Acceptance → Task → Evidence → Learning
@@ -31,6 +31,7 @@ cp -R SKILL.md TESTS.md README.md agents platforms scripts ~/.codex/skills/effor
 
 mkdir -p ~/.codex/agents
 cp platforms/codex-agents/*.toml ~/.codex/agents/
+python3 scripts/configure_codex_plan.py --apply
 ```
 
 ### 2. `~/.codex/config.toml` 전역 설정
@@ -52,8 +53,10 @@ enabled = true
 기존 내용을 보존하고 다음 단편을 추가한다.
 
 ```markdown
-코딩 작업 착수 전 설치된 `effort-router`를 사용한다. 명세·검토·난제는 GPT-5.6 Sol,
-요구가 확정된 일반 구현은 GPT-5.6 Luna max를 사용한다. 동일 접근 2회 실패 시 Sol max로 승격한다.
+코딩 작업 착수 전 설치된 `effort-router`를 사용한다. 모든 실무 실행은 GPT-5.6-Luna max,
+계획은 GPT-6-Astra medium, 검토·문제 판정·보안 감사는 Plus에서 GPT-6-Astra medium, Pro에서 high를 사용한다.
+역할 호출 전 configure_codex_plan.py로 요금제를 확인하고, 변경 시 --apply 적용 및 Codex 재시작 후 진행한다.
+동일 접근 2회 실패 시 요금제별 Astra effort로 검토하고, 재계획은 Astra medium, 확정된 실행은 Luna max로 복귀한다.
 
 ## 실패 기반 영구 예방 규칙
 
@@ -78,11 +81,15 @@ python3 ~/.codex/skills/effort-router/scripts/verify_global_install.py
 
 ## 모델 매핑
 
+**Plus:** 계획·검토 모두 Astra/medium. **Pro:** 계획 Astra/medium, 검토 Astra/high. 실무는 모두 Luna/max. 아래 표는 Pro 기준이다.
+
+`python3 scripts/configure_codex_plan.py`는 현재 Codex 로그인 요금제를 자동 조회한다. `--apply`를 붙이면 백업 후 role TOML에 반영한다. 계정 전환 후 다시 실행하고 변경 시 Codex를 재시작한다. 감지 실패 시 임의 기본값을 쓰지 않으며 `--plan plus|pro`로 명시할 수 있다. [상세 절차](platforms/codex.md#요금제-자동-감지와-적용).
+
 | 작업 | 모델·effort |
 |---|---|
-| 확정 요구의 일반 구현·반복 실행 | `gpt-5.6-luna / max` |
-| 명세 작성·계획·스펙 검토·문제 분석·PR 판정 | `gpt-5.6-sol / high~xhigh` |
-| 미해결 문제·XL 임계경로·보안 감사 | `gpt-5.6-sol / max` |
+| 모든 실무 실행·구현·수정·테스트·검증 (XL 임계경로 포함) | `gpt-5.6-luna / max` |
+| 명세 작성·계획·아키텍처 설계 | `gpt-6-astra / medium` |
+| 스펙 검토·문제 분석·PR 판정·보안 감사 | `gpt-6-astra / high` |
 
 `gpt-5.6-terra`는 기본 라우팅에서 제외한다. `max`는 단일 작업 깊이이며, `ultra`는 독립 병렬 작업이 있을 때만 쓴다.
 
