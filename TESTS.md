@@ -405,3 +405,33 @@ Plus는 격리된 표본으로 검증했으며 실제 Plus 계정 로그인은 �
 - ②적대검토 1스폰(본 라운드 전 단계): 조건부 승인 — 수정 5건 본 섹션·README·SKILL.md에 반영
 - 재검토 1렌즈(plan-adversary-xhigh): **통과** — 수정항목 5건 전부 실반영 확인, 보호 대상 원문 무변형(반려 게이트 불릿은 원문 보존형 확장), PDF 원본과 cmp 바이트 동일. LOW 3건 처리: README 소개문 갱신을 claim 8로 소급 등록, 근거 불릿 2번째 조건 문면 보강("결함 있는 사전의"), claude-mem 스텁 디렉토리(`books/*-ko/CLAUDE.md` 다수)는 r12 산출 아님 — 커밋 전 사용자 정리 판단 권고
 - ④리뷰(review-pr-xhigh 1스폰): **PASS** — claims 8건 전부 verified(grep 라인 채증 + 참조논문 [5] arXiv 실재·초록 "retaining rejected ones" 명시까지 외부 확인 — 환각 인용 부정), 보존 제약 5건 충족(platforms·agents·.gitignore·기존 PDF·state.json ignore), CRITICAL·HIGH 부재. 메인 세션 핵심 재실행 1회(반려 근거 grep ×2·2609.09153·r12 헤딩·PDF cmp 동일·diff --check clean) + `git status` 무결성 확인 — r12 산물 외 미추적 파일은 claude-mem 스텔뿐. round 0/0, spawns 3, phase done
+
+## r13 Magenta 원전 증류 (2026-09-13)
+
+원전 추가: *Magenta: Closing the Loop Between Mathematical Reasoning and Lean Verification*, arXiv 2609.11319 (2026). ②적대검토(plan-adversary-xhigh 1렌즈 — 기술적오류·충실성) 판정 **조건부 승인**: CRITICAL 0, HIGH 2(README [6] 정정·origin/main 재기준 — 개정 초안에서 해소), MEDIUM 4(F3 라운드 불일치 병기·F5 주입 방어 준용·F6 gap 처리 명시·F11 3병기 — 본 섹션·SKILL.md에 반영). 수치 대조 전수 일치 확인.
+
+행동 변경 규칙(증류):
+
+| 신규 규칙 | 삽입 위치 | 원전 근거 |
+|-----------|-----------|-----------|
+| claims 충실성 계약 — claim은 원 요구가 묻는 것을 그대로 검사한다(요구를 약화·재정의해 자명히 충족되는 목표로 바꿔 쓰지 않음), 약화 판정은 ④의 claim 대조가 하며 위반 claim은 gap(claims 밖 결함 보고와 구분) | §5 단계 인계 절 — claims 제한 문장 직후 | 거짓 증명서: Js 절제 시 FCR 0→45.5%(AIME 2026, Goedel), "Compilation is therefore a weak proxy for faithfulness", Lean 통과문 대비 판정 기각 67.08%(생성 전체 대비 44.64%, Table 6), 거짓 증명 3/5 = "weakened or answer-baked surrogate goal"(n=5) |
+| 재스폰 프롬프트에 직전 스폰의 진단(부분 출력·정지 지점)을 데이터로 주입(존재할 때 한정, §5 주입 방어 준용) — 진단 없는 재스폰은 같은 지점에서 다시 막힌다 | §3 스폰 워치독 불릿 끝 | 진단조건부 재시도 > 독립 재샘플링: AIME 2026 96.7%(29/30) vs 100%(30/30), IMO 2026 8~16회 재샘플 1/6(16.7%) vs 진단조건부 6/6 — "Conditioning on a diagnostic moves probability mass onto proofs the unconditioned distribution does not reach"(§4.3). §5 반복의 근거(HoH) 교차 근거. 실패 원인 구조: 초기 답 오류 시 후보 자체가 불가 → 재샘플로 회복 불가 |
+
+근거 소급(행동 변경 없음 — 기존 규칙의 외부 실측):
+
+| 기존 규칙 | 원전 근거 |
+|-----------|-----------|
+| 오류 귀속 라우팅 — math→재유도는 계보 "앵커 회귀 후에도 gap이 남으면 계획 결함이므로 ①로 회귀"와, Syntax→국소수리는 gap 루프(④gap→③재구현, 계획 고정)와 대응. §3 미해결 검토는 2회 집계 트리거로 보조 대응물(동일 구조 아님) | 공동 최빈 원인 = 입력 해석·전사 28.6%(n=14, Table 8) — 구현 실수보다 요구 전사 오류가 많음 |
+| 검증 루프↔모델 규모 치환(§2 라우팅 — 방향만) | 이득 7B +25.81pt vs 27B +8.60pt(Table 1), "verification-guided correction trades test-time computation for model scale". **3병기 필수**: (i) 건전한 선택자(sound selector) 전제 — Lean 커널은 건전, 스킬 검증 신호는 비포화 (ii) 천장 효과 교락(27B 베이스 91.40) — 정직한 서술은 "동일 천장을 더 많은 라운드로 도달" (iii) 라운드 수 본문 §3.2(7B 평균 5회·375B 2회)와 부록 Table 5(7B 평균 2·최대 5, 초기 시도를 round 1로 계산) 불일치 — 정성 결론(소형일수록 라운드 많음)만 양쪽 일치. round 상한 2회는 치환을 부분만 허용 — **Flash 치환 확대·상한 변경 근거로 인용 금지**, GLM-5.3 교차검증 1건이 보상 장치 |
+| ②→③ 순서·verify 재실행·escalated 의미론 | 판정 선행·소진=커버리지 손실: "adjudication is cheap relative to proof search whenever M≪K… the reason adjudication precedes proving"(A.2·B.2, T=32·M=512·K=4096), "an exhausted statement budget forfeits the problem… converts directly into lost coverage"(§4.1.1) |
+| round 카운터의 외부 관측 정규화 | 외부 라운드 비동질성: "External rounds are not interchangeable units of proof effort"(E.2, 외부 실패 도달 58% Leanstral vs 83% Codex) |
+| §3 증거기반 보고(선택 1행) | SafeVerify 승인 조건(exit code 0 + 금지 구조 무)은 교차 근거 |
+
+c4 의존성 기록: IMO alignment judge 기각은 claims 충실성(증류 ①) 채택에 조건부 — I3 제거 시 재검토 대상.
+
+defer 기록: 패러프레이즈 강건성(단독 -3.3~-10.0pt vs 루프 Δ=0, Table 2) — 표본 확대 시 응답 보존 변형 표본 병행(현재 n으로는 측정 부담 > 이득).
+
+검증 결과:
+
+- ②적대검토 1렌즈(기술적오류·충실성): 조건부 승인 — HIGH 2는 README [6] 정정·origin/main 재기준으로 개정 초안에서 해소, MEDIUM 4(F3 라운드 불일치 병기·F5 주입 방어 준용·F6 gap 처리 명시·F11 3병기)는 본 번들에 반영. 수치 대조 전수 일치 확인
+- ④리뷰(review-pr-xhigh 1스폰): **gap 1건** — README [6] 저자 누락(번들 기원, 제2저자 Haonan Li — ④가 논문 HTML 저자 블록 대조로 적발) + LOW 2건(공동 최빈 병기·A.2/B.2 이중 출처 라벨). round.review 1로 재구현(3건 수정) 후 재리뷰 **PASS** — gap 3건 resolved, claims 8/8 verified(C1~C8 grep 채증, [1]~[5]·반려 게이트·round 수치 원문 무변형 확인, 원전 수치 전수 대조 재확인), 보존 제약 B1~B6 충족. 메인 세션 핵심 재실행 1회(claims grep·diff --check exit 0) + `git status` 무결성 확인. round 0/1, spawns 7, phase done
