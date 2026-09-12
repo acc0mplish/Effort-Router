@@ -54,6 +54,7 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #5417 | 3:29 AM | ⚖️ | **r15 closed: ② conditional approval → F-3 same-round fix → ④ PASS, installed copies synced** — round 0/0, spawns 4, phase done | ~564 |
 | #5395 | 3:24 AM | ✅ | **r15 edit extends adapter-freeze policy into platforms/README.md index** | ~294 |
 | #5394 | 3:23 AM | ✅ | **r15 rework spawned**: F-3 gap fix extends the K4 adapter freeze clause to platforms/README.md | ~364 |
 | #5391 | " | 🔵 | **Main session probes adapter-freeze tension**: platforms/README.md mandates derivation updates on every main-text change | ~353 |
