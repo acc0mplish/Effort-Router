@@ -27,6 +27,7 @@ effort-router 본문(SKILL.md)은 Codex와 ChatGPT를 1급 대상으로 하며, 
 | qwen.md | Qwen Code | `~/.qwen/QWEN.md` 또는 프로젝트 루트 `QWEN.md`(`AGENTS.md` 병행 가능) | 병합용 단편 |
 | gemini.md | Gemini CLI | `~/.gemini/GEMINI.md` 또는 워크스페이스 `GEMINI.md` | 병합용 단편 |
 | glm.md | GLM Coding Plan | 설치 불필요 — Claude Code 백엔드 교체 시 참조 | 안내 문서 |
+| claude.md | Claude Code(기준 하니스·GLM 백엔드 포함) | Skill(`~/.claude/skills/effort-router/`) + `~/.claude/agents/*.md` + `~/.claude/CLAUDE.md` 병합 | 10세션 토폴로지 어댑터 |
 | zcode.md | ZCode (GLM Coding Plan 백엔드) | Skill(`~/.zcode/skills/` 또는 `~/.agents/skills/`) + `~/.zcode/AGENTS.md` 병합 | 어댑터 문서 |
 | chat-app.md | ChatGPT Work·ChatGPT Classic(구 일반 Chat) | Skill + 앱 model/reasoning control | 앱 어댑터 |
 | grok.md | Grok Bot (Cursor) | 사용자 스킬로 저장 | 어댑터 문서 |
