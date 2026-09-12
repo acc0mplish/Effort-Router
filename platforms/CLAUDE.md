@@ -9,12 +9,12 @@
 | 세션 | 역할 | 구현 | 계약 |
 |---|---|---|---|
 | 1 | 두뇌(메인) | 메인 세션 직접 | 라우터 전용(§3 — 구현·리뷰 서브에이전트는 effort-router 재호출 금지)·state.json 단일 writer(§5)·merge 최종 판정 권위(§4) |
-| 2 | 감시·Ops | `ops-supervisor` 상시 스폰(기본) 또는 별도 claude 세션 | §3 워치독(10분 간격)·두뇌 보고·GitHub issue/커밋/푸시(두뇌 명시 지시 시만)·④리뷰 후 `git status` 무결성 보고 |
+| 2 | 감시·Ops | `ops-supervisor` 온디맨드 스폰(워치독 대상 스폰 존재 시) 또는 별도 claude 세션 | §3 워치독(10분 간격)·두뇌 보고·GitHub issue/커밋/푸시(두뇌 명시 지시 시만)·④리뷰 후 `git status` 무결성 보고 |
 | 3 | 심층 작업 슬롯 | xhigh급 역할 계약 스폰 1개 | GLM 동시성 상한 — 심층 동시 1 |
 | 4–10 | 경량 작업 슬롯 ×7 | medium급 이하 역할 계약 스폰 | 병렬 허용(합계 동시 8) |
 
 - 세션 3–10의 "세션" = 두뇌의 Agent 스폰(무상태 서브에이전트)이다. 슬롯 번호는 고정 역할이 아니라 **동시성 예산**이다 — 각 스폰의 역할 계약은 §2 테이블에서 티어·단계(①계획 plan-\*·②검토 plan-adversary-xhigh·③구현 implement-\*/coder-medium/core-xhigh·④리뷰 review-pr-\*)로 선택한다.
-- 세션 2는 기본적으로 두뇌의 백그라운드 상시 스폰으로 운용한다(보고 = 메인 세션 SendMessage). 별도 터미널 claude 세션으로 띄울 때도 동일 계약을 적용하고 세션 간 통신으로 보고한다 — 이때도 state.json writer·merge 판정은 두뇌 단일이다.
+- 세션 2는 워치독 대상 스폰이 존재할 때 두뇌의 백그라운드 스폰으로 운용한다(온디맨드 — 감시 대상이 없으면 스폰하지 않는다. 보고 = 메인 세션 SendMessage). 별도 터미널 claude 세션으로 띄울 때도 동일 계약을 적용하고 세션 간 통신으로 보고한다 — 이때도 state.json writer·merge 판정은 두뇌 단일이다.
 
 ## GLM 백엔드 제약 (platforms/glm.md 준용)
 
@@ -54,6 +54,10 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #5395 | 3:24 AM | ✅ | **r15 edit extends adapter-freeze policy into platforms/README.md index** | ~294 |
+| #5394 | 3:23 AM | ✅ | **r15 rework spawned**: F-3 gap fix extends the K4 adapter freeze clause to platforms/README.md | ~364 |
+| #5391 | " | 🔵 | **Main session probes adapter-freeze tension**: platforms/README.md mandates derivation updates on every main-text change | ~353 |
+| #5366 | 3:12 AM | ✅ | **r15 edits applied**: ops-supervisor demoted to on-demand, five harness adapters frozen — 4-file diff verified | ~448 |
 | #5124 | 2:16 AM | ✅ | **Next task resumed**: reading platforms/glm.md as the session-topology WIP reopens after r13 completion | ~369 |
 | #5123 | " | 🔵 | **Install contract re-derived from adapter doc** in response to the user's sync question | ~390 |
 </claude-mem-context>

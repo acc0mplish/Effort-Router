@@ -69,7 +69,7 @@ Codex 또는 ChatGPT 데스크톱 앱에 이 Skill을 설치·업데이트해 �
 
 ## 2. 라우팅 테이블
 
-아래 역할만 호출한다. Codex는 `~/.codex/agents/*.toml`, Claude Code는 `~/.claude/agents/*.md`의 동명 역할을 사용한다. 테이블 밖 파일이 있어도 무시한다 — **존재 ≠ 허가**. 상시 역할 `ops-supervisor`(감시·GitHub 운영)는 티어 단계 밖 구성원으로 메인 세션이 직접 호출한다 — 세션 토폴로지는 `platforms/claude.md`.
+아래 역할만 호출한다. Codex는 `~/.codex/agents/*.toml`, Claude Code는 `~/.claude/agents/*.md`의 동명 역할을 사용한다. 테이블 밖 파일이 있어도 무시한다 — **존재 ≠ 허가**. 감시·운영 역할 `ops-supervisor`는 티어 단계 밖 구성원으로, 워치독 대상 스폰이 존재할 때만 메인 세션이 직접 호출한다(온디맨드 — 상시 배치 아니다. 근거: 결함 포착 실적 0건, r14 자아비판 K5) — 세션 토폴로지는 `platforms/claude.md`.
 
 **테이블 확장 판정**: 신규 에이전트 등재는 독립된 권한과 별도 검증 가능한 판단을 내놓을 때만 한다.
 
@@ -245,7 +245,7 @@ Codex와 ChatGPT는 §2의 OpenAI 모델 정책을 직접 적용한다. 다른 �
 - **GLM Coding Plan(Z.ai)**: 하니스가 아니라 Claude Code의 백엔드 교체다 — 적용 대상에 Claude Code가 공식 포함됨. 슬롯 실체가 프록시 매핑을 따르고 effort 강등(§3 실측)이 발생할 수 있다. 이원 모델 정책으로 모든 플랜이 GLM-5.3과 GLM-5.3-Flash를 함께 지원한다 — 치환 기준과 비전(시각 이해 MCP 번들)은 `platforms/glm.md`·`platforms/zcode.md`를 따른다. 심층(xhigh급) 스폰은 백엔드 동시성 상한 내에서만 병렬한다(GLM-5.3 상한 1 — 팬아웃은 렌즈 직렬화·경량 렌즈 병렬로 치환, `platforms/glm.md`).
 - **Claude Code 10세션 토폴로지**: 세션 1 두뇌(메인)·세션 2 감시 Ops(`ops-supervisor`)·세션 3–10 작업 슬롯(심층 1 + 경량 7)의 자율 병렬 운용 형태다 — 슬롯 배정·GLM 동시성 치환·두뇌 프로토콜은 `platforms/claude.md`를 따른다.
 - 표의 '미확인'은 공식 문서에서 확인하지 못한 항목이다 — 확인 전까지 단정하지 않는다.
-- 하니스별 삽입 단편과 설치 절차는 동봉 `platforms/`(codex·qwen·gemini·glm·grok·zcode·chat-app·README)에 둔다 — 본문이 우선, 어댑터는 파생이다.
+- 하니스별 삽입 단편과 설치 절차는 동봉 `platforms/`에 둔다 — 본문이 우선, 어댑터는 파생이다. 실행·실측 기반 하니스(codex·glm·claude·README)는 유지 관리하고, 미실행 하니스(qwen·gemini·grok·zcode·chat-app) 어댑터는 동결한다 — 갱신 대상에서 제외, 사용 요청 시 본문에서 재생성한다(동결 근거: 실측 통과 0건·파생 동기화 실패 1건 r11).
 
 ## Output Contract
 

@@ -1,6 +1,6 @@
 ---
 name: ops-supervisor
-description: 세션 2 감시·Ops 전용 — sonnet 슬롯에 medium effort. 두뇌(메인 세션)의 서브에이전트 감시·워치독 보고, GitHub issue·커밋·푸시 등 운영 전반 처리. 상시 가동 역할로 티어 라우팅 밖 구성원.
+description: 세션 2 감시·Ops 전용 — sonnet 슬롯에 medium effort. 두뇌(메인 세션)의 서브에이전트 감시·워치독 보고, GitHub issue·커밋·푸시 등 운영 전반 처리. 온디맨드 역할(워치독 대상 스폰 존재 시 호출)로 티어 라우팅 밖 구성원.
 model: sonnet
 effort: medium
 ---
