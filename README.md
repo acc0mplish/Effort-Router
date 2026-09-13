@@ -140,7 +140,7 @@ FrontierSWE·ProgramBench는 [1]의 평가 벤치마크다(개별 링크는 [1] 
 
 ### 한국어 번역본 (`books/`)
 
-참조논문의 한국어 정독서를 함께 동봉한다(korean-ebook 스킬로 제작. 정독서 시리즈 전체는 [KLIC-BOOK](https://github.com/klic-co-kr/KLIC-BOOK). '(참조 외 동봉)' 표기 행은 스킬 근거 미증류 번역물이다):
+참조논문의 한국어 정독서를 함께 동봉한다(korean-ebook 스킬로 제작. 정독서 시리즈 전체는 [KLIC-BOOK](https://github.com/klic-co-kr/KLIC-BOOK)):
 
 | 파일 | 대응 |
 |------|------|
@@ -149,6 +149,4 @@ FrontierSWE·ProgramBench는 [1]의 평가 벤치마크다(개별 링크는 [1] 
 | `books/에이전트는 하니스를 배운다.pdf` | [4] EvoHarness-RL |
 | `books/절차_그래프의_이해_procedural-graphs-ko.pdf` | [5] Procedural Graphs — LLM 에이전트를 위한 자기진화 실행 구조 (2026-09) |
 | `books/루프를_닫다_magenta-ko.pdf` | [6] Magenta — 수학 추론과 Lean 검증 사이의 루프 (2026-09) |
-| `books/결정론적_가드레일_lean-guardrails-ko.pdf` | (참조 외 동봉) Lean 가드레일 — 확률적 에이전트의 형식 검증 |
-| `books/검색을_넘어_지식으로_pike-rag-ko.pdf` | (참조 외 동봉) RAG — 질문 네 유형·시스템 다섯 단계 |
 | `books/많이_줄수록_여럿일수록_정말_더_잘할까_agent-papers-2026-ko.pdf` | 멀티 에이전트 논문집(번역 시리즈) |
