@@ -68,6 +68,24 @@ Codex 또는 ChatGPT 데스크톱 앱에 이 Skill을 설치·업데이트해 �
 
 **긴급 트랙**: **사용자가 운영 장애 핫픽스로 명시 지시한 경우만** — 티어 판정 후 ③구현을 선행하고 ②검토·④리뷰를 사후 수행한다(사후 절차는 §5). 장애 복구를 검토 대기시키지 않는다.
 
+## 판단 계층(jev) — 선택 가속기
+
+jev는 TypeSafe 판단형 LLM이다 — 1왕복 0.15~0.5초, 100% JSON. 프리미티브는 Choice/Score/Noul. 호출은 `scripts/jev_judge.py`로 수행한다.
+
+**사용 시점** — 비싼 추론 스폰 전 예판 3종: ①심층 계획 스폰의 스텝 소멸 / ②팬아웃 렌즈 선택·축소(루프 가지치기) / ④리뷰 스코프 축소.
+
+**권한 계약**: jev는 추천만 한다. 판정 권한은 메인 세션이 가지며, 정책(§1 L 고정 승격 등)이 jev 추천보다 우선한다. 실측 사례: jev가 본 과업(jev-layer)을 M으로 추천했으나 산출 문서 L 고정 승격 정책(§1)이 우선해 L로 판정했다.
+
+**폴백**: 키 부재·호출 실패·타임아웃 시 기존 프로세스 그대로 진행한다 — jev는 선택 계층이지 필수 계층이 아니다.
+
+**호출·감사 계약**: `python3 <skill-dir>/scripts/jev_judge.py tier "<작업 서술>" --save docs/task-id/<task-id>/jev` 및 `python3 <skill-dir>/scripts/jev_judge.py prune --stage fanout "<작업 서술>" --save docs/task-id/<task-id>/jev` — ok==true만 채택 검토 대상이고 exit 1은 폴백이다. 호출·응답은 과업 폴더에 감사 저장한다(재현 가능). 과업 폴더가 없는 환경(S티어 등)은 `--save`를 생략할 수 있다.
+
+**데이터 유출 면**: 작업 서술에 시크릿·API 키·민감 경로를 넣지 않는다 — 작업 서술 원문이 외부 전송된다(api.typesafe.ai).
+
+**키 규칙**: `TYPESAFE_API_KEY` 환경변수만 읽는다. 프롬프트·코드·문서·커밋에 literal 금지.
+
+**해석 가이드**: `any_risk`가 참이면 jev 하향 추천을 기각한다(§1 은닉 변수 원칙). confidence가 낮으면(예: 0.6 미만) 추천을 따르지 않고 직접 판정한다.
+
 ## 2. 라우팅 테이블
 
 아래 역할만 호출한다. Codex는 `~/.codex/agents/*.toml`, Claude Code는 `~/.claude/agents/*.md`의 동명 역할을 사용한다. 테이블 밖 파일이 있어도 무시한다 — **존재 ≠ 허가**. 감시·운영 역할 `ops-supervisor`는 티어 단계 밖 구성원으로, 워치독 대상 스폰이 존재할 때만 메인 세션이 직접 호출한다(온디맨드 — 상시 배치 아니다. 근거: 결함 포착 실적 0건, r14 자아비판 K5) — 세션 토폴로지는 `platforms/claude.md`.
@@ -247,6 +265,7 @@ Codex와 ChatGPT는 §2의 OpenAI 모델 정책을 직접 적용한다. 다른 �
 - **Claude Code 10세션 토폴로지**: 세션 1 두뇌(메인)·세션 2 감시 Ops(`ops-supervisor`)·세션 3–10 작업 슬롯(심층 1 + 경량 7)의 자율 병렬 운용 형태다 — 슬롯 배정·GLM 동시성 치환·두뇌 프로토콜은 `platforms/claude.md`를 따른다.
 - 표의 '미확인'은 공식 문서에서 확인하지 못한 항목이다 — 확인 전까지 단정하지 않는다.
 - 하니스별 삽입 단편과 설치 절차는 동봉 `platforms/`에 둔다 — 본문이 우선, 어댑터는 파생이다. 실행·실측 기반 하니스(codex·glm·claude·README)는 유지 관리하고, 미실행 하니스(qwen·gemini·grok·zcode·chat-app) 어댑터는 동결한다 — 갱신 대상에서 제외, 사용 요청 시 본문에서 재생성한다(동결 근거: 실측 통과 0건·파생 동기화 실패 1건 r11).
+- jev 판단 계층은 하니스 무관 계층이다(§5 파일 계약과 동일 — 셸+환경변수 하니스면 어디서나 호출, 키·감사 규칙은 jev 절 준수).
 
 ## Output Contract
 
@@ -255,6 +274,7 @@ Codex와 ChatGPT는 §2의 OpenAI 모델 정책을 직접 적용한다. 다른 �
 ```text
 [Effort Router]
 - 판정 티어: {S | M | L | XL | 보안감사}
+- 판단 출처: {없음(직접 판정) | jev 추천(<mode> <choice>, confidence <n>) → 메인 판정 <채택|기각(근거)>}
 - 작업 단계: {계획 | 검토 | 구현 | PR 리뷰 | 검증}   # state.json phase 대응: 계획=plan, 검토=adversary, 구현=implement, PR 리뷰=review, 검증=verify(메인 직접)
 - 적용 에이전트·모델·에포트: {agent-file} ({model} / {effort}) — 메인 세션 직접 수행 시 `없음(메인 세션 직접)`
 - 팬아웃: {OFF | ON: plan-adversary-xhigh × 3 (완전성/기술적오류/위험)}
@@ -263,6 +283,8 @@ Codex와 ChatGPT는 §2의 OpenAI 모델 정책을 직접 적용한다. 다른 �
 ```
 
 실제 Agent 호출의 subagent_type·model 파라미터는 Contract에 명시한 값과 일치해야 한다. 불일치 = 라우팅 위반.
+
+Output Contract의 '판단 출처' 라인은 jev 미사용·폴백 여부의 감사 표지다.
 
 ChatGPT Work에서는 적용 에이전트 라인에 `없음(ChatGPT Work 단일 세션)`과 선택한 모델·에포트를 적는다. 다른 하니스에서는 대응물 또는 `없음(단일 세션)`을 적고, 단계 상태 라인은 §5 인계를 실제로 운반할 때만 기입한다. 팬아웃을 직렬·혼합 구성으로 실행할 때는 팬아웃 라인에 실제 실행 구성을 적는다(예: `ON: 심층 ×1 직렬 + 경량 ×2 병렬`) — 라인과 실제 스폰 구성의 불일치는 라우팅 위반이다.
 

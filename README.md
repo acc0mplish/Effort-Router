@@ -19,6 +19,7 @@ Decision(티어 판정) → Requirement → Acceptance → Task → Evidence →
 | `SKILL.md` | 스킬 본체 — 티어 판정(§1)·라우팅 테이블(§2)·실행 제약(§3)·merge 권한(§4)·상태·인계 계약(§5)·타 하니스 매핑(§6)·Output Contract |
 | `agents/` | Claude Code 역할 정의 10종 + ChatGPT 데스크톱 UI 메타데이터 `openai.yaml` |
 | `platforms/` | Codex·ChatGPT 실행 어댑터와 기타 하니스 파생 문서 |
+| `scripts/` | 설치 검증·Codex 요금제 라우팅 스크립트 + jev 판단 계층 CLI(jev_judge.py) |
 | `TESTS.md` | 검증 프로토콜·측정 결과·라운드별 개정 이력·재현 절차 |
 
 ## 설치 (Codex + ChatGPT 데스크톱 앱)
@@ -78,6 +79,16 @@ python3 ~/.codex/skills/effort-router/scripts/verify_global_install.py
 ```
 
 `PASS global effort-router installation`이 나와야 로컬 Skill, 전역 모델·effort, subagent 활성화, 전역 발동 규칙, 10개 custom agent가 모두 설치된 상태다. 상세 병합법은 `platforms/codex.md` 참조.
+
+### (선택) jev 판단 계층
+
+`scripts/jev_judge.py`는 비싼 추론 스폰 전 예판을 돕는 선택 계층이다. `TYPESAFE_API_KEY` 환경변수만 읽으며, 셸 프로파일(예: `~/.bashrc`)에 아래 한 줄을 둔다.
+
+```bash
+export TYPESAFE_API_KEY='<본인 키>'
+```
+
+미설정 시 스킬은 기존 프로세스로 동작한다 — jev는 선택 계층이며, 키 부재 시 jev_judge.py는 exit 1 폴백 신호를 낸다. 사용 규칙(데이터 유출 면·감사 저장·권한 계약)은 SKILL.md의 '판단 계층(jev)' 절을 따른다.
 
 ## 모델 매핑
 
