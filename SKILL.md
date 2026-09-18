@@ -73,8 +73,9 @@ Codex 또는 ChatGPT 데스크톱 앱에 이 Skill을 설치·업데이트해 �
 jev는 TypeSafe 판단형 LLM이다 — 1왕복 0.15~0.5초, 100% JSON. 프리미티브는 Choice/Score/Noul. 호출은 `scripts/jev_judge.py`로 수행한다.
 
 **사용 시점** — 비싼 추론 스폰 전 예판 3종: ①심층 계획 스폰의 스텝 소멸 / ②팬아웃 렌즈 선택·축소(루프 가지치기) / ④리뷰 스코프 축소.
+추가 예판 — done 선언 직전 보조: §5 done 조건(claims 전부 verified ∧ CRITICAL·HIGH 부재) 충족 Noul(미달 방향 전량 차단 기준, 판정 권한은 메인).
 
-**모드 3종(확장 — 격상·기억·고착)**: `escalation "<격상 사유>"`는 격상 사유가 허용 케이스(관측된 작업량 급증·하니스 제약 실측·사용자 명시 지시 — `--rules-file` JSON으로 허용 규칙 교체)에 해당하는지 판정한다 — `reject_confirmed`(불허 확정)는 decision이 not_justified ∧ confidence≥0.85일 때만 참이고, 격상 승인은 상향이라 conf 바닥 없음. `memory-gate "<요청 서술>" --memory-file <경로>`는 기억 파일 줄별 관련성을 1호출 fan-out으로 판정한다 — 관련 noul≥0.6(dead zone 불통과) 줄만 `selected`(top-k, 기본 5) 통과한다 — memory-gate는 캘리브레이션 미달(관련 줄 회수 실패 실측)로 폴백 우선이다. `stall "<신호 JSON>"`은 워커 고착을 판정한다 — 입력은 검증 신호 JSON(last_tool_age_s·last_file_write_age_s 필수)이며 워커 자기 보고(last_assistant_text·declared_state)는 주장 필드로 신호가 우선, `intervene_confirmed`(고착 확정)는 stalled ∧ confidence≥0.85. 셋 다 폴백·감사 저장·권한 계약은 기존 jev 계약을 그대로 따른다. 호출 시점(격상 순간·세션 시작 기억 주입·워치독)은 사용 환경이 정한다.
+**모드 3종(확장 — 격상·기억·고착)**: `escalation "<격상 사유>"`는 격상 사유가 허용 케이스(관측된 작업량 급증·하니스 제약 실측·사용자 명시 지시 — `--rules-file` JSON으로 허용 규칙 교체)에 해당하는지 판정한다 — `reject_confirmed`(불허 확정)는 decision이 not_justified ∧ confidence≥0.85일 때만 참이고, 격상 승인은 상향이라 conf 바닥 없음. `memory-gate "<요청 서술>" --memory-file <경로>`는 기억 파일 줄별 관련성을 1호출 fan-out으로 판정한다 — 관련 noul≥0.6(dead zone 불통과) 줄만 `selected`(top-k, 기본 5) 통과한다 — memory-gate는 개정 fixture 기준 회수·차단 실측 통과다(관련 줄 ≥4/5 noul≥0.6·무관 줄 전량 차단) — 회수 기대는 직접 언급·명시적 인과 줄 한정이고 폴백은 기존 계약을 유지한다. `stall "<신호 JSON>"`은 워커 고착을 판정한다 — 입력은 검증 신호 JSON(last_tool_age_s·last_file_write_age_s 필수)이며 워커 자기 보고(last_assistant_text·declared_state)는 주장 필드로 신호가 우선, `intervene_confirmed`(고착 확정)는 stalled ∧ confidence≥0.85. 셋 다 폴백·감사 저장·권한 계약은 기존 jev 계약을 그대로 따른다. 호출 시점(격상 순간·세션 시작 기억 주입·워치독)은 사용 환경이 정한다.
 
 **권한 계약**: jev는 추천만 한다. 판정 권한은 메인 세션이 가지며, 정책(§1 L 고정 승격 등)이 jev 추천보다 우선한다. 실측 사례: jev가 본 과업(jev-layer)을 M으로 추천했으나 산출 문서 L 고정 승격 정책(§1)이 우선해 L로 판정했다.
 
@@ -83,6 +84,9 @@ jev는 TypeSafe 판단형 LLM이다 — 1왕복 0.15~0.5초, 100% JSON. 프리�
 **호출·감사 계약**: `python3 <skill-dir>/scripts/jev_judge.py tier "<작업 서술>" --save docs/task-id/<task-id>/jev` 및 `python3 <skill-dir>/scripts/jev_judge.py prune --stage fanout "<작업 서술>" --save docs/task-id/<task-id>/jev` — ok==true만 채택 검토 대상이고 exit 1은 폴백이다. 호출·응답은 과업 폴더에 감사 저장한다(재현 가능). 과업 폴더가 없는 환경(S티어 등)은 `--save`를 생략할 수 있다. 확장 모드 3종(escalation·memory-gate·stall)도 동일 계약으로 호출한다.
 
 **데이터 유출 면**: 작업 서술에 시크릿·API 키·민감 경로를 넣지 않는다 — 작업 서술 원문이 외부 전송된다(api.typesafe.ai).
+
+**state 위생(1차 방어)**: 작업 서술·실험 질문에는 관찰된 사실만 쓴다 — 전문가·다수·이전 판정 인용 같은 외부 평가 주장은 제거한다. 권위 오염은 confidence를 유지한 채 판단을 이동시켜 conf 게이트를 우회한다(실측) — 서술 단계 차단이 유일한 1차 방어다.
+방어 위계는 ① state 위생 > ② 선명 criteria > ③ conf 게이트 > ④ dead zone 순서다 — 오염이 의심되면 게이트를 조정하기 전에 서술을 사실만으로 다시 쓴다.
 
 **키 규칙**: `TYPESAFE_API_KEY` 환경변수만 읽는다. 프롬프트·코드·문서·커밋에 literal 금지.
 
