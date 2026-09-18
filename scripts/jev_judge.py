@@ -60,8 +60,8 @@ TIER_CRITERIA = {
 RISK_DESCRIPTIONS = {
     'request_path': '모든 요청이 지나는 경로(필터·인터셉터·인증·라우팅)의 동작 자체를 바꾸는 변경이다',
     'security_control': '보안 통제 자체가 변경 대상이다',
-    'topology_unknown': '코드만으로 판별 불가한 배포 토폴로지·프록시 경계 변수가 있다',
-    'output_document': '다운스트림 구현을 지시하는 산출 문서의 신규 작성·중대 개정이다',
+    'topology_unknown': '작업 서술이 배포 토폴로지·프록시·게이트웨이 경계를 명시적으로 언급한다. 언급이 없으면 false다',
+    'output_document': '작업 서술이 다른 구현을 지시할 산출 문서(설계서·계획서·명세 등)의 신규 작성 또는 중대 개정을 명시한다. 문서 산출 언급이 없으면 false다',
     'gate_preset': '게이트 신설·변경, 보안·무결성 통제 변경, 기준선 봉인 문서에 해당한다',
 }
 STAGE_OPTIONS = {
