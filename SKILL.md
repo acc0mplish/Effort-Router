@@ -74,6 +74,9 @@ jev는 TypeSafe 판단형 LLM이다 — 1왕복 0.15~0.5초, 100% JSON. 프리�
 
 **사용 시점** — 비싼 추론 스폰 전 예판 3종: ①심층 계획 스폰의 스텝 소멸 / ②팬아웃 렌즈 선택·축소(루프 가지치기) / ④리뷰 스코프 축소.
 추가 예판 — done 선언 직전 보조: §5 done 조건(claims 전부 verified ∧ CRITICAL·HIGH 부재) 충족 Noul(미달 방향 전량 차단 기준, 판정 권한은 메인).
+추가 예판 — todo 추가 직전 중복·우산 보조: 기존 트랙과 같은 일 Noul·우산(상위 포함) Noul 병설 fan-out(다른 일 오탐 전량 차단 기준, 병합 판정은 메인).
+추가 예판 — 도구 호출 루프 감지(워치독 stall과 별개 축): 최근 도구 호출 신호 JSON(동일 오류 반복 횟수·상이 오류 수·시도 추이)으로 Choice 정상|동일오류반복|전략변경필요(정상 오탐 0 기준, 개입 판정은 메인).
+추가 예판 — 종료 턴 완료 선언 직전 검증 이행 보조: 코드 수정 후 빌드·테스트 실행 이행 Noul(미이행 전량 차단 기준, 완료 판정은 메인).
 
 **모드 3종(확장 — 격상·기억·고착)**: `escalation "<격상 사유>"`는 격상 사유가 허용 케이스(관측된 작업량 급증·하니스 제약 실측·사용자 명시 지시 — `--rules-file` JSON으로 허용 규칙 교체)에 해당하는지 판정한다 — `reject_confirmed`(불허 확정)는 decision이 not_justified ∧ confidence≥0.85일 때만 참이고, 격상 승인은 상향이라 conf 바닥 없음. `memory-gate "<요청 서술>" --memory-file <경로>`는 기억 파일 줄별 관련성을 1호출 fan-out으로 판정한다 — 관련 noul≥0.6(dead zone 불통과) 줄만 `selected`(top-k, 기본 5) 통과한다 — memory-gate는 개정 fixture 기준 회수·차단 실측 통과다(관련 줄 ≥4/5 noul≥0.6·무관 줄 전량 차단) — 회수 기대는 직접 언급·명시적 인과 줄 한정이고 폴백은 기존 계약을 유지한다. `stall "<신호 JSON>"`은 워커 고착을 판정한다 — 입력은 검증 신호 JSON(last_tool_age_s·last_file_write_age_s 필수)이며 워커 자기 보고(last_assistant_text·declared_state)는 주장 필드로 신호가 우선, `intervene_confirmed`(고착 확정)는 stalled ∧ confidence≥0.85. 셋 다 폴백·감사 저장·권한 계약은 기존 jev 계약을 그대로 따른다. 호출 시점(격상 순간·세션 시작 기억 주입·워치독)은 사용 환경이 정한다.
 
