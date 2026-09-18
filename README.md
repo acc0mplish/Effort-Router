@@ -90,6 +90,8 @@ export TYPESAFE_API_KEY='<본인 키>'
 
 미설정 시 스킬은 기존 프로세스로 동작한다 — jev는 선택 계층이며, 키 부재 시 jev_judge.py는 exit 1 폴백 신호를 낸다. 사용 규칙(데이터 유출 면·감사 저장·권한 계약)은 SKILL.md의 '판단 계층(jev)' 절을 따른다.
 
+`unset TYPESAFE_API_KEY`가 즉시 비활성 스위치다(호출 전 폴백). 키 로테이션 시 셸 프로파일의 모든 export 지점을 함께 갱신한다.
+
 ## 모델 매핑
 
 **Plus:** 계획·검토 모두 Astra/medium. **Pro:** 계획 Astra/medium, 검토 Astra/high. 실무는 모두 Luna/max. 아래 표는 Pro 기준이다.

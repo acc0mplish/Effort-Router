@@ -84,7 +84,7 @@ jev는 TypeSafe 판단형 LLM이다 — 1왕복 0.15~0.5초, 100% JSON. 프리�
 
 **키 규칙**: `TYPESAFE_API_KEY` 환경변수만 읽는다. 프롬프트·코드·문서·커밋에 literal 금지.
 
-**해석 가이드**: `any_risk`가 참이면 jev 하향 추천을 기각한다(§1 은닉 변수 원칙). confidence가 낮으면(예: 0.6 미만) 추천을 따르지 않고 직접 판정한다.
+**해석 가이드**: `any_risk`가 참이면 jev 하향 추천을 기각한다(§1 은닉 변수 원칙). confidence가 낮으면(예: 0.6 미만) 추천을 따르지 않고 직접 판정한다. `safe_to_prune`이 거짓이면 축소 추천을 기각한다 — dead zone(0.4~0.6)의 noul도 축소를 허용하지 않는다. noul 원값(`risk_values`·`safe_noul`)을 판단 출처에 기재한다.
 
 ## 2. 라우팅 테이블
 
@@ -274,7 +274,7 @@ Codex와 ChatGPT는 §2의 OpenAI 모델 정책을 직접 적용한다. 다른 �
 ```text
 [Effort Router]
 - 판정 티어: {S | M | L | XL | 보안감사}
-- 판단 출처: {없음(직접 판정) | jev 추천(<mode> <choice>, confidence <n>) → 메인 판정 <채택|기각(근거)>}
+- 판단 출처: {없음(직접 판정) | jev 추천(<mode> <choice>, confidence <n>, risk_values/safe_noul) → 메인 판정 <채택|기각(근거)>}
 - 작업 단계: {계획 | 검토 | 구현 | PR 리뷰 | 검증}   # state.json phase 대응: 계획=plan, 검토=adversary, 구현=implement, PR 리뷰=review, 검증=verify(메인 직접)
 - 적용 에이전트·모델·에포트: {agent-file} ({model} / {effort}) — 메인 세션 직접 수행 시 `없음(메인 세션 직접)`
 - 팬아웃: {OFF | ON: plan-adversary-xhigh × 3 (완전성/기술적오류/위험)}

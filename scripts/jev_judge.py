@@ -17,10 +17,16 @@
 
 성공은 stdout JSON(ensure_ascii=False) + exit 0. 실패는 stderr 'FAIL jev judge: <사유>'
 + exit 1 — 호출자는 exit 1을 기존 프로세스 폴백 신호로 해석한다(jev는 선택 계층).
+
+noul 해석(gap G2): noul 원시값은 recommendation.risk_values(tier)·recommendation.safe_noul
+(prune)로 그대로 노출한다 — boolean만으로는 판단 정보가 손실된다. dead zone(0.4≤v<0.6)은
+임계 인접 응답의 신뢰가 불가하다(실측 오탐 0.64·정탐 0.57 공존) — tier 위험은 양성 처리
+(하향 기각 방향), prune safe는 축소 불허 처리한다.
 """
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import math
 import os
@@ -37,7 +43,9 @@ DEFAULT_ENDPOINT = 'https://api.typesafe.ai/v1/systemone'
 DEFAULT_MODEL = 'jev-latest'
 DEFAULT_TIMEOUT = 8.0
 LOOPBACK_HOSTS = {'127.0.0.1', 'localhost', '::1'}
-NOUL_TRUE_THRESHOLD = 0.5  # noul ∈ [0,1] — 0.5 이상이면 true criteria 충족으로 해석한다
+# noul 해석 dead zone(0.4≤v<0.6) — 임계 인접 응답은 신뢰 불가(실측 오탐 0.64·정탐 0.57 공존).
+# 보수 처리: tier 위험은 양성(하향 기각 방향), prune safe는 축소 불허(gap G2 — 2렌즈 독립 확인).
+NOUL_DEAD_ZONE = (0.4, 0.6)
 PROB_SUM_TOLERANCE = 0.05
 
 RISK_KEYS = ('request_path', 'security_control', 'topology_unknown', 'output_document', 'gate_preset')
@@ -138,6 +146,9 @@ def call_api(endpoint: str, api_key: str, body: dict[str, Any], timeout: float) 
         if isinstance(error.reason, (socket.timeout, TimeoutError)):
             fail(f'request timed out after {timeout}s')
         fail(f'request failed: {error.reason}')
+    except http.client.HTTPException as error:
+        # 절단 응답(IncompleteRead)·비정상 연결 종료(RemoteDisconnected) 등 스트림 결함(gap G1)
+        fail(f'response stream failed: {error}')
     except OSError as error:
         fail(f'request failed: {error}')
     try:
@@ -216,21 +227,33 @@ def validate_usage(usage: Any) -> dict[str, int]:
     return usage
 
 
+def noul_risk_positive(value: float) -> bool:
+    """위험 은닉 변수 — dead zone은 보수적으로 양성 처리한다(하향 기각 방향)."""
+    return value >= NOUL_DEAD_ZONE[0]
+
+
+def noul_confirmed(value: float) -> bool:
+    """확신 판정 — dead zone은 확신으로 인정하지 않는다(축소 금지 방향)."""
+    return value >= NOUL_DEAD_ZONE[1]
+
+
 def build_recommendation(mode: str, stage: str | None,
                          answers: dict[str, Any]) -> dict[str, Any]:
     if mode == 'tier':
         tier_answer = answers['tier']
-        risks = {key: answers[f'risk_{key}']['noul'] >= NOUL_TRUE_THRESHOLD
-                 for key in RISK_KEYS}
+        risk_values = {key: answers[f'risk_{key}']['noul'] for key in RISK_KEYS}
+        risks = {key: noul_risk_positive(value) for key, value in risk_values.items()}
         return {'tier': tier_answer['choice'],
                 'confidence': tier_answer['confidence'],
                 'probabilities': tier_answer['probabilities'],
-                'risks': risks, 'any_risk': any(risks.values())}
+                'risks': risks, 'risk_values': risk_values,
+                'any_risk': any(risks.values())}
     choice_answer = answers[stage or '']
+    safe_noul = answers['safe']['noul']
     return {'stage': stage, 'action': choice_answer['choice'],
             'confidence': choice_answer['confidence'],
             'probabilities': choice_answer['probabilities'],
-            'safe_to_prune': answers['safe']['noul'] >= NOUL_TRUE_THRESHOLD}
+            'safe_noul': safe_noul, 'safe_to_prune': noul_confirmed(safe_noul)}
 
 
 def audit_target(save: str, mode: str) -> Path:

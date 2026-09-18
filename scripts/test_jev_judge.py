@@ -52,13 +52,14 @@ class MockJevServer:
     """ThreadingHTTPServer mock — 설정된 응답을 돌려주고 수신 요청을 기록한다."""
 
     def __init__(self, status=200, sleep=0.0, responder=None, noul_values=None,
-                 raw_body=None, redirect_location=None):
+                 raw_body=None, redirect_location=None, truncate=False):
         self.status = status
         self.sleep = sleep
         self.responder = responder
         self.noul_values = noul_values or {}
         self.raw_body = raw_body
         self.redirect_location = redirect_location
+        self.truncate = truncate
         self.hits = 0
         self.requests = []
 
@@ -88,6 +89,13 @@ class MockJevServer:
                     self.send_header('Location', outer.redirect_location)
                     self.send_header('Content-Length', '0')
                     self.end_headers()
+                    return
+                if outer.truncate:
+                    # 헤더만 보내고 연결 절단 — http.client.IncompleteRead 유발(gap G1)
+                    self.send_response(200)
+                    self.send_header('Content-Length', '100')
+                    self.end_headers()
+                    self.close_connection = True
                     return
                 if outer.status == 200:
                     if outer.raw_body is not None:
@@ -153,6 +161,7 @@ class JevJudgeTests(unittest.TestCase):
         self.assertEqual(recommendation['confidence'], 0.94)
         self.assertEqual(set(recommendation['probabilities']), {'S', 'M', 'L', 'XL'})
         self.assertEqual(set(recommendation['risks']), set(RISK_IDS))
+        self.assertEqual(recommendation['risk_values'], {key: 0.01 for key in RISK_IDS})
         self.assertFalse(recommendation['any_risk'])
         self.assertIsInstance(output['usage']['input_tokens'], int)
         self.assertIsInstance(output['usage']['output_tokens'], int)
@@ -188,6 +197,7 @@ class JevJudgeTests(unittest.TestCase):
             self.assertEqual(recommendation['stage'], stage)
             self.assertEqual(recommendation['action'], options[0])
             self.assertTrue(recommendation['safe_to_prune'])
+            self.assertEqual(recommendation['safe_noul'], 0.9)
             self.assertEqual(set(recommendation['probabilities']), set(options))
             self.assertEqual(set(mock.requests[0]['payload']['questions']), {stage, 'safe'})
 
@@ -338,6 +348,51 @@ class JevJudgeTests(unittest.TestCase):
         self.assertIn('FAIL jev judge:', stderr)
         self.assertNotIn('Traceback', stderr)
         self.assertEqual(mock.hits, 0)
+
+    def test_t17_noul_dead_zone_boundaries(self):
+        # gap G2 — 0.4≤v<0.6 dead zone은 위험 양성 처리(하향 기각 방향), 원값은 risk_values로 노출
+        for value, expected in ((0.0, False), (0.39, False), (0.40, True),
+                                (0.59, True), (0.60, True), (1.0, True)):
+            with MockJevServer(noul_values={'risk_security_control': value}) as mock:
+                result = self.run_cli('tier', '작업', '--endpoint', mock.endpoint)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            recommendation = json.loads(result.stdout)['recommendation']
+            self.assertEqual(recommendation['risks']['security_control'], expected, value)
+            self.assertEqual(recommendation['any_risk'], expected, value)
+            self.assertEqual(recommendation['risk_values']['security_control'], value)
+
+    def test_t18_safe_dead_zone(self):
+        # gap G2 — safe는 dead zone을 확신으로 인정하지 않는다(축소 금지 방향)
+        for value, expected in ((0.45, False), (0.59, False), (0.60, True)):
+            with MockJevServer(noul_values={'safe': value}) as mock:
+                result = self.run_cli('prune', '--stage', 'fanout', '작업',
+                                      '--endpoint', mock.endpoint)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            recommendation = json.loads(result.stdout)['recommendation']
+            self.assertEqual(recommendation['safe_to_prune'], expected, value)
+            self.assertEqual(recommendation['safe_noul'], value)
+
+    def test_t19_probabilities_sum_tolerance(self):
+        # gap G5 — 합산 허용오차 경계 0.95/1.05 통과, 0.94/1.06 거부
+        def with_prob_sum(request, total):
+            response = valid_payload(request['questions'])
+            response['answers']['tier']['probabilities'] = {'S': total, 'L': 0.0, 'M': 0.0, 'XL': 0.0}
+            return response
+
+        for total, expected_ok in ((0.95, True), (1.05, True), (0.94, False), (1.06, False)):
+            with MockJevServer(responder=lambda r, t=total: with_prob_sum(r, t)) as mock:
+                result = self.run_cli('tier', '작업', '--endpoint', mock.endpoint)
+            self.assertEqual(result.returncode, 0 if expected_ok else 1, total)
+            if not expected_ok:
+                self.assertIn('FAIL jev judge:', result.stderr)
+
+    def test_t20_truncated_response(self):
+        # gap G1 — 절단 응답(IncompleteRead)도 트레이스백 없이 FAIL 폴백
+        with MockJevServer(truncate=True) as mock:
+            result = self.run_cli('tier', '작업', '--endpoint', mock.endpoint)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('FAIL jev judge:', result.stderr)
+        self.assertNotIn('Traceback', result.stderr)
 
 
 if __name__ == '__main__':
