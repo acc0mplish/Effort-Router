@@ -19,7 +19,7 @@ Decision(티어 판정) → Requirement → Acceptance → Task → Evidence →
 | `SKILL.md` | 스킬 본체 — 티어 판정(§1)·라우팅 테이블(§2)·실행 제약(§3)·merge 권한(§4)·상태·인계 계약(§5)·타 하니스 매핑(§6)·Output Contract |
 | `agents/` | Claude Code 역할 정의 10종 + ChatGPT 데스크톱 UI 메타데이터 `openai.yaml` |
 | `platforms/` | Codex·ChatGPT 실행 어댑터와 기타 하니스 파생 문서 |
-| `scripts/` | 설치 검증·Codex 요금제 라우팅 스크립트 + jev 판단 계층 CLI(jev_judge.py) |
+| `scripts/` | 설치 검증·Codex 요금제 라우팅 스크립트 + jev 판단 계층 CLI(jev_judge.py·jev_modes.py — tier·prune·escalation·memory-gate·stall) |
 | `TESTS.md` | 검증 프로토콜·측정 결과·라운드별 개정 이력·재현 절차 |
 
 ## 설치 (Codex + ChatGPT 데스크톱 앱)
@@ -90,7 +90,7 @@ export TYPESAFE_API_KEY='<본인 키>'
 
 미설정 시 스킬은 기존 프로세스로 동작한다 — jev는 선택 계층이며, 키 부재 시 jev_judge.py는 exit 1 폴백 신호를 낸다. 사용 규칙(데이터 유출 면·감사 저장·권한 계약)은 SKILL.md의 '판단 계층(jev)' 절을 따른다.
 
-`unset TYPESAFE_API_KEY`가 즉시 비활성 스위치다(호출 전 폴백). 키 로테이션 시 셸 프로파일의 모든 export 지점을 함께 갱신한다.
+`unset TYPESAFE_API_KEY`가 즉시 비활성 스위치다(호출 전 폴백). 키 로테이션 시 셸 프로파일의 모든 export 지점을 함께 갱신한다. 판단 모드는 tier·prune 외에 escalation(격상 사유 검증)·memory-gate(기억 줄별 게이팅)·stall(고착 판정)을 제공한다.
 
 ## 모델 매핑
 

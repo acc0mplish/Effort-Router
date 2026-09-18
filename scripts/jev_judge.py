@@ -23,6 +23,10 @@ noul 해석(gap G2): noul 원시값은 recommendation.risk_values(tier)·recomme
 (prune)로 그대로 노출한다 — boolean만으로는 판단 정보가 손실된다. dead zone(0.4≤v<0.6)은
 임계 인접 응답의 신뢰가 불가하다(실측 오탐 0.64·정탐 0.57 공존) — tier 위험은 양성 처리
 (하향 기각 방향), prune safe는 축소 불허 처리한다.
+
+확장 모드 3종(escalation·memory-gate·stall)의 질문 상수·입력 파싱·recommendation 합성은
+jev_modes.py가 담당한다 — 의존 방향은 jev_judge → jev_modes 단방향(계획 §2.1)이며 신규
+분기도 기존 call_api→validate_response→audit 파이프라인을 그대로 경유한다.
 """
 from __future__ import annotations
 
@@ -39,6 +43,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, NoReturn
 from urllib.parse import urlsplit
+
+import jev_modes
 
 DEFAULT_ENDPOINT = 'https://api.typesafe.ai/v1/systemone'
 DEFAULT_MODEL = 'jev-latest'
@@ -119,6 +125,16 @@ def build_questions(mode: str, stage: str | None) -> dict[str, Any]:
 def fail(reason: str) -> NoReturn:
     print(f'FAIL jev judge: {reason}', file=sys.stderr)
     raise SystemExit(1)
+
+
+def read_stdin_text() -> str:
+    """stdin을 바이트로 읽어 UTF-8 엄격 디코드한다(gap F3 — surrogateescape mojibake 차단)."""
+    try:
+        return sys.stdin.buffer.read().decode('utf-8')
+    except UnicodeDecodeError as error:
+        fail(f'statement is not valid UTF-8: {error}')
+    except OSError as error:
+        fail(f'statement read failed: {error}')
 
 
 def guard_endpoint(endpoint: str) -> None:
@@ -363,10 +379,20 @@ def write_audit_file(path: Path, mode: str, endpoint: str, model: str, state: st
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description='jev 판단 계층 CLI — TypeSafe 판단형 LLM 예판 클라이언트')
-    parser.add_argument('mode', choices=('tier', 'prune'), help='판단 모드')
-    parser.add_argument('statement', help="작업 서술 원문 ('-'는 stdin에서 읽는다)")
+    parser.add_argument('mode',
+                        choices=('tier', 'prune', 'escalation', 'memory-gate', 'stall'),
+                        help='판단 모드')
+    parser.add_argument('statement',
+                        help="작업 서술 원문 또는 모드 입력(stall은 신호 JSON 원문·경로, "
+                             "'-'는 stdin에서 읽는다)")
     parser.add_argument('--stage', choices=('plan', 'fanout', 'review'),
                         help='prune 모드의 대상 단계')
+    parser.add_argument('--rules-file',
+                        help='escalation 모드 — 허용 규칙 JSON 파일({case_id: 설명})')
+    parser.add_argument('--memory-file',
+                        help="memory-gate 모드 — 기억 파일 경로('-'는 stdin 전체)")
+    parser.add_argument('--top-k', type=int, default=5,
+                        help='memory-gate 모드 — selected 상위 N줄(기본 5)')
     parser.add_argument('--save', help='감사 저장 경로(디렉터리 또는 .json 파일)')
     parser.add_argument('--timeout', type=float, default=DEFAULT_TIMEOUT,
                         help=f'HTTP 타임아웃 초(기본 {DEFAULT_TIMEOUT})')
@@ -380,16 +406,16 @@ def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     if not math.isfinite(args.timeout) or args.timeout <= 0:
         fail(f'--timeout must be a positive finite number, got {args.timeout!r}')
-    if args.statement == '-':
-        # stdin은 바이트로 읽어 UTF-8 엄격 디코드한다(gap F3 확장). UTF-8 모드의
-        # surrogateescape에서 sys.stdin.read()는 비UTF-8 바이트를 조용히 통과시키므로
-        # — 무음 mojibake가 외부로 전송되는 경로를 환경과 무관하게 차단한다.
-        try:
-            state = sys.stdin.buffer.read().decode('utf-8')
-        except UnicodeDecodeError as error:
-            fail(f'statement is not valid UTF-8: {error}')
-        except OSError as error:
-            fail(f'statement read failed: {error}')
+    mode_input = None
+    if args.mode in ('escalation', 'memory-gate', 'stall'):
+        # 신규 모드는 입력 파싱·질문 생성·recommendation 합성만 jev_modes에 위임하고
+        # 호출·검증·감사는 기존 파이프라인을 그대로 경유한다(계획 §2.1)
+        mode_input = jev_modes.parse_mode_input(
+            args.mode, args.statement, rules_file=args.rules_file,
+            memory_file=args.memory_file, top_k=args.top_k, stdin_text=read_stdin_text)
+        state = mode_input['state']
+    elif args.statement == '-':
+        state = read_stdin_text()
     else:
         state = args.statement
     guard_endpoint(args.endpoint)
@@ -398,7 +424,8 @@ def main(argv: list[str] | None = None) -> None:
         fail('TYPESAFE_API_KEY is not set — HTTP 호출 없이 폴백한다(jev는 선택 계층)')
     if args.mode == 'prune' and not args.stage:
         fail('prune 모드에는 --stage {plan|fanout|review}가 필요하다')
-    questions = build_questions(args.mode, args.stage)
+    questions = (jev_modes.build_mode_questions(args.mode, mode_input)
+                 if mode_input is not None else build_questions(args.mode, args.stage))
     body = {'state': state, 'model': args.model, 'questions': questions}
     raw = call_api(args.endpoint, api_key, body, args.timeout)
     try:
@@ -407,8 +434,11 @@ def main(argv: list[str] | None = None) -> None:
         fail(f'response is not valid JSON: {error}')
     model, answers, usage = validate_response(payload, questions)
     audit_path = audit_target(args.save, args.mode) if args.save else None
+    recommendation = (jev_modes.build_mode_recommendation(
+        args.mode, mode_input, answers, noul_confirmed)
+        if mode_input is not None else build_recommendation(args.mode, args.stage, answers))
     parsed = {'ok': True, 'mode': args.mode, 'model': model,
-              'recommendation': build_recommendation(args.mode, args.stage, answers),
+              'recommendation': recommendation,
               'usage': usage, 'audit': str(audit_path) if audit_path is not None else None}
     if audit_path is not None:
         write_audit_file(audit_path, args.mode, args.endpoint, model,

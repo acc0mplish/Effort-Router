@@ -74,11 +74,13 @@ jev는 TypeSafe 판단형 LLM이다 — 1왕복 0.15~0.5초, 100% JSON. 프리�
 
 **사용 시점** — 비싼 추론 스폰 전 예판 3종: ①심층 계획 스폰의 스텝 소멸 / ②팬아웃 렌즈 선택·축소(루프 가지치기) / ④리뷰 스코프 축소.
 
+**모드 3종(확장 — 격상·기억·고착)**: `escalation "<격상 사유>"`는 격상 사유가 허용 케이스(관측된 작업량 급증·하니스 제약 실측·사용자 명시 지시 — `--rules-file` JSON으로 허용 규칙 교체)에 해당하는지 판정한다 — `reject_confirmed`(불허 확정)는 decision이 not_justified ∧ confidence≥0.85일 때만 참이고, 격상 승인은 상향이라 conf 바닥 없음. `memory-gate "<요청 서술>" --memory-file <경로>`는 기억 파일 줄별 관련성을 1호출 fan-out으로 판정한다 — 관련 noul≥0.6(dead zone 불통과) 줄만 `selected`(top-k, 기본 5) 통과한다 — memory-gate는 캘리브레이션 미달(관련 줄 회수 실패 실측)로 폴백 우선이다. `stall "<신호 JSON>"`은 워커 고착을 판정한다 — 입력은 검증 신호 JSON(last_tool_age_s·last_file_write_age_s 필수)이며 워커 자기 보고(last_assistant_text·declared_state)는 주장 필드로 신호가 우선, `intervene_confirmed`(고착 확정)는 stalled ∧ confidence≥0.85. 셋 다 폴백·감사 저장·권한 계약은 기존 jev 계약을 그대로 따른다. 호출 시점(격상 순간·세션 시작 기억 주입·워치독)은 사용 환경이 정한다.
+
 **권한 계약**: jev는 추천만 한다. 판정 권한은 메인 세션이 가지며, 정책(§1 L 고정 승격 등)이 jev 추천보다 우선한다. 실측 사례: jev가 본 과업(jev-layer)을 M으로 추천했으나 산출 문서 L 고정 승격 정책(§1)이 우선해 L로 판정했다.
 
 **폴백**: 키 부재·호출 실패·타임아웃 시 기존 프로세스 그대로 진행한다 — jev는 선택 계층이지 필수 계층이 아니다.
 
-**호출·감사 계약**: `python3 <skill-dir>/scripts/jev_judge.py tier "<작업 서술>" --save docs/task-id/<task-id>/jev` 및 `python3 <skill-dir>/scripts/jev_judge.py prune --stage fanout "<작업 서술>" --save docs/task-id/<task-id>/jev` — ok==true만 채택 검토 대상이고 exit 1은 폴백이다. 호출·응답은 과업 폴더에 감사 저장한다(재현 가능). 과업 폴더가 없는 환경(S티어 등)은 `--save`를 생략할 수 있다.
+**호출·감사 계약**: `python3 <skill-dir>/scripts/jev_judge.py tier "<작업 서술>" --save docs/task-id/<task-id>/jev` 및 `python3 <skill-dir>/scripts/jev_judge.py prune --stage fanout "<작업 서술>" --save docs/task-id/<task-id>/jev` — ok==true만 채택 검토 대상이고 exit 1은 폴백이다. 호출·응답은 과업 폴더에 감사 저장한다(재현 가능). 과업 폴더가 없는 환경(S티어 등)은 `--save`를 생략할 수 있다. 확장 모드 3종(escalation·memory-gate·stall)도 동일 계약으로 호출한다.
 
 **데이터 유출 면**: 작업 서술에 시크릿·API 키·민감 경로를 넣지 않는다 — 작업 서술 원문이 외부 전송된다(api.typesafe.ai).
 
