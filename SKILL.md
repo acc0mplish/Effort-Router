@@ -84,7 +84,9 @@ jev는 TypeSafe 판단형 LLM이다 — 1왕복 0.15~0.5초, 100% JSON. 프리�
 
 **키 규칙**: `TYPESAFE_API_KEY` 환경변수만 읽는다. 프롬프트·코드·문서·커밋에 literal 금지.
 
-**해석 가이드**: `any_risk`가 참이면 jev 하향 추천을 기각한다(§1 은닉 변수 원칙). confidence가 낮으면(예: 0.6 미만) 추천을 따르지 않고 직접 판정한다. `safe_to_prune`이 거짓이면 축소 추천을 기각한다 — dead zone(0.4~0.6)의 noul도 축소를 허용하지 않는다. noul 원값(`risk_values`·`safe_noul`)을 판단 출처에 기재한다.
+**해석 가이드 (방향별 임계)**: `any_risk`가 참이면 jev 하향 추천을 기각한다(§1 은닉 변수 원칙). **하향 채택**(메인 세션 예상·정책 기준보다 낮은 티어 추천, 스코프·렌즈 축소 추천)은 confidence ≥0.85 ∧ 안전 신호 열림(tier: `any_risk` 거짓 / prune: `safe_to_prune` 참)인 경우만 채택한다 — 고위험→저위험 조정은 전송 승인급 고위험 조치와 같은 임계(0.85)를 쓴다. **상향 추천**은 confidence 바닥 없이 채택 가능하다(자원 과투자 비용 < 결함 유출 비용). `safe_to_prune`이 거짓이면 축소 추천을 기각한다 — dead zone(0.4~0.6)의 noul도 축소를 허용하지 않는다. noul 원값(`risk_values`·`safe_noul`·`complexity.score`)을 판단 출처에 기재한다.
+
+**팬아웃 렌즈 규칙 (fanout 스테이지)**: `prune --stage fanout`은 복잡도 Score(5레벨)와 안전성 noul의 복합 점수로 `lens_count`(3/2/1)와 파생 `action`(keep_all/reduce/minimal)을 추천한다 — 임계 판정만 하고 보간하지 않는다(jev 수치 캘리브레이션 한계). `lens_forced_reason`이 'safe_not_confirmed'이면(안전 미확신) 코드가 이미 3렌즈 보수 처리를 적용했다. **lens_count는 메인 세션 티어 판정에 종속된다 — L티어 팬아웃 최소 2렌즈, XL 최소 3렌즈 하한. jev lens_count가 하한 미달이면 하한으로 올린다.** L 고정 승격(§1 산출 문서·게이트 프리셋)·보안감사 트랙은 축소 불가(기본 렌즈 유지). 렌즈 축소 채택은 상단 '방향별 임계'의 하향 문(0.85)을 그대로 통과해야 한다.
 
 ## 2. 라우팅 테이블
 

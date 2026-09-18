@@ -5,6 +5,7 @@
 - 엔드포인트: POST {endpoint} · Authorization: Bearer $TYPESAFE_API_KEY · JSON
 - 요청 body: state(작업 서술 원문) + model + questions(map — 응답도 같은 키로 돌아온다)
 - choice 답 = {type, choice, probabilities(전 옵션, 합 1), confidence}
+- score 답 = {type, score, confidence, legend(레벨→문구), probabilities(레벨 인덱스 문자열 키, 합 1)}
 - noul 답 = {type, noul(0~1)} — noul 답에는 confidence 필드가 없다
 - 에러 401·422·429·529 — 재시도 없음(결정 D1): 실패는 즉시 폴백 신호다
 
@@ -50,6 +51,17 @@ PROB_SUM_TOLERANCE = 0.05
 
 RISK_KEYS = ('request_path', 'security_control', 'topology_unknown', 'output_document', 'gate_preset')
 
+# fanout 복합 점수(계획 §2.2) — 복잡도 Score 5레벨. 레벨 문구는 after/ 감사 질문 맵과
+# 바이트 동일해야 한다(재판정 재사용 전제 A4). 렌즈 임계는 이 상수 1곳에 격리한다.
+COMPLEXITY_LEVELS = (
+    '단일 파일의 국소 변경이다 — 텍스트·스타일·상수 수준이고 분기 로직과 파급이 없다',
+    '동일 치환의 기계적 반복이다 — 여러 파일이지만 각 변경은 동일하고 새 분기가 없다',
+    '통상의 기능 과업이다 — 분기 로직 추가·수정과 2~10파일 파급, 위험 지표는 음성이다',
+    '구조·통제에 닿는 변경이다 — 아키텍처·요청 경로·보안 통제·산출 문서 중 하나에 해당한다',
+    '시스템 전체를 움직리는 변경이다 — 코어 재구현·전면 리팩터링, 결함이 되돌릴 수 없다',
+)
+LENS_THRESHOLDS = (2.5, 1.5)   # score ≥2.5 → 3렌즈, ≥1.5 → 2렌즈, 미만 → 1렌즈
+
 # ── 질문 설계(계획 §2.3) — 이 상수 블록 1곳에 격리한다 ──────────────────────────
 TIER_CRITERIA = {
     'S': '단순 버그 수정, 텍스트/스타일, 단일 파일 변경 (테스트 로직 변경 없음)',
@@ -66,12 +78,10 @@ RISK_DESCRIPTIONS = {
 }
 STAGE_OPTIONS = {
     'plan': ('keep_full', 'thin_plan'),
-    'fanout': ('keep', 'reduce'),
     'review': ('full_scope', 'narrow_scope'),
 }
 STAGE_CHOICE_DESCRIPTIONS = {
     'plan': {'keep_full': '심층 계획 스폰을 유지한다', 'thin_plan': '얇은 계획으로 축소한다'},
-    'fanout': {'keep': '팬아웃 렌즈 구성을 유지한다', 'reduce': '팬아웃 렌즈를 축소한다'},
     'review': {'full_scope': '리뷰 전체 스코프를 유지한다', 'narrow_scope': '리뷰 스코프를 축소한다'},
 }
 
@@ -83,7 +93,7 @@ def noul_question(description: str) -> dict[str, str]:
 
 
 def build_questions(mode: str, stage: str | None) -> dict[str, Any]:
-    """호출 질문 맵을 만든다 — tier 1+은닉변수 5종 / prune 스테이지 choice+Noul safe."""
+    """호출 질문 맵을 만든다 — tier 1+은닉변수 5종 / fanout score+Noul safe / plan·review choice+Noul safe."""
     if mode == 'tier':
         questions: dict[str, Any] = {
             'tier': {'type': 'choice',
@@ -92,6 +102,12 @@ def build_questions(mode: str, stage: str | None) -> dict[str, Any]:
         questions.update({f'risk_{key}': noul_question(RISK_DESCRIPTIONS[key])
                           for key in RISK_KEYS})
         return questions
+    if stage == 'fanout':
+        # 복합 점수(계획 P3-D1) — 렌즈 수 3단계는 Score 영역이고 choice 병설은 이중 질의다
+        return {'complexity': {'type': 'score',
+                               'instructions': '작업 서술의 변경 규모와 파급 수준을 판단한다',
+                               'criteria': list(COMPLEXITY_LEVELS)},
+                'safe': noul_question('이 축소로도 과업 계약(요구·검증 커버리지)이 훼손되지 않는다')}
     options = STAGE_OPTIONS[stage or '']
     return {stage: {'type': 'choice',
                     'instructions': f'{stage} 단계의 실행 범위를 판단한다',
@@ -175,6 +191,8 @@ def validate_response(payload: Any, questions: dict[str, Any]
     for qid, question in questions.items():
         if question['type'] == 'choice':
             validate_choice_answer(qid, answers[qid], question['criteria'])
+        elif question['type'] == 'score':
+            validate_score_answer(qid, answers[qid], question['criteria'])
         else:
             validate_noul_answer(qid, answers[qid])
     return model, answers, validate_usage(payload.get('usage'))
@@ -200,6 +218,41 @@ def validate_choice_answer(qid: str, answer: Any, criteria: dict[str, str]) -> N
     if not 1.0 - PROB_SUM_TOLERANCE <= total <= 1.0 + PROB_SUM_TOLERANCE:
         fail(f"invalid response schema: answer '{qid}' probabilities sum "
              f"{total!r} outside 1±{PROB_SUM_TOLERANCE}")
+    confidence = answer.get('confidence')
+    if not isinstance(confidence, (int, float)) or isinstance(confidence, bool) \
+            or not 0.0 <= confidence <= 1.0:
+        fail(f"invalid response schema: answer '{qid}' confidence "
+             f"{confidence!r} not in [0, 1]")
+
+
+def validate_score_answer(qid: str, answer: Any, criteria: list[str]) -> None:
+    """score 답 검증 — 레벨 인덱스 문자열 키 확률 분포·legend·confidence(스키마는 r0 실측 50회 실증)."""
+    if not isinstance(answer, dict) or answer.get('type') != 'score':
+        fail(f"invalid response schema: answer '{qid}' is not a score answer")
+    levels = {str(index) for index in range(len(criteria))}
+    score = answer.get('score')
+    if not isinstance(score, (int, float)) or isinstance(score, bool) \
+            or not -PROB_SUM_TOLERANCE <= score <= len(criteria) - 1 + PROB_SUM_TOLERANCE:
+        fail(f"invalid response schema: answer '{qid}' score "
+             f"{score!r} not in [0, {len(criteria) - 1}]")
+    probabilities = answer.get('probabilities')
+    if not isinstance(probabilities, dict) or set(probabilities) != levels:
+        fail(f"invalid response schema: answer '{qid}' probabilities keys "
+             f"!= levels {sorted(levels)}")
+    values = list(probabilities.values())
+    if not all(isinstance(value, (int, float)) and not isinstance(value, bool)
+               for value in values):
+        fail(f"invalid response schema: answer '{qid}' probabilities has "
+             f"non-numeric values {values!r}")
+    total = sum(values)
+    if not 1.0 - PROB_SUM_TOLERANCE <= total <= 1.0 + PROB_SUM_TOLERANCE:
+        fail(f"invalid response schema: answer '{qid}' probabilities sum "
+             f"{total!r} outside 1±{PROB_SUM_TOLERANCE}")
+    legend = answer.get('legend')
+    if not isinstance(legend, dict) or set(legend) != levels \
+            or not all(isinstance(text, str) for text in legend.values()):
+        fail(f"invalid response schema: answer '{qid}' legend keys "
+             f"!= levels {sorted(levels)} or has non-string values")
     confidence = answer.get('confidence')
     if not isinstance(confidence, (int, float)) or isinstance(confidence, bool) \
             or not 0.0 <= confidence <= 1.0:
@@ -237,6 +290,31 @@ def noul_confirmed(value: float) -> bool:
     return value >= NOUL_DEAD_ZONE[1]
 
 
+def build_fanout_recommendation(answers: dict[str, Any]) -> dict[str, Any]:
+    """fanout 복합 점수 합성 — 임계 판정만 하고 보간하지 않는다(계획 P3-D2).
+
+    complexity.score는 확률 분포의 기댓값(레벨 0~4)이다. 렌즈 수는 스코어 임계로만 정하고,
+    safe 미확신(거짓·dead zone 포함)은 최대 렌즈 3을 강제한다(거부권 — gap G2 계승).
+    """
+    complexity_answer = answers['complexity']
+    probabilities = complexity_answer['probabilities']
+    score = sum(int(level) * value for level, value in probabilities.items())
+    safe_noul = answers['safe']['noul']
+    lens_forced_reason = None if noul_confirmed(safe_noul) else 'safe_not_confirmed'
+    if lens_forced_reason is None:
+        lens_count = (3 if score >= LENS_THRESHOLDS[0]
+                      else 2 if score >= LENS_THRESHOLDS[1] else 1)
+    else:
+        lens_count = 3
+    return {'stage': 'fanout',
+            'action': {3: 'keep_all', 2: 'reduce', 1: 'minimal'}[lens_count],
+            'lens_count': lens_count, 'lens_forced_reason': lens_forced_reason,
+            'complexity': {'score': score, 'confidence': complexity_answer['confidence'],
+                           'normalized': score / (len(COMPLEXITY_LEVELS) - 1),
+                           'probabilities': probabilities},
+            'safe_noul': safe_noul, 'safe_to_prune': noul_confirmed(safe_noul)}
+
+
 def build_recommendation(mode: str, stage: str | None,
                          answers: dict[str, Any]) -> dict[str, Any]:
     if mode == 'tier':
@@ -248,6 +326,8 @@ def build_recommendation(mode: str, stage: str | None,
                 'probabilities': tier_answer['probabilities'],
                 'risks': risks, 'risk_values': risk_values,
                 'any_risk': any(risks.values())}
+    if stage == 'fanout':
+        return build_fanout_recommendation(answers)
     choice_answer = answers[stage or '']
     safe_noul = answers['safe']['noul']
     return {'stage': stage, 'action': choice_answer['choice'],

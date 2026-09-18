@@ -32,12 +32,28 @@ def noul(value):
     return {'type': 'noul', 'noul': value}
 
 
-def valid_payload(questions, noul_values=None):
+def score_distribution(score):
+    """기댓값이 score가 되는 5레벨 확률 분포 — 인접 레벨 2개에 선형 분배한다."""
+    low = int(score)
+    weight = score - low
+    probabilities = {str(level): 0.0 for level in range(5)}
+    probabilities[str(low)] = 1.0 - weight
+    probabilities[str(low + 1)] += weight
+    return probabilities
+
+
+def valid_payload(questions, noul_values=None, score_values=None):
     """질문 맵을 받아 스키마 합법 응답을 합성한다 — tier 답은 실측 원문 그대로."""
     answers = {}
     for qid, question in questions.items():
         if qid == 'tier':
             answers[qid] = dict(TIER_ANSWER)
+        elif question['type'] == 'score':
+            score, confidence = (score_values or {}).get(qid, (2.0, 0.9))
+            answers[qid] = {'type': 'score', 'score': score, 'confidence': confidence,
+                            'probabilities': score_distribution(score),
+                            'legend': {str(level): text
+                                       for level, text in enumerate(question['criteria'])}}
         elif question['type'] == 'choice':
             options = list(question['criteria'])
             answers[qid] = {'type': 'choice', 'choice': options[0], 'confidence': 0.9,
@@ -185,7 +201,6 @@ class JevJudgeTests(unittest.TestCase):
 
     def test_t3_prune_three_stages(self):
         stages = {'plan': ('keep_full', 'thin_plan'),
-                  'fanout': ('keep', 'reduce'),
                   'review': ('full_scope', 'narrow_scope')}
         for stage, options in stages.items():
             with MockJevServer(noul_values={'safe': 0.9}) as mock:
@@ -200,6 +215,16 @@ class JevJudgeTests(unittest.TestCase):
             self.assertEqual(recommendation['safe_noul'], 0.9)
             self.assertEqual(set(recommendation['probabilities']), set(options))
             self.assertEqual(set(mock.requests[0]['payload']['questions']), {stage, 'safe'})
+        # fanout 분기(갱신) — choice가 아니라 복합 점수 파생(action·lens_count, 기본 mock score 2.0)
+        with MockJevServer(noul_values={'safe': 0.9}) as mock:
+            result = self.run_cli('prune', '--stage', 'fanout', '작업', '--endpoint', mock.endpoint)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        recommendation = json.loads(result.stdout)['recommendation']
+        self.assertEqual(recommendation['stage'], 'fanout')
+        self.assertEqual(recommendation['action'], 'reduce')
+        self.assertEqual(recommendation['lens_count'], 2)
+        self.assertTrue(recommendation['safe_to_prune'])
+        self.assertEqual(recommendation['safe_noul'], 0.9)
 
     def test_t4_missing_key(self):
         with MockJevServer() as mock:
@@ -288,8 +313,9 @@ class JevJudgeTests(unittest.TestCase):
             self.assertEqual(questions[f'risk_{key}']['type'], 'noul')
             self.assertEqual(set(questions[f'risk_{key}']['criteria']), {'true', 'false'})
         prune_questions = mock.requests[1]['payload']['questions']
-        self.assertEqual(set(prune_questions), {'fanout', 'safe'})
-        self.assertEqual(set(prune_questions['fanout']['criteria']), {'keep', 'reduce'})
+        self.assertEqual(set(prune_questions), {'complexity', 'safe'})
+        self.assertEqual(prune_questions['complexity']['type'], 'score')
+        self.assertEqual(len(prune_questions['complexity']['criteria']), 5)
         self.assertEqual(set(prune_questions['safe']['criteria']), {'true', 'false'})
 
     def test_t11_endpoint_guard(self):
@@ -393,6 +419,117 @@ class JevJudgeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn('FAIL jev judge:', result.stderr)
         self.assertNotIn('Traceback', result.stderr)
+
+    def test_t21_fanout_score_happy_path(self):
+        # P3 — fanout 복합 점수 합성: 신규 필드 노출 + flat_probabilities 부재 단언(r1 회귀 방지)
+        with MockJevServer(noul_values={'safe': 0.9}) as mock:
+            result = self.run_cli('prune', '--stage', 'fanout', '작업', '--endpoint', mock.endpoint)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output = json.loads(result.stdout)
+        self.assertTrue(output['ok'])
+        recommendation = output['recommendation']
+        self.assertEqual(recommendation['stage'], 'fanout')
+        self.assertEqual(recommendation['action'], 'reduce')
+        self.assertEqual(recommendation['lens_count'], 2)
+        self.assertIsNone(recommendation['lens_forced_reason'])
+        complexity = recommendation['complexity']
+        self.assertEqual(complexity['score'], 2.0)
+        self.assertEqual(complexity['confidence'], 0.9)
+        self.assertEqual(complexity['normalized'], 0.5)
+        self.assertEqual(set(complexity['probabilities']), {'0', '1', '2', '3', '4'})
+        self.assertEqual(recommendation['safe_noul'], 0.9)
+        self.assertTrue(recommendation['safe_to_prune'])
+        self.assertNotIn('flat_probabilities', recommendation)
+
+    def test_t22_lens_threshold_boundaries(self):
+        # P3 — 렌즈 임계 경계: score 2.5→3 / 2.49→2 / 1.5→2 / 1.49→1(확률 합성으로 기대값 제어)
+        for score, expected in ((2.5, 3), (2.49, 2), (1.5, 2), (1.49, 1)):
+            def responder(request, boundary=score):
+                return valid_payload(request['questions'], noul_values={'safe': 0.9},
+                                     score_values={'complexity': (boundary, 0.9)})
+            with MockJevServer(responder=responder) as mock:
+                result = self.run_cli('prune', '--stage', 'fanout', '작업',
+                                      '--endpoint', mock.endpoint)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            recommendation = json.loads(result.stdout)['recommendation']
+            self.assertAlmostEqual(recommendation['complexity']['score'], score, places=2)
+            self.assertEqual(recommendation['lens_count'], expected, score)
+            self.assertEqual(recommendation['action'],
+                             {3: 'keep_all', 2: 'reduce', 1: 'minimal'}[expected], score)
+            self.assertIsNone(recommendation['lens_forced_reason'])
+
+    def test_t23_safe_not_confirmed_forces_three_lenses(self):
+        # P3 — 보수 오버라이드: safe 미확신(데드존 포함)은 최대 렌즈 3 강제
+        def dead_zone_safe(request):
+            return valid_payload(request['questions'], noul_values={'safe': 0.45},
+                                 score_values={'complexity': (2.0, 0.9)})
+        with MockJevServer(responder=dead_zone_safe) as mock:
+            result = self.run_cli('prune', '--stage', 'fanout', '작업', '--endpoint', mock.endpoint)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        recommendation = json.loads(result.stdout)['recommendation']
+        self.assertEqual(recommendation['lens_forced_reason'], 'safe_not_confirmed')
+        self.assertEqual(recommendation['lens_count'], 3)
+        self.assertEqual(recommendation['action'], 'keep_all')
+        self.assertFalse(recommendation['safe_to_prune'])
+        # 대조 분기 — safe 확신이면 강제 없이 임계 판정(score 2.0 → 2렌즈)
+        with MockJevServer(noul_values={'safe': 0.9}) as mock:
+            result = self.run_cli('prune', '--stage', 'fanout', '작업', '--endpoint', mock.endpoint)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        recommendation = json.loads(result.stdout)['recommendation']
+        self.assertIsNone(recommendation['lens_forced_reason'])
+        self.assertEqual(recommendation['lens_count'], 2)
+
+    def test_t24_score_schema_violations(self):
+        # P3 — score 답 스키마 위반은 전부 exit 1(계획 §2.2 검증기 계약)
+        flat_probabilities = {str(level): 0.0 for level in range(5)}
+
+        def violation(mutate):
+            def responder(request):
+                response = valid_payload(request['questions'], noul_values={'safe': 0.9},
+                                         score_values={'complexity': (2.0, 0.9)})
+                mutate(response['answers']['complexity'])
+                return response
+            return responder
+
+        cases = (
+            ('type mismatch', lambda a: a.update(type='choice')),
+            ('score range violation', lambda a: a.update(score=5.0)),
+            ('probabilities key mismatch', lambda a: a.update(probabilities={'0': 1.0})),
+            ('probabilities sum deviation',
+             lambda a: a.update(probabilities={**flat_probabilities, '2': 0.3})),
+            ('confidence invalid', lambda a: a.update(confidence=1.5)),
+            ('legend key mismatch', lambda a: a.update(legend={'0': 'x'})),
+        )
+        for name, mutate in cases:
+            with MockJevServer(responder=violation(mutate)) as mock:
+                result = self.run_cli('prune', '--stage', 'fanout', '작업',
+                                      '--endpoint', mock.endpoint)
+            self.assertEqual(result.returncode, 1, name)
+            self.assertIn('FAIL jev judge:', result.stderr, name)
+
+    def test_t26_fanout_request_shape(self):
+        # P3 — fanout 요청 질문 맵: score 질문 + 안1 레벨 문구 식자(A4 바이트 동일 전제의 검출기)
+        with MockJevServer() as mock:
+            result = self.run_cli('prune', '--stage', 'fanout', '작업', '--endpoint', mock.endpoint)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        questions = mock.requests[0]['payload']['questions']
+        self.assertEqual(set(questions), {'complexity', 'safe'})
+        self.assertEqual(questions['complexity']['type'], 'score')
+        criteria = questions['complexity']['criteria']
+        self.assertIsInstance(criteria, list)
+        self.assertEqual(len(criteria), 5)
+        self.assertEqual(questions['complexity']['instructions'],
+                         '작업 서술의 변경 규모와 파급 수준을 판단한다')
+        self.assertEqual(
+            criteria[0],
+            '단일 파일의 국소 변경이다 — 텍스트·스타일·상수 수준이고 분기 로직과 파급이 없다')
+        self.assertEqual(
+            criteria[2],
+            '통상의 기능 과업이다 — 분기 로직 추가·수정과 2~10파일 파급, 위험 지표는 음성이다')
+        self.assertEqual(
+            criteria[4],
+            '시스템 전체를 움직리는 변경이다 — 코어 재구현·전면 리팩터링, 결함이 되돌릴 수 없다')
+        self.assertEqual(set(questions['safe']['criteria']), {'true', 'false'})
 
 
 if __name__ == '__main__':
