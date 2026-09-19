@@ -87,6 +87,8 @@ jev는 TypeSafe 판단형 LLM이다 — 1왕복 0.15~0.5초, 100% JSON. 프리�
 
 **폴백**: 키 부재·호출 실패·타임아웃 시 기존 프로세스 그대로 진행한다 — jev는 선택 계층이지 필수 계층이 아니다.
 
+**경제성·bypass 계약**: 판정 1호출의 비용(0.15~0.5초·~1.2k 토큰)은 그 판정이 승인·차단하는 행동(심층 스폰·오배치 실행) 비용의 극소수 %여야 계층이 성립한다 — 판단 계층 도입·유지 판단은 이 비율로 한다. 판정 실패는 오류가 아니라 이유가 붙은 보수 bypass다 — 폴백도 설계된 경로 선택 중 하나로, 근거(ok=false 사유)를 감사에 남긴다.
+
 **호출·감사 계약**: `python3 <skill-dir>/scripts/jev_judge.py tier "<작업 서술>" --save docs/task-id/<task-id>/jev` 및 `python3 <skill-dir>/scripts/jev_judge.py prune --stage fanout "<작업 서술>" --save docs/task-id/<task-id>/jev` — ok==true만 채택 검토 대상이고 exit 1은 폴백이다. 호출·응답은 과업 폴더에 감사 저장한다(재현 가능). 과업 폴더가 없는 환경(S티어 등)은 `--save`를 생략할 수 있다. 확장 모드 3종(escalation·memory-gate·stall)도 동일 계약으로 호출한다.
 
 **데이터 유출 면**: 작업 서술에 시크릿·API 키·민감 경로를 넣지 않는다 — 작업 서술 원문이 외부 전송된다(api.typesafe.ai).
