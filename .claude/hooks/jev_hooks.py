@@ -31,7 +31,9 @@ def enabled():
 
 
 def run_jev(args):
-    """jev_judge 실행 — ok json 또는 None(폴백)."""
+    """jev_judge 실행 — ok json 또는 None(폴백). JEV_ENDPOINT env로 목업 지정 가능(로컬 검증)."""
+    if os.environ.get("JEV_ENDPOINT"):
+        args = list(args) + ["--endpoint", os.environ["JEV_ENDPOINT"]]
     try:
         p = subprocess.run(
             [sys.executable, SKILL] + args,
@@ -127,7 +129,7 @@ def cmd_stop():
     if not out or not out.get("ok"):
         emit({})
     rec = out.get("recommendation", {})
-    if rec.get("verified_confirmed"):
+    if rec.get("verified"):
         emit({})
     emit({"systemMessage":
           f"[jev verify-run] 코드 수정 후 빌드·테스트 실행 이행이 확인되지 않음 "
