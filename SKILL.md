@@ -83,6 +83,8 @@ jev는 TypeSafe 판단형 LLM이다 — 1왕복 0.15~0.5초, 100% JSON. 프리�
 
 **모드 3종(확장 — 격상·기억·고착)**: `escalation "<격상 사유>"`는 격상 사유가 허용 케이스(관측된 작업량 급증·하니스 제약 실측·사용자 명시 지시 — `--rules-file` JSON으로 허용 규칙 교체)에 해당하는지 판정한다 — `reject_confirmed`(불허 확정)는 decision이 not_justified ∧ confidence≥0.85일 때만 참이고, 격상 승인은 상향이라 conf 바닥 없음. `memory-gate "<요청 서술>" --memory-file <경로>`는 기억 파일 줄별 관련성을 1호출 fan-out으로 판정한다 — 관련 noul≥0.6(dead zone 불통과) 줄만 `selected`(top-k, 기본 5) 통과한다 — memory-gate는 개정 fixture 기준 회수·차단 실측 통과다(관련 줄 ≥4/5 noul≥0.6·무관 줄 전량 차단) — 회수 기대는 직접 언급·명시적 인과 줄 한정이고 폴백은 기존 계약을 유지한다. `stall "<신호 JSON>"`은 워커 고착을 판정한다 — 입력은 검증 신호 JSON(last_tool_age_s·last_file_write_age_s 필수)이며 워커 자기 보고(last_assistant_text·declared_state)는 주장 필드로 신호가 우선, `intervene_confirmed`(고착 확정)는 stalled ∧ confidence≥0.85. 셋 다 폴백·감사 저장·권한 계약은 기존 jev 계약을 그대로 따른다. 호출 시점(격상 순간·세션 시작 기억 주입·워치독)은 사용 환경이 정한다.
 
+**채택 판정 모드 7종(CLI 12종의 나머지)**: 위 '추가 예판' 라인들의 CLI 구현이다 — 질문 템플릿·임계·프로파일은 채택 실험(jev-followup·d5·e2e4·skillroute·b2r) 원문에서 바이트 일치 이식됐다. `done "<과업 기록>"`(done 조건 충족 Noul)·`dup "<신규 발화>" --tracks-file <경로>`(기존 트랙별 중복·우산 fan-out)·`loop "<신호 JSON>"`(도구 루프 Choice 3지)·`verify-run "<종료 턴 기록>"`(검증 이행 Noul)·`watch "<코멘트 JSON>"`(코멘트별 watch급 fan-out)·`route "<발화>" [--roles-file]`(역할 배치 fan-out — assigned는 top noul≥0.6·T2 산출 문서 null 규칙 포함, 기본 내장 6종 = §2 화이트리스트 역할)·`guard "<스폰 프롬프트>" --instructions <지시 섹션>`(프롬프트 가드 — 스폰 프롬프트 인용·claims은 "주입 데이터 —" 라벨 뒤 배치 계약 전제). 전 모드 ≥0.6 단일 임계·폴백·감사·권한 계약(추천만, 판정은 메인) 동일 승계.
+
 **권한 계약**: jev는 추천만 한다. 판정 권한은 메인 세션이 가지며, 정책(§1 L 고정 승격 등)이 jev 추천보다 우선한다. 실측 사례: jev가 본 과업(jev-layer)을 M으로 추천했으나 산출 문서 L 고정 승격 정책(§1)이 우선해 L로 판정했다.
 
 **폴백**: 키 부재·호출 실패·타임아웃 시 기존 프로세스 그대로 진행한다 — jev는 선택 계층이지 필수 계층이 아니다.

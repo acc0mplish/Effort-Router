@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """jev_modes.py 단위테스트 — 확장 판단 모드 3종(escalation·memory-gate·stall) T27~T36.
 
+채택 판정 7종(done·dup·loop·verify-run·watch·route·guard) 테스트는
+test_jev_modes_extra.py T37~T50이다(650줄 분리).
+
 MockJevServer·run_cli 재사용(test_jev_judge) — 127.0.0.1 mock 기반(실 API·실 키 불필요).
 테스트는 subprocess로 CLI를 실행한다(test_jev_judge 관습) — import 방식이면
 수집 단계 ImportError로 RED가 성립하지 않는다.

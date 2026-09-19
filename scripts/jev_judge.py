@@ -380,7 +380,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description='jev 판단 계층 CLI — TypeSafe 판단형 LLM 예판 클라이언트')
     parser.add_argument('mode',
-                        choices=('tier', 'prune', 'escalation', 'memory-gate', 'stall'),
+                        choices=('tier', 'prune', 'escalation', 'memory-gate', 'stall',
+                                 *jev_modes.EXTRA_MODES),
                         help='판단 모드')
     parser.add_argument('statement',
                         help="작업 서술 원문 또는 모드 입력(stall은 신호 JSON 원문·경로, "
@@ -393,6 +394,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="memory-gate 모드 — 기억 파일 경로('-'는 stdin 전체)")
     parser.add_argument('--top-k', type=int, default=5,
                         help='memory-gate 모드 — selected 상위 N줄(기본 5)')
+    parser.add_argument('--tracks-file',
+                        help="dup 모드 — 트랙 목록 JSON 파일({track_id: 제목}, '-'는 stdin)")
+    parser.add_argument('--instructions',
+                        help="guard 모드 — 지시 섹션 원문·경로('-'는 stdin 전체)")
+    parser.add_argument('--roles-file',
+                        help="route 모드 — 역할 프로파일 JSON 파일({'roles': [...]}, "
+                             "'-'는 stdin, 미지정 시 내장 6종)")
     parser.add_argument('--save', help='감사 저장 경로(디렉터리 또는 .json 파일)')
     parser.add_argument('--timeout', type=float, default=DEFAULT_TIMEOUT,
                         help=f'HTTP 타임아웃 초(기본 {DEFAULT_TIMEOUT})')
@@ -414,6 +422,14 @@ def main(argv: list[str] | None = None) -> None:
             args.mode, args.statement, rules_file=args.rules_file,
             memory_file=args.memory_file, top_k=args.top_k, stdin_text=read_stdin_text)
         state = mode_input['state']
+    elif args.mode in jev_modes.EXTRA_MODES:
+        # 채택 판정 7종 — 입력 파싱·질문 생성·recommendation 합성은 jev_modes 별도 함수가
+        # 담당하고 호출·검증·감사는 기존 파이프라인을 그대로 경유한다(계획 jev-cli8 §2.5)
+        mode_input = jev_modes.parse_extra_input(
+            args.mode, args.statement, tracks_file=args.tracks_file,
+            instructions=args.instructions, roles_file=args.roles_file,
+            stdin_text=read_stdin_text)
+        state = mode_input['state']
     elif args.statement == '-':
         state = read_stdin_text()
     else:
@@ -424,8 +440,11 @@ def main(argv: list[str] | None = None) -> None:
         fail('TYPESAFE_API_KEY is not set — HTTP 호출 없이 폴백한다(jev는 선택 계층)')
     if args.mode == 'prune' and not args.stage:
         fail('prune 모드에는 --stage {plan|fanout|review}가 필요하다')
-    questions = (jev_modes.build_mode_questions(args.mode, mode_input)
-                 if mode_input is not None else build_questions(args.mode, args.stage))
+    if args.mode in jev_modes.EXTRA_MODES:
+        questions = jev_modes.build_extra_questions(args.mode, mode_input)
+    else:
+        questions = (jev_modes.build_mode_questions(args.mode, mode_input)
+                     if mode_input is not None else build_questions(args.mode, args.stage))
     body = {'state': state, 'model': args.model, 'questions': questions}
     raw = call_api(args.endpoint, api_key, body, args.timeout)
     try:
@@ -434,9 +453,13 @@ def main(argv: list[str] | None = None) -> None:
         fail(f'response is not valid JSON: {error}')
     model, answers, usage = validate_response(payload, questions)
     audit_path = audit_target(args.save, args.mode) if args.save else None
-    recommendation = (jev_modes.build_mode_recommendation(
-        args.mode, mode_input, answers, noul_confirmed)
-        if mode_input is not None else build_recommendation(args.mode, args.stage, answers))
+    if args.mode in jev_modes.EXTRA_MODES:
+        recommendation = jev_modes.build_extra_recommendation(
+            args.mode, mode_input, answers, noul_confirmed)
+    else:
+        recommendation = (jev_modes.build_mode_recommendation(
+            args.mode, mode_input, answers, noul_confirmed)
+            if mode_input is not None else build_recommendation(args.mode, args.stage, answers))
     parsed = {'ok': True, 'mode': args.mode, 'model': model,
               'recommendation': recommendation,
               'usage': usage, 'audit': str(audit_path) if audit_path is not None else None}
