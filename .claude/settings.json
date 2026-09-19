@@ -1,0 +1,51 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/jev_hooks.py prompt",
+            "timeout": 10,
+            "statusMessage": "jev memory-gate..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/jev_hooks.py logbash",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/jev_hooks.py guard",
+            "timeout": 10,
+            "statusMessage": "jev guard..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/jev_hooks.py stop",
+            "timeout": 12,
+            "statusMessage": "jev verify-run..."
+          }
+        ]
+      }
+    ]
+  }
+}
