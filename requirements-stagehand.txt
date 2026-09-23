@@ -1,0 +1,5 @@
+# r18 Stagehand 게이트 — 직접 의존성 정확 버전 핀(plan.md §3-6, 가정 A1)
+# 실측: pip index versions stagehand|playwright (2026-09-23)
+# stagehand 4.1.0 requires_python >=3.11 · 간접 의존성 풀 lock은 범위 밖(가정 A5)
+stagehand==4.1.0
+playwright==1.63.0

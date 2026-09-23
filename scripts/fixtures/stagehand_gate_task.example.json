@@ -1,0 +1,16 @@
+{
+  "task_id": "example-read-heading",
+  "url": "https://example.com",
+  "steps": [
+    {
+      "action": "act",
+      "instruction": "페이지에 접속해 본문이 렌더링될 때까지 기다린다"
+    },
+    {
+      "action": "extract",
+      "instruction": "페이지의 h1 제목 텍스트를 추출한다",
+      "target": "h1"
+    }
+  ],
+  "success_criteria": "h1이 Example Domain을 표시한다"
+}
