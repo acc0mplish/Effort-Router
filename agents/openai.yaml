@@ -1,6 +1,6 @@
 interface:
   display_name: "Effort Router"
-  short_description: "계획 Astra medium · 검토 Astra high · 실행 Luna max"
+  short_description: "일반 작업 Luna max · 계획·고난도 추론 Sol xhigh"
   default_prompt: "Use $effort-router to classify this task and select the correct model and reasoning effort before starting."
 
 policy:

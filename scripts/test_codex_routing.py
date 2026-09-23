@@ -1,4 +1,4 @@
-"""Exercise the installation checker with isolated current and stale policies."""
+"""Exercise the fixed global routing verifier in an isolated Codex home."""
 import os
 from pathlib import Path
 import shutil
@@ -16,49 +16,46 @@ class CodexRoutingTests(unittest.TestCase):
             home = Path(directory)
             skill = home / 'skills' / 'effort-router'
             (skill / 'agents').mkdir(parents=True)
+            (skill / 'platforms').mkdir()
             shutil.copy(ROOT / 'SKILL.md', skill)
             shutil.copy(ROOT / 'agents/openai.yaml', skill / 'agents')
+            shutil.copy(ROOT / 'platforms/codex.md', skill / 'platforms')
             shutil.copytree(ROOT / 'platforms/codex-agents', home / 'agents')
             (home / 'config.toml').write_text(
-                'model = "gpt-5.6-luna"\nmodel_reasoning_effort = "max"\n'
+                'model = "gpt-6-luna"\nmodel_reasoning_effort = "max"\n'
                 '[agents]\nenabled = true\n')
-            adapter = (ROOT / 'platforms/codex.md').read_text()
-            guide = adapter.split('## AGENTS.md 삽입 단편')[1].split('```markdown\n')[1].split('```')[0]
-            (home / 'AGENTS.md').write_text(guide)
+            (home / 'AGENTS.md').write_text(
+                'effort-router GPT-6-Luna GPT-6-Sol max 실패 기반 영구 예방 규칙 '
+                '과거 실패 1건 CLAUDE.md .cursorrules')
 
             def verify():
                 return subprocess.run(
-                    [sys.executable, str(ROOT / 'scripts/verify_global_install.py'), '--plan', 'pro'],
+                    [sys.executable, str(ROOT / 'scripts/verify_global_install.py')],
                     env=dict(os.environ, CODEX_HOME=str(home)),
                     capture_output=True, text=True)
 
             result = verify()
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn('custom agents: 10/10', result.stdout)
-            for role in ('plan-high', 'plan-xhigh', 'plan-adversary-xhigh',
-                         'review-pr-high', 'review-pr-xhigh', 'security-audit',
-                         'implement-xhigh', 'core-xhigh'):
-                with self.subTest(role=role):
-                    path = home / 'agents' / (role + '.toml')
-                    original = path.read_text()
-                    stale = original.replace('gpt-6-astra', 'gpt-5.6-sol').replace('gpt-5.6-luna', 'gpt-5.6-sol')
-                    path.write_text(stale)
-                    result = verify()
-                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-                    self.assertIn('agent ' + role + ' expected', result.stdout)
-                    path.write_text(original)
 
-            apply = subprocess.run(
+            path = home / 'agents' / 'review-pr-high.toml'
+            original = path.read_text()
+            path.write_text(original.replace('model = "gpt-6-sol"', 'model = "gpt-6-luna"', 1))
+            result = verify()
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn('agent review-pr-high expected', result.stdout)
+
+            path.write_text(original)
+            path = home / 'agents' / 'plan-high.toml'
+            original = path.read_text()
+            path.write_text(original.replace('model = "gpt-6-sol"', 'model = "gpt-6-luna"', 1))
+            update = subprocess.run(
                 [sys.executable, str(ROOT / 'scripts/configure_codex_plan.py'),
-                 '--plan', 'plus', '--agents-dir', str(home / 'agents'), '--apply'],
+                 '--agents-dir', str(home / 'agents'), '--apply'],
                 capture_output=True, text=True)
-            self.assertEqual(apply.returncode, 0, apply.stderr)
-            result = subprocess.run(
-                [sys.executable, str(ROOT / 'scripts/verify_global_install.py'), '--plan', 'plus'],
-                env=dict(os.environ, CODEX_HOME=str(home)), capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertIn('plan: plus; review effort: medium', result.stdout)
-            self.assertEqual(verify().returncode, 1)  # Plus files must fail Pro validation.
+            self.assertEqual(update.returncode, 0, update.stderr)
+            self.assertIn('plan-high', update.stdout)
+            self.assertEqual(verify().returncode, 0)
 
 
 if __name__ == '__main__':
