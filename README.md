@@ -110,6 +110,45 @@ export TYPESAFE_API_KEY='<본인 키>'
 
 설계 원칙: 질문 쪼개기 · 판별 소재 질문 내장 · 사실 필드(이력·신호)로 주기 · 예외 조건 미리 적기. 상세 원리·한계 표는 SKILL.md '판단 계층(jev)' 절 참조.
 
+### Stagehand 게이트 (r21)
+
+`scripts/stagehand_gate.py`는 브라우저 실행 계층(Stagehand)과 판단 계층(jev)을 잇는 래퍼다. Stagehand로 태스크를 실행 → 시도 기록을 jev verify-run/done으로 판정 → 판정에 따라 재시도·종료·에스컬레이션한다. jev 결합은 서브프로세스뿐이며, recommendation의 `verified`/`done_confirmed` 불리언만 소비한다(noul 임계 재해석 없음).
+
+구조: `stagehand_gate.py`(게이트 CLI 본체) · `stagehand_gate_policy.py`(순수 판정 정책 — 스키마 검증·recommendation 소비·게이트 결정) · `stagehand_runner.py`(실행 계층 — 모의 러너 4시나리오 + 실 Stagehand 러너 지연 임포트).
+
+```bash
+# 환경 구성(1회) — .venv-stagehand/ 생성 + 의존성 핀 설치 + Chrome 확인
+bash scripts/setup_stagehand_env.sh
+
+# 모의 실행(키·브라우저 불필요 — 게이트 로직 검증용)
+python3 scripts/stagehand_gate.py --task-file scripts/fixtures/stagehand_gate_task.example.json \
+  --runner mock --mock-scenario retry-then-done
+
+# 실 Stagehand 실행(venv python + LLM 키 필요 — OPENAI_API_KEY 또는 ANTHROPIC_API_KEY)
+.venv-stagehand/bin/python scripts/stagehand_gate.py \
+  --task-file scripts/fixtures/stagehand_gate_task.example.json
+```
+
+| 환경변수 | 용도 |
+|---|---|
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | Stagehand LLM(어느 하나) — runner=stagehand일 때 필수 |
+| `TYPESAFE_API_KEY` | jev 판단 호출 |
+| `STAGEHAND_GATE_JEV_CMD` | jev 커맨드 오버라이드(플래그 > env > 기본) |
+| `STAGEHAND_GATE_MAX_RETRIES` | 재시도 상한 env 폴백(기본 2, 0..5) |
+| `STAGEHAND_MODEL` | Stagehand LLM 모델명(기본 `openai/gpt-4o-mini` — 과금 레이트 결정) |
+
+| 종료코드 | 의미 |
+|---|---|
+| 0 | pass — jev 판정 불리언 true |
+| 1 | retry-exhausted — 총 시도(1+max_retries) 소진 후에도 미확정 |
+| 2 | config/env 오류 — 키 부재·SDK 미설치·태스크 스키마 위반 등(즉시 종료) |
+| 3 | escalated — jev 판단 불능(exit≠0·비JSON·ok≠true). 브라우저 재시도 없이 즉시 상향 |
+
+SDK 미설치 환경에서는 `--runner stagehand`가 exit 2로 실패-폐쇄한다(안내에 `scripts/setup_stagehand_env.sh` 포함). 게이트 분기 전수는 모의 러너 + 루프백 jev mock으로 `python3 scripts/test_stagehand_gate.py`에서 결정적으로 검증한다.
+
+사용 시점·폴백·경제성·권한 계약(선택 실행 계층 옵션의 사용 규칙)은 SKILL.md의 '실행 계층(Stagehand 게이트)' 절을 따른다 — jev 위임 패턴('판단 계층(jev)' 절 위임)과 평행이다. 미설정·미구성(venv·SDK·LLM 키 부재) 시 이 계층 없이 기존 프로세스로 동작한다(exit 2 = bypass).
+모의 실행도 jev 판정 단계에는 `TYPESAFE_API_KEY`(또는 `--jev-cmd` 오버라이드)가 필요하다. 실 Stagehand 실행 경로는 모의 러너만 검증됐다 — SDK 표면 불일치로 첫 실실행이 실패할 수 있으니 소규모 태스크로 수동 확인한다.
+
 ## 모델 매핑
 
 일반 작업은 `gpt-6-luna / max`, 계획·고난도 추론은 `gpt-6-sol / xhigh`다. Terra는 사용하지 않는다. 이 설치에서는 native spawn/fan-out을 사용하지 않는다.

@@ -104,6 +104,48 @@ jev는 TypeSafe 판단형 LLM이다 — 1왕복 0.15~0.5초, 100% JSON. 프리�
 
 **팬아웃 렌즈 규칙 (fanout 스테이지)**: `prune --stage fanout`은 복잡도 Score(5레벨)와 안전성 noul의 복합 점수로 `lens_count`(3/2/1)와 파생 `action`(keep_all/reduce/minimal)을 추천한다 — 임계 판정만 하고 보간하지 않는다(jev 수치 캘리브레이션 한계). `lens_forced_reason`이 'safe_not_confirmed'이면(안전 미확신) 코드가 이미 3렌즈 보수 처리를 적용했다. **lens_count는 메인 세션 티어 판정에 종속된다 — L티어 팬아웃 최소 2렌즈, XL 최소 3렌즈 하한. jev lens_count가 하한 미달이면 하한으로 올린다.** L 고정 승격(§1 산출 문서·게이트 프리셋)·보안감사 트랙은 축소 불가(기본 렌즈 유지). 렌즈 축소 채택은 상단 '방향별 임계'의 하향 문(0.85)을 그대로 통과해야 한다.
 
+## 실행 계층(Stagehand 게이트) — 선택 실행 계층
+
+Stagehand 게이트는 브라우저 실행 계층(Stagehand)과 판단 계층(위 '판단 계층(jev)' 절)을 잇는 선택 실행 게이트 래퍼다 — 태스크 실행 → 시도 기록을 jev verify-run/done으로 판정 → 판정에 따라 재시도·종료·에스컬레이션한다. r21 구현이며 SKILL.md에서 Stagehand가 최초로 등재되는 절이다.
+
+**사용 시점** — 브라우저 조작이 필요한 실행·검증 과업에서 켠다.
+- 트리거 2종: 사용자 명시 옵션("jev 처럼 옵션으로 제공해" → "스킬 옵션 문서화"로 확정) 또는 메인 세션 판단.
+- **유료 계층 활성화는 사용자 명시가 기본이다** — 메인 세션이 자율로 켤 때는 활성화와 과금 발생을 사용자에게 먼저 고지한다.
+- 기본 꺼짐 — 선택 계층이지 필수 계층이 아니다. 판단 계층(jev)과 별개의 독립 옵션이며, 둘은 결합해 사용한다(게이트가 jev 판단을 소비).
+- 꺼진 상태에서의 브라우저 과업은 기존 프로세스로 수행한다 — 옵션을 켜지 않으면 이 계층의 실행·과금이 발생하지 않는다.
+- 켜는 순서: 태스크 JSON 작성(url·steps·success_criteria) → 게이트 호출 → 종료코드 해석 → jev 감사 기록(--save-dir) 확인.
+
+**호출·감사 계약**: `python3 scripts/stagehand_gate.py --task-file <JSON>` — **저장소 루트 기준 상대경로다**. jev 절의 `<skill-dir>/scripts/` 규약과 상이하다(미러 동봉 불가 — 실실행은 저장소 국소 `.venv-stagehand/`·fixtures를 요구한다).
+- 실 Stagehand 실행은 `.venv-stagehand/bin/python scripts/stagehand_gate.py ...`로 **venv 인터프리터를 쓴다** — 시스템 python3는 SDK 미설치로 exit 2다.
+- 핵심 플래그: `--runner {stagehand,mock}`(기본 stagehand), `--max-retries N`(기본 2, 0..5 — 총 시도=1+N), `--jev-mode {verify-run,done}`(기본 verify-run), `--save-dir DIR`(시도별 jev --save 감사 저장 — 생략 가능하며 생략 시 감사 파일 미기록), `--jev-cmd`·`--mock-scenario`·`--timeout`.
+- mock 러너는 LLM 키·브라우저 불필요하지만 **jev 판정 단계에는 TYPESAFE_API_KEY(또는 `--jev-cmd` 오버라이드)가 필요하다**.
+- 태스크 스키마: task_id·url·steps(1..50개 — action은 act|observe|extract + instruction)·success_criteria — success_criteria는 jev 판정 기록에 포함된다. **steps의 target 필드는 스키마 검증만 하고 실행 계층이 소비하지 않는다(미지원)** — fixture 예시의 target 값은 실행에 반영되지 않는다.
+- API 키·모델은 환경변수만 읽는다: OPENAI_API_KEY 또는 ANTHROPIC_API_KEY(Stagehand LLM — 어느 하나)·STAGEHAND_MODEL(기본 `openai/gpt-4o-mini` — 과금 레이트를 결정)·TYPESAFE_API_KEY(jev 판단)·STAGEHAND_GATE_JEV_CMD(jev 커맨드 오버라이드)·STAGEHAND_GATE_MAX_RETRIES(재시도 상한 env 폴백).
+- jev 결합은 subprocess 단독이며 판정은 recommendation 불리언(verified/done_confirmed)만 소비한다 — noul 임계 재해석 금지.
+- 상세 사용법(env 표·종료코드 표 전문)은 README 'Stagehand 게이트 (r21)' 절 위임.
+
+**폴백 계약**: venv 미구성·SDK 미설치·LLM 키 부재 = exit 2 = "이 계층 없이 기존 프로세스 진행" — 실패는 오류가 아니라 이유가 붙은 bypass다(jev 폴백 계약 준용).
+- exit 2 안내에는 원인(키 부재·SDK 미설치)과 구성 방법(setup_stagehand_env.sh)이 포함된다.
+- preflight는 LLM 키·SDK만 검사하고 TYPESAFE_API_KEY는 검사하지 않는다 — **TYPESAFE 부재 시 1회 유료 브라우저 시도를 소진한 뒤 exit 3으로 끝난다**.
+- **exit 3(escalated)은 bypass가 아닌 즉시 상향 신호다** — jev 판단 불능(TYPESAFE 키 부재·exit≠0·비JSON·ok≠true·서브프로세스 타임아웃·서브프로세스 실행 실패) 시 브라우저 재시도 없이 종료한다. **exit 3 최빈 원인은 설정류(TYPESAFE_API_KEY 부재)다 — 수신 시 stdout의 `escalation_reason` 필드를 먼저 확인한다**.
+- "상향"은 티어 상향이 아니라 **메인 세션 보고·판정 위임**이다 — 상향 수용 여부의 판정은 메인 세션이 한다.
+- exit 0 = pass(jev 판정 불리언 true)·exit 1 = retry-exhausted(총 시도 1+max_retries 소진 후에도 미확정).
+
+**경제성 계약**: 브라우저 스텝 1개 = LLM 호출 1회 이상이며 토큰 단위로 모델 제공자에게 청구된다 — Stagehand 자체가 과금하는 구조가 아니다(공식 문서 대조 — Stagehand는 토큰 수를 보고하고 청구는 모델 제공자가 한다).
+- 총 비용 상한 = 총 시도 상한(1+max_retries, 기본 3) × 태스크 스텝 수다 — 최악 상한은 6시도(max_retries 최대 5) × 50스텝 = **LLM 호출 300회**다. 종료코드 1·3이 비용 차단 경로다.
+- 재시도 여부 판정은 jev(0원·1왕복 0.15~0.5초)가 하므로 판단 계층이 비용 통제 장치다 — 게이트 없는 브라우저 루프가 비용 폭주 경로다.
+- 기본 꺼짐이 비용 기본값이다 — 옵션을 명시적으로 켠 과업에만 과금이 발생한다.
+
+**권한 계약**: 게이트 결과(종료코드)는 진행·재시도·중단·상향 판정의 입력일 뿐이다 — 판정 권한은 메인 세션이 가진다(jev 권한 계약 평행: 추천만, 판정은 메인).
+
+**실경로 미검증 캐베**: 실 Stagehand 실행 경로는 모의 러너만으로 검증됐다 — 러너가 쓰는 최소 표면(`Stagehand(env='LOCAL', model_name=...)`·`page.act/observe/extract`)과 stagehand 4.1.0 공식 표면(`Stagehand.create`·`model_api_key` 등)이 불일치할 수 있고, 첫 실실행 실패가 exit 1(retry-exhausted)로 오진단될 수 있다 — 첫 실실행은 소규모 태스크로 수동 확인한다.
+
+**하니스 무관성**: 게이트는 subprocess CLI라 Codex·ChatGPT·Claude 어느 하니스에서도 동일하게 호출된다 — SKILL.md는 공용 계약 문서이며 하니스 고유 메커니즘에 의존하지 않는다.
+
+**데이터 유출 면**: 태스크 파일의 url·steps instruction·success_criteria에 시크릿·API 키·민감 경로를 기재하지 않는다 — 태스크 서술이 jev 판정 statement(api.typesafe.ai 전송)와 Stagehand LLM 프롬프트로 외부 전송된다(jev 절 데이터 유출 면 준용).
+- **브라우저가 수집하는 내용도 유출 면이다** — extract 스텝이 수집한 페이지 내용·시도 결과 JSON이 jev statement·Stagehand LLM 프롬프트로 외부 전송된다. 민감 페이지·인증 뒤 콘텐츠를 대상으로 하는 extract는 금지한다. **act/observe만 수행하는 과업도 면제가 아니다** — Stagehand는 LLM-in-the-loop 조작이므로 인증 뒤 페이지의 문맥이 페이지 콘텐츠로서 LLM 제공자에게 전송된다(시도 기록에는 남지 않는다).
+- 민감 정보가 필요한 스텝은 **태스크에서 제외하는 것이 유일한 대체 경로다** — 러너는 instruction 내 환경변수 삽입을 지원하지 않는다(실측). 이 제외 원칙은 **extract 수집 결과에도 동일 적용된다**. jev 절 state 위생(관찰된 사실만 서술)도 동일 적용한다.
+
 ## 2. 라우팅 테이블
 
 아래 역할만 호출한다. Codex는 `~/.codex/agents/*.toml`, Claude Code는 `~/.claude/agents/*.md`의 동명 역할을 사용한다. 테이블 밖 파일이 있어도 무시한다 — **존재 ≠ 허가**. 감시·운영 역할 `ops-supervisor`는 티어 단계 밖 구성원으로, 워치독 대상 스폰이 존재할 때만 메인 세션이 직접 호출한다(온디맨드 — 상시 배치 아니다. 근거: 결함 포착 실적 0건, r14 자아비판 K5) — 세션 토폴로지는 `platforms/claude.md`.

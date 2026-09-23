@@ -549,3 +549,19 @@ revfactory/codex-harness 비교에서 차용 기준 O(1)·일회성 비용 통�
 | I4 — README 핵심 원칙 무효화 전파 불릿(트리거 조건형·§5 위임) | README.md 핵심 원칙 | I1 파생 |
 
 검증 기록: ④리뷰(review-pr-xhigh 1스폰) **승인** — claims 5/5 verified: claim 1·2·3·5 본문 실측(verbatim diff exit 0·`git diff HEAD | grep -c '^-[^-]'` = 0·기존 계약 의미 대조 8쌍 모순 0), claim 4 미러 8/8 diff 0(cp 후 diff -q 전건 통과). claims 밖 LOW 2 비차단: 생성-검증 행 '연속' 수식어 탈락(어휘표 기록 전용 — 규범 본문 불변), 커밋 위생(4파일 개별 add — 선행 untracked AGENTS.md·__pycache__ 제외). round 1/0(②반려 1회 — v1 HIGH 5 → v2 → 재② 조건 접기 v3 확정), spawns 11, phase done
+
+## r22 Stagehand 게이트 선택 실행 계층 등재 (2026-09-23)
+
+원 요구 "jev 처럼 옵션으로 제공해" — 스킬 옵션 문서화로 확정. r21 게이트 래퍼(scripts/stagehand_gate.py 5종)를 SKILL.md 선택 계층으로 등재했다. 신규 절 '## 실행 계층(Stagehand 게이트) — 선택 실행 계층'(L107~148, 42줄) — jev 절 평행 볼드 라벨 구조, 필수 항목 8종 + 실경로 미검증 캐베. README r21 섹션 보강(venv 인터프리터·STAGEHAND_MODEL env·mock 키 조건·실경로 캐베·유출 면 확장).
+
+계약 요지 (증류):
+
+| 항목 | 계약 |
+|------|------|
+| 사용 시점 | 유료 계층 — 사용자 명시 기본, 메인 자율 활성화 시 고지 의무 |
+| 폴백 | exit 2 = bypass · exit 3 = 상향 신호(최빈 원인 TYPESAFE 부재 — escalation_reason 먼저 확인) |
+| 경제성 | 총 비용 상한 = (1+max_retries) × 스텝 수, 최악 6×50 = LLM 호출 300회 — 토큰 단위 제공자 청구 |
+| 유출 면 | extract 수집 내용·act/observe 페이지 문맥 전부 외부 전송 — 태스크 제외가 유일 대체 경로(러너 env 삽입 미지원) |
+| 실경로 | 미검증 캐베 — 러너 표면 vs SDK 4.1.0 공식 표면(Stagehand.create·model_api_key) 불일치 가능, 첫 실실행 소규모 수동 확인 |
+
+검증 기록: ④리뷰(review-pr-xhigh 1스폰) **승인** — claims C1·C2·C5·C7·C8 verified, C6 부분(대조 반영 4건 확인 — 기록 매체 부재·404 URL은 LOW로 축소 수용), C3·C4 Phase 2 메인 검증(미러 6/6 diff 0·'## r22' 1매치). ② 라운드1 반려(HIGH 4: exit3 오라우팅·비용 상한 스텝 수 탈락·extract 유출면·실경로 무경고) → 수정 라운드(초안 작성 재호출·반려 근거 주입) → 재② 3렌즈 전부 approve → M1·M2(act/observe 유출 면·env 삽입 미지원) 메인 직접 보강 — ④ 실측 정합 확인. round 1/0, spawns 9. 커밋 위경: r21 스크립트 선커밋 후 문서 3파일 스테이징(plan §6 제약6)
