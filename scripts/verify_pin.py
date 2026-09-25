@@ -342,19 +342,20 @@ class ReceiptWriter:
         return None if self.failed_reason is not None else str(self.path)
 
 
-def fresh_prologue(head: str) -> tuple[Path, dict[str, Any]]:
+def fresh_prologue(head: str) -> tuple[Path, Path, dict[str, Any]]:
     """fresh 절차 전반 — 가드(H4)→잔존 복구→worktree add --detach(§5.2 순서).
 
     가드·잔존 복구·add 실패는 GateConfigError — 호출부가 exit 2로 변환한다.
     잔존 복구는 r24 sweep이 detached를 스킵해 fresh 잔존을 못 치우므로(M12)
-    fresh 모드 재실행으로만 정리된다."""
+    fresh 모드 재실행으로만 정리된다. repo 루트를 반환한다 — epilogue가 재평가
+    하지 않게(리뷰 LOW — main_toplevel 재호출이 try 밖 예외 경로였다)."""
     repo = verify_exec.main_toplevel()
     verify_exec.fresh_guard(repo)
     leftovers = verify_exec.fresh_leftover_cleanup(repo)
     worktree = verify_exec.fresh_checkout(repo, head)
     fresh = {'used': True, 'checkout_sha': head, 'worktree_path': str(worktree),
              'removed': False, 'leftovers_cleaned': leftovers}
-    return worktree, fresh
+    return repo, worktree, fresh
 
 
 def fresh_epilogue(repo: Path, worktree: Path, fresh: dict[str, Any],
@@ -371,6 +372,45 @@ def fresh_epilogue(repo: Path, worktree: Path, fresh: dict[str, Any],
         print(json.dumps(partial, ensure_ascii=False))
         fail_config(f'fresh worktree remove 실패 — {error}')
     return {**fresh, 'removed': True}
+
+
+def write_stage(writer: ReceiptWriter | None, stage: str,
+                result: dict[str, Any]) -> None:
+    """영수증 단계 기록 — writer 없으면 no-op(--save 미지정은 파일 0생성 계약)."""
+    if writer is not None:
+        writer.write(stage, result)
+
+
+def execute_verify_window(args: argparse.Namespace, timeout: float,
+                          worktree: Path | None) -> tuple[dict[str, Any] | None,
+                                                          tuple[str, ...]]:
+    """verify-cmd 실행창 단계 — 엔진 호출·플래그 조립(미지정 시 None·공백).
+
+    ps 실패 등 엔진 오류는 exit 2로 변환한다(H2). cwd는 fresh면 worktree다 —
+    legacy 폴백 경로도 동일 적용된다(리뷰 HIGH 수선)."""
+    if args.verify_cmd is None:
+        return None, ()
+    patterns = (*VERIFICATION_PATTERNS, *(args.pattern or []))
+    cwd = worktree if worktree is not None else None
+    try:
+        verify_cmd, _ = run_verify_window(args.verify_cmd, timeout,
+                                          verify_exec.capability(), patterns, cwd)
+    except (GateConfigError, verify_exec.GateConfigError) as error:
+        fail_config(str(error))
+    return verify_cmd, verify_window_flags(verify_cmd['window_delta'])
+
+
+def finish_receipt(writer: ReceiptWriter | None,
+                   result: dict[str, Any]) -> dict[str, Any]:
+    """최종 저장 경로 — 저장 실패는 stdout 보존 후 exit 2(§3-2·§5.3 계약)."""
+    if writer is None:
+        return result
+    saved = writer.finish(result)
+    if saved is None:
+        print(json.dumps(result, ensure_ascii=False))
+        fail_config('증분 영수증 기록 실패 후 최종 저장도 실패 — 검사 결과는 위 '
+                    f'stdout JSON에 보존됐다: {writer.failed_reason}')
+    return {**result, 'saved_to': saved}
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -396,46 +436,27 @@ def main(argv: list[str] | None = None) -> None:
                                sha_matched, verification, verify_cmd,
                                flags if flags is not None else [], fresh)
 
-    if writer is not None:
-        writer.write('init', snap())
+    write_stage(writer, 'init', snap())
     verification, verification_flags = inspect_verification(base_sha, args.pattern or [])
     sha_flags = (FLAG_SHA,) if sha_matched is False else ()
-    if writer is not None:
-        writer.write('inspected', snap(verification,
-                                       flags=[*sha_flags, *verification_flags]))
-    worktree, fresh = None, None
+    write_stage(writer, 'inspected',
+                snap(verification, flags=[*sha_flags, *verification_flags]))
+    repo, worktree, fresh = None, None, None
     if args.fresh_checkout:
         try:
-            worktree, fresh = fresh_prologue(head)
+            repo, worktree, fresh = fresh_prologue(head)
         except (GateConfigError, verify_exec.GateConfigError) as error:
             fail_config(str(error))
-        if writer is not None:
-            writer.write('fresh_checkout', snap(fresh=fresh))
-    verify_cmd = None
-    window_flags: tuple[str, ...] = ()
-    if args.verify_cmd is not None:
-        patterns = (*VERIFICATION_PATTERNS, *(args.pattern or []))
-        cwd = worktree if worktree is not None else None
-        try:
-            verify_cmd, _ = run_verify_window(args.verify_cmd, timeout,
-                                              verify_exec.capability(), patterns, cwd)
-        except (GateConfigError, verify_exec.GateConfigError) as error:
-            fail_config(str(error))
-        window_flags = verify_window_flags(verify_cmd['window_delta'])
+        write_stage(writer, 'fresh_checkout', snap(fresh=fresh))
+    verify_cmd, window_flags = execute_verify_window(args, timeout, worktree)
     cmd_flags = verify_cmd_flags(verify_cmd) if verify_cmd is not None else ()
     flags = [*sha_flags, *verification_flags, *cmd_flags, *window_flags]
     result = snap(verification, verify_cmd, flags, fresh)
     if worktree is not None:
-        fresh = fresh_epilogue(verify_exec.main_toplevel(), worktree, fresh, result)
+        fresh = fresh_epilogue(repo, worktree, fresh, result)
         result = {**result, 'fresh': fresh}
-    if writer is not None:
-        writer.write('verify_cmd', result)  # 검증 실행 완료(fresh는 제거까지 완료 뒤)
-        saved = writer.finish(result)
-        if saved is None:
-            print(json.dumps(result, ensure_ascii=False))
-            fail_config('증분 영수증 기록 실패 후 최종 저장도 실패 — 검사 결과는 위 '
-                        f'stdout JSON에 보존됐다: {writer.failed_reason}')
-        result = {**result, 'saved_to': saved}
+    write_stage(writer, 'verify_cmd', result)  # 검증 실행 완료(fresh는 제거까지 완료 뒤)
+    result = finish_receipt(writer, result)
     print(json.dumps(result, ensure_ascii=False))
     raise SystemExit(EXIT_PASS if not result['flags'] else EXIT_ATTENTION)
 

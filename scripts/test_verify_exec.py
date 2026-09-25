@@ -212,6 +212,30 @@ class VerifyExecEngineTests(unittest.TestCase):
         self.assertIn('verify_cmd_timeout', slow_output['flags'])
         self.assertFalse(slow_output['verify_cmd']['process_group'])
 
+    def test_t27b_fresh_legacy_fallback_runs_in_fresh_checkout(self):
+        # HIGH 회귀(r26 리뷰) — legacy 폴백(process_group false)에서도 fresh cwd로
+        # 실행돼야 한다. ps 제거 PATH + dirty 메인 + --fresh-checkout → stdout_tail은
+        # 커밋 내용이다(수선 전에는 메인 cwd에서 실행돼 dirty 본문이 나왔다).
+        repo = self.make_repo()
+        write_file(repo, 'ver.txt', 'committed\n')
+        self.assertEqual(git(repo, 'add', '-A').returncode, 0)
+        self.assertEqual(git(repo, 'commit', '-m', 'committed ver').returncode, 0)
+        write_file(repo, 'ver.txt', 'dirty\n')  # 미커밋 dirty 메인
+        shim_dir = self.root / 'path-no-ps-fresh'
+        shim_dir.mkdir()
+        os.symlink(shutil.which('git'), shim_dir / 'git')
+        env = clean_env()
+        env['PATH'] = str(shim_dir)
+        result = run_pin(repo, '--verify-cmd', '/bin/cat ver.txt', '--fresh-checkout',
+                         env_extra={'PATH': env['PATH']})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output = json.loads(result.stdout)
+        self.assertFalse(output['verify_cmd']['process_group'])
+        self.assertTrue(output['fresh']['used'])
+        self.assertEqual(output['verify_cmd']['stdout_tail'], 'committed\n')
+        # 메인 워크스페이스는 게이트가 건드리지 않는다 — dirty 본문 유지(§3-8)
+        self.assertEqual((repo / 'ver.txt').read_text(encoding='utf-8'), 'dirty\n')
+
     # --- T28~T32 — verify-window 전후 클린 검사 ---
 
     def test_t28_head_moved_during_verify(self):

@@ -199,13 +199,15 @@ def _result(command: str, started: float, exit_code: int | None, timed_out: bool
             'survivors': survivors, 'group_killed': group_killed}
 
 
-def _run_legacy(argv: list[str], command: str, timeout: float,
+def _run_legacy(argv: list[str], command: str, timeout: float, cwd: Path,
                 started: float) -> dict[str, Any]:
     """비POSIX 폴백 — 현행 subprocess.run(timeout=) 의미 이관(직속 자식만 종료).
-    process_group false로 투명 표기(C14)."""
+    process_group false로 투명 표기(C14). cwd는 posix 경로와 동일 적용이다 —
+    fresh 모드에서 폴백이 메인 cwd에서 실행되면 검증 대상 자체가 바뀐다(r26 리뷰
+    HIGH 수선)."""
     try:
         completed = subprocess.run(argv, capture_output=True, text=True,
-                                   errors='replace', timeout=timeout)
+                                   errors='replace', timeout=timeout, cwd=str(cwd))
     except subprocess.TimeoutExpired as error:
         return _result(command, started, None, True, as_text(error.stdout),
                        as_text(error.stderr), None, None)
@@ -235,10 +237,12 @@ def _run_posix(argv: list[str], command: str, timeout: float, cwd: Path,
     except subprocess.TimeoutExpired:
         genuine_timeout = proc.poll() is None
         stdout, stderr, group_dead = stop_group(proc)
+        # survivors는 (b) orphan 경로면 강제 종료됐음을 뜻하고, group_killed는
+        # 그룹 소멸이 확인된 경우만 True다(소멸 미확인 undead 경로는 실측값 — 리뷰 LOW)
         survivors = (not group_dead) or (not genuine_timeout)
         return _result(command, started,
                        None if genuine_timeout else proc.returncode,
-                       genuine_timeout, stdout, stderr, survivors, True)
+                       genuine_timeout, stdout, stderr, survivors, group_dead)
     except BaseException:
         stop_group(proc)
         raise
@@ -266,7 +270,7 @@ def run_verify_cmd(command: str, timeout: float, cwd: Path,
     argv = split_verify_command(command)
     started = time.monotonic()
     if not process_group:
-        result = _run_legacy(argv, command, timeout, started)
+        result = _run_legacy(argv, command, timeout, cwd, started)
     else:
         result = _run_posix(argv, command, timeout, cwd, started)
     return {**result, 'process_group': process_group}
