@@ -3,10 +3,12 @@
 
 검증의 자기참조 구멍(검증 대상 테스트를 약화·삭제·신규 무력화해도 재실행은 같은
 약화본을 통과시킨다)과 핀 부재(옛 검증으로 새 코드가 통과한다)를 기계 노출로 전환하는
-읽기 전용 게이트다(완전 차단이 아니다 — 검증 입력 변경은 정당화 계층 사유 기재로
-해제되고 감시 자동화 없이 호출 시점 1회 판정이다). 감지는 git(커밋·staged·unstaged·삭제
+게이트다(완전 차단이 아니다 — 검증 입력 변경은 정당화 계층 사유 기재로 해제되고
+감시 자동화 없이 호출 시점 1회 판정이다). 감지는 git(커밋·staged·unstaged·삭제
 diff + untracked 신규 + ignore 제외 untracked 스캔[r25] + 은닉 지정
-ls-files -v 스캔)과 검증명령 subprocess뿐이며 외부 전송·과금이 없다. git 호출은
+ls-files -v 스캔)과 검증명령 subprocess[r26: 프로세스 그룹 제어·실행창 전후
+클린 검사 — verify_exec.py 실행 엔진]뿐이며 외부 전송·과금이 없다. 기본 모드는
+메인 워크스페이스 tracked·인덱스·HEAD를 기록하지 않는다. git 호출은
 `-c core.autocrlf=false -c core.quotePath=false` 고정 — CRLF 정규화 위플래그와
 비ASCII 경로 C-인용(fnmatch 무력화)을 경로 자체에서 차단한다.
 종료코드: 0 pass · 1 attention(확인 의무 플래그 — jev의 exit 1 폴백과 정반대다,
@@ -19,21 +21,20 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import shlex
 import subprocess
 import sys
-import time
 from datetime import datetime, timezone
 from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any
+
+import verify_exec  # scripts/ 동일 디렉터리 국소 의존(§3-6 — r24 lib 패턴 준용)
 
 GATE = 'verify-pin'
 EXIT_PASS = 0
 EXIT_ATTENTION = 1
 EXIT_CONFIG = 2
 DEFAULT_TIMEOUT = 600.0
-TAIL_CHARS = 500
 GIT_FIXED = ('-c', 'core.autocrlf=false', '-c', 'core.quotePath=false')
 
 # 그룹 1 — 검증 입력(기본 8종, --pattern은 여기에만 append된다)
@@ -49,6 +50,11 @@ FLAG_INPUT_HIDDEN = 'verification_input_hidden'
 FLAG_INPUT_IGNORE_HIDDEN = 'verification_input_ignore_hidden'
 FLAG_CMD_FAILED = 'verify_cmd_failed'
 FLAG_CMD_TIMEOUT = 'verify_cmd_timeout'
+# r26 신규 3종 — survivors는 재검증 계층(프로세스 정지 후 재실행으로 소멸 확인),
+# head_moved·workspace_mutated는 정당화 계층(1회성 사건 — 재실행 소멸≠해제, M16)
+FLAG_SURVIVORS = 'verify_cmd_survivors'
+FLAG_HEAD_MOVED = 'head_moved_during_verify'
+FLAG_WORKSPACE_MUTATED = 'verify_workspace_mutated'
 
 
 class GateConfigError(Exception):
@@ -220,47 +226,48 @@ def inspect_verification(base_sha: str | None,
     return verification, flags
 
 
-def as_text(value: Any) -> str:
-    """TimeoutExpired 출력은 text 모드에서도 bytes로 올 수 있다 — 방어적 복원."""
-    if value is None:
-        return ''
-    if isinstance(value, bytes):
-        return value.decode('utf-8', errors='replace')
-    return value
+def run_verify_window(command: str, timeout: float, process_group: bool,
+                      patterns: tuple[str, ...]) -> tuple[dict[str, Any], list[str]]:
+    """verify-cmd 실행창 — 직전 스냅샷 → 실행 → 직후 재판정 델타(r26 §5.1).
+
+    기준은 실행 창 전후 델타(게이트 시작 아님) — 선행 inspect_verification과
+    무관하다. 사전 dirty는 플래그 대상 아니다(게이트의 검증입력 검사 영역).
+    untracked 신규·소실은 검증입력 패턴 매칭 한정 검출(.pytest_cache 등 산출물
+    오탐 방지 — §12-3 승인 트레이드오프), exclude 내용 변화는 무조건 변형이다(M8).
+    ps 실패 등 엔진 오류는 verify_exec.GateConfigError — 호출부가 exit 2로
+    변환한다(H2)."""
+    before = verify_exec.window_snapshot()
+    verify_cmd = verify_exec.run_verify_cmd(command, timeout, Path.cwd(),
+                                            process_group)
+    delta = verify_exec.window_delta(before, verify_exec.window_snapshot())
+    untracked_matched = match_candidates(
+        delta['untracked_new'] + delta['untracked_gone'], patterns)
+    detail = {**delta, 'untracked_matched': untracked_matched}
+    return {**verify_cmd, 'window_delta': detail}, untracked_matched
 
 
-def tail(text: str, limit: int = TAIL_CHARS) -> str:
-    return text[-limit:]
-
-
-def run_verify_cmd(command: str, timeout: float) -> dict[str, Any]:
-    """검증명령 1회 실행 — shlex 분할 후 셸 미경유 subprocess. 타임아웃은 failed와 배타다."""
-    argv = shlex.split(command)
-    if not argv:
-        raise GateConfigError('--verify-cmd가 빈 명령이다')
-    started = time.monotonic()
-    try:
-        completed = subprocess.run(argv, capture_output=True, text=True,
-                                   errors='replace', timeout=timeout)
-    except subprocess.TimeoutExpired as error:
-        return {'command': command, 'exit_code': None, 'timed_out': True,
-                'duration_s': round(time.monotonic() - started, 3),
-                'stdout_tail': tail(as_text(error.stdout)),
-                'stderr_tail': tail(as_text(error.stderr))}
-    except OSError as error:
-        raise GateConfigError(f'--verify-cmd 실행 불가: {error}') from error
-    return {'command': command, 'exit_code': completed.returncode, 'timed_out': False,
-            'duration_s': round(time.monotonic() - started, 3),
-            'stdout_tail': tail(as_text(completed.stdout)),
-            'stderr_tail': tail(as_text(completed.stderr))}
+def verify_window_flags(delta: dict[str, Any]) -> tuple[str, ...]:
+    """실행창 델타 플래그 — HEAD 이동은 head_moved_during_verify(정당화 계층),
+    tracked 변형·exclude 변화·패턴 매칭 untracked는 verify_workspace_mutated
+    (정당화 계층 — 1회성 사건, 재실행 소멸≠해제, M16)."""
+    flags = ()
+    if delta['head_moved']:
+        flags += (FLAG_HEAD_MOVED,)
+    if delta['tracked_changed'] or delta['exclude_changed'] \
+            or delta['untracked_matched']:
+        flags += (FLAG_WORKSPACE_MUTATED,)
+    return flags
 
 
 def verify_cmd_flags(verify: dict[str, Any]) -> tuple[str, ...]:
+    flags = ()
     if verify['timed_out']:
-        return (FLAG_CMD_TIMEOUT,)  # 타임아웃이 원인 — failed 병기 금지(배타성, LOW)
-    if verify['exit_code'] != 0:
-        return (FLAG_CMD_FAILED,)
-    return ()
+        flags += (FLAG_CMD_TIMEOUT,)  # 타임아웃이 원인 — failed 병기 금지(배타성, LOW)
+    elif verify['exit_code'] != 0:
+        flags += (FLAG_CMD_FAILED,)
+    if verify.get('survivors'):
+        flags += (FLAG_SURVIVORS,)  # 독립 축(프로세스 잔존) — timeout과 병기 가능(r26)
+    return flags
 
 
 def assemble_result(head_sha: str, expect_sha: str | None, base_ref: str | None,
@@ -306,10 +313,18 @@ def main(argv: list[str] | None = None) -> None:
     verification, verification_flags = inspect_verification(base_sha, args.pattern or [])
     sha_matched = None if args.expect_sha is None else head == args.expect_sha
     sha_flags = (FLAG_SHA,) if sha_matched is False else ()
-    verify_cmd = run_verify_cmd(args.verify_cmd, timeout) \
-        if args.verify_cmd is not None else None
+    verify_cmd = None
+    window_flags: tuple[str, ...] = ()
+    if args.verify_cmd is not None:
+        patterns = (*VERIFICATION_PATTERNS, *(args.pattern or []))
+        try:
+            verify_cmd, _ = run_verify_window(args.verify_cmd, timeout,
+                                              verify_exec.capability(), patterns)
+        except (GateConfigError, verify_exec.GateConfigError) as error:
+            fail_config(str(error))
+        window_flags = verify_window_flags(verify_cmd['window_delta'])
     cmd_flags = verify_cmd_flags(verify_cmd) if verify_cmd is not None else ()
-    flags = [*sha_flags, *verification_flags, *cmd_flags]
+    flags = [*sha_flags, *verification_flags, *cmd_flags, *window_flags]
     result = assemble_result(head, args.expect_sha, args.base, base_sha,
                              sha_matched, verification, verify_cmd, flags)
     if args.save is not None:
