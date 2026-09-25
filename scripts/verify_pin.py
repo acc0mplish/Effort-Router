@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -296,19 +297,49 @@ def assemble_result(head_sha: str, expect_sha: str | None, base_ref: str | None,
             'saved_to': None}
 
 
-def save_result(save_dir: str, result: dict[str, Any]) -> tuple[str | None, str | None]:
-    """결과 JSON 저장 — (경로, None) 또는 (None, 사유). 검사 결과는 폐기하지 않는다(M-f)."""
-    try:
+class ReceiptWriter:
+    """증분 영수증 — 단계별 tmp+fsync+os.replace 원자 기록(r26 §5.3).
+
+    경로는 게이트 시작 시 확정(스탬프 1회 생성 — 타임스탬프 경합으로 중간 기록이
+    분산되지 않게). 시작 시 동일 접두 tmp 잔여 파일을 먼저 정리한다(직전 크래시의
+    tmp 고착 방지, LOW). 실패 종료(exit 2) 시 영수증은 마지막 성공 stage에 머문다
+    (실패 시점 강제 기록 없음 — 최종 stdout이 사유를 운반한다, M10). 중간 기록
+    실패(OSError)는 이후 기록 중단 + 검사는 계속 수행(§3-2 — 검사 결과 폐기 금지)
+    — 최종 저장도 실패하면 exit 2 사유에 합류한다. 디렉터리 fsync는 생략 —
+    os.replace의 same-dir 원자성으로 크래시 일관성 충분(§12-7)."""
+
+    def __init__(self, save_dir: str):
+        self.failed_reason: str | None = None
         stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
-        directory = Path(save_dir)
-        directory.mkdir(parents=True, exist_ok=True)
-        path = directory / f'{GATE}-{stamp}.json'
-        payload = {**result, 'saved_to': str(path)}
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n',
-                        encoding='utf-8')
-    except OSError as error:
-        return None, str(error)
-    return str(path), None
+        self.path = Path(save_dir) / f'{GATE}-{stamp}.json'
+        self._tmp = self.path.with_name(self.path.name + '.tmp')
+        try:
+            directory = self.path.parent
+            directory.mkdir(parents=True, exist_ok=True)
+            for stale in directory.glob(f'{GATE}-*.tmp'):
+                stale.unlink()
+        except OSError as error:
+            self.failed_reason = str(error)
+
+    def write(self, stage: str, result: dict[str, Any]) -> None:
+        """단계 완료 시점 영수증 전체 재기록 — 실패 시 기록 중단(검사는 계속)."""
+        if self.failed_reason is not None:
+            return
+        payload = {**result, 'stage': stage, 'saved_to': str(self.path)}
+        try:
+            with open(self._tmp, 'w', encoding='utf-8') as handle:
+                handle.write(json.dumps(payload, ensure_ascii=False, indent=2) + '\n')
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(self._tmp, self.path)
+        except OSError as error:
+            self.failed_reason = str(error)
+
+    def finish(self, result: dict[str, Any]) -> str | None:
+        """최종 complete 기록 — 성공 시 경로, 실패 시 None(사유는 failed_reason)."""
+        if self.failed_reason is None:
+            self.write('complete', result)
+        return None if self.failed_reason is not None else str(self.path)
 
 
 def fresh_prologue(head: str) -> tuple[Path, dict[str, Any]]:
@@ -344,6 +375,7 @@ def fresh_epilogue(repo: Path, worktree: Path, fresh: dict[str, Any],
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
+    writer = ReceiptWriter(args.save) if args.save is not None else None
     try:
         timeout = validate_timeout(args.timeout)
         if args.fresh_checkout and args.verify_cmd is None:
@@ -351,14 +383,34 @@ def main(argv: list[str] | None = None) -> None:
                                   ' — verify-cmd 없는 fresh는 검증 부재다')
         head = resolve_head()
         base_sha = resolve_base(args.base) if args.base is not None else None
-        worktree, fresh = (None, None)
-        if args.fresh_checkout:
-            worktree, fresh = fresh_prologue(head)
+        sha_matched = None if args.expect_sha is None else head == args.expect_sha
     except (GateConfigError, verify_exec.GateConfigError) as error:
         fail_config(str(error))
+
+    def snap(verification: dict[str, Any] | None = None,
+             verify_cmd: dict[str, Any] | None = None,
+             flags: list[str] | None = None,
+             fresh: dict[str, Any] | None = None) -> dict[str, Any]:
+        """현재까지의 구성 요소로 부분 결과 조립 — 영수증 단계 기록 재료."""
+        return assemble_result(head, args.expect_sha, args.base, base_sha,
+                               sha_matched, verification, verify_cmd,
+                               flags if flags is not None else [], fresh)
+
+    if writer is not None:
+        writer.write('init', snap())
     verification, verification_flags = inspect_verification(base_sha, args.pattern or [])
-    sha_matched = None if args.expect_sha is None else head == args.expect_sha
     sha_flags = (FLAG_SHA,) if sha_matched is False else ()
+    if writer is not None:
+        writer.write('inspected', snap(verification,
+                                       flags=[*sha_flags, *verification_flags]))
+    worktree, fresh = None, None
+    if args.fresh_checkout:
+        try:
+            worktree, fresh = fresh_prologue(head)
+        except (GateConfigError, verify_exec.GateConfigError) as error:
+            fail_config(str(error))
+        if writer is not None:
+            writer.write('fresh_checkout', snap(fresh=fresh))
     verify_cmd = None
     window_flags: tuple[str, ...] = ()
     if args.verify_cmd is not None:
@@ -372,16 +424,17 @@ def main(argv: list[str] | None = None) -> None:
         window_flags = verify_window_flags(verify_cmd['window_delta'])
     cmd_flags = verify_cmd_flags(verify_cmd) if verify_cmd is not None else ()
     flags = [*sha_flags, *verification_flags, *cmd_flags, *window_flags]
-    result = assemble_result(head, args.expect_sha, args.base, base_sha,
-                             sha_matched, verification, verify_cmd, flags, fresh)
+    result = snap(verification, verify_cmd, flags, fresh)
     if worktree is not None:
         fresh = fresh_epilogue(verify_exec.main_toplevel(), worktree, fresh, result)
         result = {**result, 'fresh': fresh}
-    if args.save is not None:
-        saved, save_error = save_result(args.save, result)
+    if writer is not None:
+        writer.write('verify_cmd', result)  # 검증 실행 완료(fresh는 제거까지 완료 뒤)
+        saved = writer.finish(result)
         if saved is None:
             print(json.dumps(result, ensure_ascii=False))
-            fail_config(f'--save 실패 — 검사 결과는 위 stdout JSON에 보존됐다: {save_error}')
+            fail_config('증분 영수증 기록 실패 후 최종 저장도 실패 — 검사 결과는 위 '
+                        f'stdout JSON에 보존됐다: {writer.failed_reason}')
         result = {**result, 'saved_to': saved}
     print(json.dumps(result, ensure_ascii=False))
     raise SystemExit(EXIT_PASS if not result['flags'] else EXIT_ATTENTION)

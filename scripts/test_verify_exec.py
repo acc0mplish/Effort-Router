@@ -433,6 +433,76 @@ sys.exit(subprocess.run([RG, *A]).returncode)
         self.assertEqual(result2.returncode, 2, result2.stdout)
         self.assertIn('충돌', result2.stderr)
 
+    # --- T41~T42 — 증분 영수증 ---
+
+    def poll_receipt(self, save_dir, stage, deadline_s=15.0):
+        """영수증 파일이 지정 stage에 도달할 때까지 폴링 — (경로, 데이터) 반환."""
+        deadline = time.monotonic() + deadline_s
+        last = None
+        while time.monotonic() < deadline:
+            files = list(Path(save_dir).glob('verify-pin-*.json'))
+            if files:
+                try:
+                    last = json.loads(files[0].read_text(encoding='utf-8'))
+                    if last.get('stage') == stage:
+                        return files[0], last
+                except (OSError, ValueError):
+                    pass  # 원자 replace 중 읽기 — 다음 폴링에서 재시도
+            time.sleep(0.05)
+        self.fail(f'{stage!r} 단계 영수증이 {deadline_s}s 내에 나타나지 않았다: {last}')
+
+    def test_t41_receipt_survives_sigkill_midrun(self):
+        # C12 — 게이트 SIGKILL 후 영수증 잔존·파싱 가능·stage·head_sha 보존.
+        # fresh 조합 변형: stage fresh_checkout에서 크래시 시 잔여 worktree 시사
+        # (M12 — fresh 잔존은 fresh 모드 재실행으로만 정리).
+        repo = self.make_repo()
+        save_dir = self.root / 'audit-t41'
+        proc = subprocess.Popen(
+            [sys.executable, str(VERIFY_PIN), '--verify-cmd', 'sleep 5',
+             '--save', str(save_dir)],
+            cwd=str(repo), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            env=clean_env())
+        try:
+            path, saved = self.poll_receipt(save_dir, 'inspected')
+        finally:
+            proc.kill()
+            proc.wait()
+        self.assertEqual(saved['stage'], 'inspected')
+        self.assertEqual(saved['head_sha'], head_sha(repo))
+        self.assertEqual(saved['saved_to'], str(path))
+        # fresh 변형 — fresh_checkout 단계 크래시
+        save_dir_f = self.root / 'audit-t41-fresh'
+        proc_f = subprocess.Popen(
+            [sys.executable, str(VERIFY_PIN), '--verify-cmd', 'sleep 5',
+             '--fresh-checkout', '--save', str(save_dir_f)],
+            cwd=str(repo), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            env=clean_env())
+        try:
+            _, saved_f = self.poll_receipt(save_dir_f, 'fresh_checkout')
+        finally:
+            proc_f.kill()
+            proc_f.wait()
+        self.assertEqual(saved_f['stage'], 'fresh_checkout')
+        # 크래시 시점에 worktree가 아직 제거 전 — 잔존(재실행 정리 대상) 시사
+        self.assertTrue(self.fresh_wt(repo).exists(),
+                        'fresh_checkout 단계 크래시인데 worktree가 없다')
+
+    def test_t42_receipt_complete_matches_stdout(self):
+        # C13 — 정상 종료: 파일 stage complete ∧ stdout JSON과 키 일치(stage 제외)
+        repo = self.make_repo()
+        save_dir = self.root / 'audit-t42'
+        result = run_pin(repo, '--verify-cmd', '/bin/true', '--save', str(save_dir))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output = json.loads(result.stdout)
+        files = list(save_dir.glob('verify-pin-*.json'))
+        self.assertEqual(len(files), 1)
+        saved = json.loads(files[0].read_text(encoding='utf-8'))
+        self.assertEqual(saved['stage'], 'complete')
+        without_stage = {key: value for key, value in saved.items() if key != 'stage'}
+        self.assertEqual(without_stage, output)
+        # stdout 최종 JSON은 stage 키 없다(기존 모양 보존 — §3-4)
+        self.assertNotIn('stage', output)
+
 
 if __name__ == '__main__':
     unittest.main()
