@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""r24 워크트리 수명주기 게이트 CLI — 생성·완료 제거 기계 강제(강제 제거 ∧ 데이터 0손실).
+"""r24 워크트리 수명주기 게이트 CLI — 생성·완료 제거 기계 강제(강제 제거 ∧ 정지 트리 0손실 — 동시 작성 감지 후 제거, r25).
 
 워크트리 격리 과업의 완료 후 잔존(디스크 고갈 반복 관측 실패)을 막는 게이트다.
 미포스 `git worktree remove`는 작업 트리가 dirty(tracked 수정·staged)하거나
 untracked 파일이 있으면 거부된다 — 수동 제거가 반복 실패해 방치되는 경로를,
 salvage 커밋(미커밋 분만) 후 remove --force·prune의 7단계 기계 절차로 강제한다.
 salvage는 커밋 추가이지 리셋이 아니다 — 게이트가 실행하는 파기성·변경성 명령은
-`worktree remove --force`·`branch -D`(명시 옵션)·`add -A`·`commit --no-verify`와
+`worktree remove --force`·`branch -D`(done --drop-branch 명시 옵션 — create add 실패 정리 제외)·`add -A`·`commit --no-verify`와
 salvage 전용 plumbing(branch 생성·update-ref·잔존 디렉터리 rmtree)뿐이며
 reset·checkout·unlock 자동 실행은 금지한다.
 본체 저장소 식별은 `git rev-parse --git-common-dir`(M-c) — worktree 내부에서
@@ -77,9 +77,35 @@ def cmd_create(repo: Path, args: argparse.Namespace) -> dict[str, Any]:
             'flags': [], 'saved_to': None}
 
 
+def require_done_phase(repo: Path, task: str) -> None:
+    """done 사전 phase 검사(M2·V7) — 활성 과업 done은 exit 2 사전 차단.
+
+    state.json 부재·파손(None)은 고아·레지스트리리스 정상 경로라 진행한다(A5).
+    레지스트리 소실+활성 phase 혼합도 동일 차단한다(V7) — phase 패치 주체는 메인
+    세션 단일(§5)이며 중단·폐기 과업도 phase=done 전환 후 done 호출이다.
+    """
+    phase = lib.read_state_phase(repo, task)
+    if phase is not None and phase != 'done':
+        raise GateConfigError(
+            f'활성 과업 상태다(phase={phase}) — phase=done 전환 후 재시도'
+            f'(중단·폐기 과업도 동일): {task}')
+
+
+def emit_partial(partial: dict[str, Any], error: Exception) -> None:
+    """부분 결과 JSON을 stdout에 1회 출력한 뒤 원래 예외를 재발행한다(M3·V5).
+
+    emit 미도달 경로라 stdout JSON은 정확 1회다(R6). --save는 수행하지 않는다
+    (r23 --save 실패 시 stdout 보존과 동일 형태 — 이 경로는 --save 미수행, 한계).
+    재발행된 GateConfigError는 main이 stderr `FAIL <gate>: <사유>`·exit 2로
+    변환한다(§3 종료코드 어휘 — exit 1 의미 확장 아님).
+    """
+    print(json.dumps(partial, ensure_ascii=False))
+    raise error
+
+
 def execute_done(repo: Path, task: str, drop_branch: bool,
                  no_salvage: bool) -> dict[str, Any]:
-    """done 7단계 — 대상 확정·멱등·locked·salvage·remove·prune·기록(전부 기계 절차)."""
+    """done — 대상 확정·멱등·locked·phase 검사·salvage(동시 작성 감지 루프)·remove·prune·기록(전부 기계 절차, r25 경화)."""
     reg_path = lib.registry_path(repo, task)
     registry = lib.read_registry(reg_path)
     branch = BRANCH_PREFIX + task
@@ -87,7 +113,7 @@ def execute_done(repo: Path, task: str, drop_branch: bool,
     if entry is None and registry is None:
         raise GateConfigError(
             f'done 대상 부재 — 레지스트리·worktree 모두 없다: {task}')
-    if entry is not None and registry is None \
+    if entry is not None \
             and entry['path'] != str(lib.wt_path(repo, task)):
         raise GateConfigError(
             f"브랜치 {branch}의 worktree가 명명규칙 경로 밖에 있다: {entry['path']}")
@@ -105,33 +131,70 @@ def execute_done(repo: Path, task: str, drop_branch: bool,
         # lock은 사용자 보존 신호 — 자동 unlock 금지(A11), -f -f 탈출구는 문서로만.
         raise GateConfigError(
             f"worktree가 locked다 — git worktree unlock {entry['path']} 후 재시도하라")
+    require_done_phase(repo, task)  # 4단계(M2) — salvage 전 사전 차단
     wt = Path(entry['path'])
-    if no_salvage:  # --no-salvage — 폐기를 각오한 명시 옵션(폐기 수 기록, H4·A12)
+    if no_salvage:  # --no-salvage — 폐기를 각오한 명시 옵션(폐기 수 기록, H4·A12·A4)
         salvage = lib.salvage_none(discarded=len(lib.status_porcelain(wt)),
                                    skipped=True)
     else:
-        salvage = lib.perform_salvage(task, wt)
+        try:
+            salvage = lib.salvage_until_quiet(
+                lambda: lib.perform_salvage(task, wt),
+                lambda: bool(lib.status_porcelain(wt)), str(wt))
+        except lib.SalvageAborted as error:
+            emit_partial({**head_fields, 'ok': False,
+                          'worktree': {'path': str(wt), 'branch': branch,
+                                       'removed': False, 'already_removed': False,
+                                       'registry_less': registry_less},
+                          'salvage': error.salvage, 'pruned': None,
+                          'aborted': 'concurrent_writer', 'error': str(error)},
+                         error)
     lib.remove_worktree_force(str(wt))      # 5단계 — salvage 후 잔여는 ignored뿐
     pruned = lib.prune_worktrees()          # 6단계
     tip = lib.branch_tip(branch)            # 브랜치는 제거 후에도 잔존(실측 P4)
     dropped = False
     if drop_branch:
-        lib.git_ok('branch', '-D', branch)  # 명시 옵션뿐 — tip SHA 기록 후 삭제
-        dropped = True
+        try:
+            lib.git_ok('branch', '-D', branch)  # 명시 옵션뿐 — tip SHA 기록 후 삭제
+            dropped = True
+        except GateConfigError as error:  # M3 — 제거 성공 뒤 실패는 부분 결과 보존
+            emit_partial({**head_fields, 'ok': False,
+                          'worktree': {'path': str(wt), 'branch': branch,
+                                       'removed': True, 'already_removed': False,
+                                       'registry_less': registry_less},
+                          'salvage': salvage, 'pruned': pruned,
+                          'branch': {'name': branch, 'preserved': True,
+                                     'dropped': False, 'tip_sha': tip},
+                          'registry': lib.registry_field(repo, task, False),
+                          'incomplete_step': 'branch_drop', 'error': str(error)},
+                         error)
     if registry is not None:
-        lib.write_registry(reg_path, {**registry, 'done_utc': lib.utc_now(),
-                                      'salvage_commit': salvage['commit'],
-                                      'dropped_branch_tip': tip if dropped
-                                      else registry.get('dropped_branch_tip')})
+        try:
+            lib.write_registry(reg_path, {**registry, 'done_utc': lib.utc_now(),
+                                          'salvage_commit': salvage['commit'],
+                                          'dropped_branch_tip': tip if dropped
+                                          else registry.get('dropped_branch_tip')})
+        except GateConfigError as error:  # M3 — 기록 실패도 부분 결과 보존
+            emit_partial({**head_fields, 'ok': False,
+                          'worktree': {'path': str(wt), 'branch': branch,
+                                       'removed': True, 'already_removed': False,
+                                       'registry_less': registry_less},
+                          'salvage': salvage, 'pruned': pruned,
+                          'branch': {'name': branch, 'preserved': not dropped,
+                                     'dropped': dropped, 'tip_sha': tip},
+                          'registry': lib.registry_field(repo, task, False),
+                          'incomplete_step': 'registry_write', 'error': str(error)},
+                         error)
     lib.rmdir_container_best_effort(repo)   # 7단계 말미 — 빈 컨테이너 정리
-    return {**head_fields,
+    flags = [FLAG_SALVAGE] if salvage['performed'] else []
+    return {**head_fields, 'ok': len(flags) == 0,
             'worktree': {'path': str(wt), 'branch': branch, 'removed': True,
                          'already_removed': False, 'registry_less': registry_less},
             'salvage': salvage, 'pruned': pruned,
             'branch': {'name': branch, 'preserved': not dropped, 'dropped': dropped,
                        'tip_sha': tip},
             'registry': lib.registry_field(repo, task, registry is not None),
-            'flags': [FLAG_SALVAGE] if salvage['performed'] else [],
+            'flags': flags,
             'saved_to': None}
 
 
@@ -148,30 +211,72 @@ def finish_absent(repo: Path, task: str, registry: dict[str, Any], branch: str,
     if registry.get('done_utc') is None and leftover \
             and Path(leftover) == lib.wt_path(repo, task) \
             and Path(leftover).is_dir() and lib.branch_tip(branch) is not None:
-        salvage = lib.perform_salvage_leftover(Path(leftover), branch,
-                                               commit=not no_salvage)
+        require_done_phase(repo, task)  # 수렴 분기도 활성 과업 사전 차단(M2)
+        if no_salvage:
+            salvage = lib.salvage_none(
+                discarded=len(lib.leftover_dirty_files(Path(leftover), branch)),
+                skipped=True)
+        else:
+            try:
+                salvage = lib.salvage_until_quiet(
+                    lambda: lib.perform_salvage_leftover(Path(leftover), branch),
+                    lambda: bool(lib.leftover_dirty_files(Path(leftover), branch)),
+                    str(leftover))
+            except lib.SalvageAborted as error:
+                emit_partial({**head_fields, 'ok': False,
+                              'worktree': {'path': leftover, 'branch': branch,
+                                           'removed': False, 'already_removed': False,
+                                           'registry_less': False},
+                              'salvage': error.salvage, 'pruned': None,
+                              'aborted': 'concurrent_writer', 'error': str(error)},
+                             error)
         lib.discard_leftover_dir(Path(leftover))
         pruned = lib.prune_worktrees()
         tip = lib.branch_tip(branch)  # 삭제 전 판독 — 정상 경로와 동일 순서(M1)
         dropped = False
         if drop_branch:
-            lib.git_ok('branch', '-D', branch)
-            dropped = True
+            try:
+                lib.git_ok('branch', '-D', branch)
+                dropped = True
+            except GateConfigError as error:  # M3 — 부분 결과 보존
+                emit_partial({**head_fields, 'ok': False,
+                              'worktree': {'path': leftover, 'branch': branch,
+                                           'removed': True, 'already_removed': False,
+                                           'registry_less': False},
+                              'salvage': salvage, 'pruned': pruned,
+                              'branch': {'name': branch, 'preserved': True,
+                                         'dropped': False, 'tip_sha': tip},
+                              'registry': lib.registry_field(repo, task, False),
+                              'incomplete_step': 'branch_drop', 'error': str(error)},
+                             error)
         # 순수 수렴(재판정 공백)이면 1차 실패 당시 salvage SHA를 기록한다(LOW-6)
         salvage_sha = salvage['commit'] or lib.last_salvage_commit(branch)
-        lib.write_registry(reg_path, {**registry, 'done_utc': lib.utc_now(),
-                                      'salvage_commit': salvage_sha,
-                                      'dropped_branch_tip': tip if dropped
-                                      else registry.get('dropped_branch_tip')})
+        try:
+            lib.write_registry(reg_path, {**registry, 'done_utc': lib.utc_now(),
+                                          'salvage_commit': salvage_sha,
+                                          'dropped_branch_tip': tip if dropped
+                                          else registry.get('dropped_branch_tip')})
+        except GateConfigError as error:  # M3 — 기록 실패도 부분 결과 보존
+            emit_partial({**head_fields, 'ok': False,
+                          'worktree': {'path': leftover, 'branch': branch,
+                                       'removed': True, 'already_removed': False,
+                                       'registry_less': False},
+                          'salvage': salvage, 'pruned': pruned,
+                          'branch': {'name': branch, 'preserved': not dropped,
+                                     'dropped': dropped, 'tip_sha': tip},
+                          'registry': lib.registry_field(repo, task, False),
+                          'incomplete_step': 'registry_write', 'error': str(error)},
+                         error)
         lib.rmdir_container_best_effort(repo)
-        return {**head_fields,
+        flags = [FLAG_SALVAGE] if salvage['performed'] else []
+        return {**head_fields, 'ok': len(flags) == 0,
                 'worktree': {'path': leftover, 'branch': branch, 'removed': True,
                              'already_removed': False, 'registry_less': False},
                 'salvage': salvage, 'pruned': pruned,
                 'branch': {'name': branch, 'preserved': not dropped,
                            'dropped': dropped, 'tip_sha': tip},
                 'registry': lib.registry_field(repo, task, True),
-                'flags': [FLAG_SALVAGE] if salvage['performed'] else [],
+                'flags': flags,
                 'saved_to': None}
     if registry.get('done_utc'):
         return {**head_fields,
@@ -228,9 +333,18 @@ def cmd_list(repo: Path, args: argparse.Namespace) -> dict[str, Any]:
 
 
 def remove_unmanaged(entry: dict[str, Any]) -> dict[str, Any]:
-    """--unmanaged 제거 — salvage(salvage/unmanaged-* 브랜치 보존) 후 remove·prune."""
+    """--unmanaged 제거 — salvage(동시 작성 감지 루프·salvage/unmanaged-* 보존) 후
+    remove·prune."""
     wt = Path(entry['path'])
-    salvage = perform_salvage_unmanaged(wt)
+    try:
+        salvage = lib.salvage_until_quiet(
+            lambda: perform_salvage_unmanaged(wt),
+            lambda: bool(lib.unsalvaged_paths(wt)), str(wt))
+    except lib.SalvageAborted as error:  # V5 — 감사 대칭 부분 결과
+        emit_partial({'task': None, 'path': str(wt),
+                      'classification': 'unmanaged', 'salvage': error.salvage,
+                      'aborted': 'concurrent_writer', 'error': str(error),
+                      'ok': False}, error)
     lib.remove_worktree_force(str(wt))
     pruned = lib.prune_worktrees()
     return {'task': None, 'path': str(wt), 'classification': 'unmanaged',
@@ -265,6 +379,11 @@ def cmd_sweep(repo: Path, args: argparse.Namespace) -> dict[str, Any]:
         elif not args.unmanaged:
             skipped.append({'task': None, 'path': entry['path'],
                             'reason': 'unmanaged'})
+        elif entry['locked']:
+            # L3 — lock은 사용자 보존 신호 — salvage 전 사전 분류(salvage 브랜치만
+            # 남는 반쪽 상태 방지). 탈출구는 unlock 후 재시도
+            skipped.append({'task': None, 'path': entry['path'],
+                            'reason': 'locked'})
         elif entry['detached']:
             # detached HEAD는 브랜치 재구성 불가 — 명시 옵션에서도 보존(LOW)
             skipped.append({'task': None, 'path': entry['path'],

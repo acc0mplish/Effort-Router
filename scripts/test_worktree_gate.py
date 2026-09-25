@@ -7,8 +7,9 @@
 claims 대응: T1~T19 = 번들 §4 C1~C19, T20~T31 = C25~C36(②반려 파생).
 T32 = 라운드1 G1(완료 과업 재등장 디렉터리 멱등 유지), T33 = G2·LOW-6(잔존 경로
 --no-salvage·1차 salvage SHA 기록), T34 = 라운드2 M1(잔존 경로 --drop-branch의
-tip 삭제 전 판독). C20 = 본 파일 전체 exit 0.
-C21~C24 = 문서·미러(docs/task-id 스크립트·메인).
+tip 삭제 전 판독). C20 = 본 파일 전체 exit 0. C21~C24 = 문서·미러(메인).
+r25 경화: T24·T33·T34 remove 실패 유도 chmod→PATH git 심 전환(H1·RH-4=make_git_shim)·
+setUp 가드(H2)·clean_env 전역 config 격리(RH-1). r25 신규 분기 테스트=hardening 파일.
 fixture 계약: r23 준용 + identity 환경변수 제거(H2 실증 전제)·state.json 헬퍼·
 WORKTREE_GATE_TEST_ROOT env로 fixture 루트 지정(M-g — /tmp ext4 vs /mnt/d DrvFs 재현).
 """
@@ -29,17 +30,25 @@ GATE = ROOT / 'scripts/worktree_gate.py'
 
 # 부모 환경 오염 차단 — fixture git과 게이트 subprocess 모두 적용.
 # GIT_AUTHOR/COMMITTER 제거는 H2(identity 폴백) 실증의 전제다.
-FIXTURE_ENV_KEYS = ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_CONFIG_GLOBAL',
+FIXTURE_ENV_KEYS = ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE',
                     'GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL',
                     'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL')
 GIT_IDENTITY = ('-c', 'user.email=worktree-gate-test@example.com',
                 '-c', 'user.name=worktree-gate-test')
+
+# RH-1 격리 — 호스트 ~/.gitconfig·/etc/gitconfig·~/.config/git/ignore 차단(gitignore는 XDG 경로로 읽힘).
+_ISOLATION_TMP = tempfile.TemporaryDirectory()
+XDG_ISOLATION_DIR = os.path.join(_ISOLATION_TMP.name, 'xdg')
+os.makedirs(XDG_ISOLATION_DIR, exist_ok=True)
 
 
 def clean_env():
     env = dict(os.environ)
     for key in FIXTURE_ENV_KEYS:
         env.pop(key, None)
+    env['GIT_CONFIG_GLOBAL'] = os.devnull
+    env['GIT_CONFIG_SYSTEM'] = os.devnull
+    env['XDG_CONFIG_HOME'] = XDG_ISOLATION_DIR
     return env
 
 
@@ -61,9 +70,41 @@ def write_file(base, name, content):
     return path
 
 
-def run_gate(cwd, *args):
+def run_gate(cwd, *args, shim_dir=None):
+    """게이트 subprocess 호출 — shim_dir 지정 시 PATH 앞에 심 디렉터리 치환(H1)."""
+    env = clean_env()
+    if shim_dir is not None:
+        env['PATH'] = f'{shim_dir}:{env.get("PATH", "")}'
     return subprocess.run([sys.executable, str(GATE), *args],
-                          cwd=str(cwd), capture_output=True, text=True, env=clean_env())
+                          cwd=str(cwd), capture_output=True, text=True, env=env)
+
+
+def make_git_shim(root, block):
+    """H1 remove 실패 유도용 PATH git 심(RH-4 스펙) — shim_dir 반환.
+
+    내부 git은 절대경로만(자기재귀 차단)·block ∈ {'worktree-remove','branch-delete'}
+    argv 토큰 인접 매칭($* substring 금지)·worktree-remove 차단은 실제 실패 모드 재현
+    (admin 제거 후 실패, stderr `fatal:` 1줄·exit 1)·생명주기는 루트 안 uuid 디렉터리.
+    """
+    real_git = shutil.which('git')
+    assert real_git, 'git 실행 파일을 찾을 수 없다'
+    shim_dir = Path(root) / f'shim-{uuid.uuid4().hex[:8]}'
+    shim_dir.mkdir(parents=True)
+    want = {'worktree-remove': ('worktree', 'remove'), 'branch-delete': ('branch', '-D')}[block]
+    body = f'''#!/usr/bin/env python3
+import os, shutil, subprocess, sys
+RG = {real_git!r}; W = {want!r}; A = sys.argv[1:]
+if any(A[i] == W[0] and A[i + 1] == W[1] for i in range(len(A) - 1)):
+    if W[1] == 'remove':  # 실제 remove 실패 모드 재현 — admin 메타데이터 제거 후 실패
+        c = subprocess.run([RG, 'rev-parse', '--path-format=absolute', '--git-common-dir'], capture_output=True, text=True).stdout.strip()
+        shutil.rmtree(os.path.join(c, 'worktrees', os.path.basename(os.path.normpath(A[-1]))), ignore_errors=True)
+    print(f'fatal: shim blocked {{W[0]}} {{W[1]}}', file=sys.stderr); sys.exit(1)
+os.execv(RG, [RG] + A)
+'''
+    shim = shim_dir / 'git'
+    shim.write_text(body, encoding='utf-8')
+    shim.chmod(0o755)
+    return shim_dir
 
 
 class WorktreeGateTests(unittest.TestCase):
@@ -81,6 +122,12 @@ class WorktreeGateTests(unittest.TestCase):
             tmp = tempfile.TemporaryDirectory()
             self.addCleanup(tmp.cleanup)
             self.root = Path(tmp.name)
+        # H2 — 루트가 git 저장소 내부면 create가 호스트 본체에서 실행된다 — skip이
+        # "34 passed"에 숨으므로 fail. inside = git(...) — clean_env로 격리됐다.
+        inside = git(self.root, 'rev-parse', '--is-inside-work-tree')
+        if inside.returncode == 0 and inside.stdout.strip() == 'true':
+            self.fail(f'fixture 루트가 git 저장소 내부다({self.root}) — 호스트 오염 방지: '
+                      'WORKTREE_GATE_TEST_ROOT를 저장소 밖으로 옮겨라')
 
     def make_repo(self):
         """초기 커밋 저장소 — .gitignore 포함 커밋(T9 ignored-only 분기 전제)."""
@@ -316,20 +363,18 @@ class WorktreeGateTests(unittest.TestCase):
         self.assertFalse((repo / 'docs/task-id/t-r/worktree.json').exists())
 
     def test_t24_done_remove_failure_converges(self):
-        # C29(M-f·R2) — remove 실패(쓰기금지 chmod) 유도 done → exit 2 ∧ 권한 회복 후
-        # 재 done → 수렴 exit 0 ∧ salvage 커밋 정확히 1개(재시도 2중 커밋 없음)
-        if os.geteuid() == 0:
-            self.skipTest('root는 chmod 쓰기금지가 무의미하다')
+        # C29(M-f·R2) — remove 실패(PATH git 심 유도 — FS 무관·root 무의존) done →
+        # exit 2 ∧ 디렉터리 잔존 ∧ plain PATH 재 done → 수렴 exit 0 ∧ salvage 커밋
+        # 정확히 1개(재시도 2중 커밋 없음)
         repo = self.make_repo()
         self.assertEqual(run_gate(repo, 'create', '--task', 't-r').returncode, 0)
         wt = self.container(repo) / 't-r'
         write_file(wt, 'notes.txt', 'memo\n')
-        wt.chmod(0o555)
-        blocked = run_gate(repo, 'done', '--task', 't-r')
+        shim_dir = make_git_shim(self.root, 'worktree-remove')
+        blocked = run_gate(repo, 'done', '--task', 't-r', shim_dir=shim_dir)
         self.assertEqual(blocked.returncode, 2)
         self.assertIn('FAIL', blocked.stderr)
         self.assertTrue(wt.exists())
-        wt.chmod(0o755)
         retried = run_gate(repo, 'done', '--task', 't-r')
         self.assertEqual(retried.returncode, 0, retried.stderr)
         self.assertFalse(wt.exists())
@@ -376,16 +421,16 @@ class WorktreeGateTests(unittest.TestCase):
         self.assertEqual(self.salvage_commit_count(repo, 'wt/t-g'), 0)
 
     def test_t33_done_no_salvage_on_leftover(self):
-        # 라운드1 G2·LOW-6 — remove 실패 잔존 경로에서 --no-salvage → 신규 파일도
-        # 커밋하지 않고 폐기 수 기록 ∧ 1차 실패 당시 salvage SHA는 레지스트리에 기록
+        # 라운드1 G2·LOW-6 — remove 실패(PATH git 심) 잔존 경로에서 --no-salvage →
+        # 신규 파일도 커밋하지 않고 폐기 수 기록 ∧ 1차 실패 당시 salvage SHA는
+        # 레지스트리에 기록
         repo = self.make_repo()
         self.assertEqual(run_gate(repo, 'create', '--task', 't-l').returncode, 0)
         wt = self.container(repo) / 't-l'
         write_file(wt, 'notes.txt', 'memo\n')
-        wt.chmod(0o555)
-        blocked = run_gate(repo, 'done', '--task', 't-l')
+        shim_dir = make_git_shim(self.root, 'worktree-remove')
+        blocked = run_gate(repo, 'done', '--task', 't-l', shim_dir=shim_dir)
         self.assertEqual(blocked.returncode, 2)  # 1차 — salvage 커밋 후 remove 실패
-        wt.chmod(0o755)
         write_file(wt, 'extra.txt', 'late\n')  # 실패 이후 신규 파일
         result = run_gate(repo, 'done', '--task', 't-l', '--no-salvage')
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -398,16 +443,16 @@ class WorktreeGateTests(unittest.TestCase):
         self.assertIsNotNone(self.registry(repo, 't-l')['salvage_commit'])
 
     def test_t34_done_drop_branch_on_leftover_keeps_tip(self):
-        # 라운드2 M1 — 잔존 경로 done --drop-branch → tip은 삭제 전 판독: JSON
-        # branch.tip_sha·레지스트리 dropped_branch_tip non-null ∧ 브랜치 소멸
+        # 라운드2 M1 — remove 실패(PATH git 심) 잔존 경로 done --drop-branch →
+        # tip은 삭제 전 판독: JSON branch.tip_sha·레지스트리 dropped_branch_tip
+        # non-null ∧ 브랜치 소멸
         repo = self.make_repo()
         self.assertEqual(run_gate(repo, 'create', '--task', 't-b').returncode, 0)
         wt = self.container(repo) / 't-b'
         write_file(wt, 'notes.txt', 'memo\n')
-        wt.chmod(0o555)
-        blocked = run_gate(repo, 'done', '--task', 't-b')
+        shim_dir = make_git_shim(self.root, 'worktree-remove')
+        blocked = run_gate(repo, 'done', '--task', 't-b', shim_dir=shim_dir)
         self.assertEqual(blocked.returncode, 2)  # 1차 — salvage 후 remove 실패
-        wt.chmod(0o755)
         result = run_gate(repo, 'done', '--task', 't-b', '--drop-branch')
         self.assertEqual(result.returncode, 0, result.stderr)
         output = json.loads(result.stdout)

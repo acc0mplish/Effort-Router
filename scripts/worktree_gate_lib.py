@@ -8,6 +8,7 @@ salvage 세 경로: 관리 worktree는 status --porcelain 판정 후 add -A + co
 (--no-verify·identity 폴백), 미관리는 plumbing(write-tree·commit-tree·branch 생성)
 으로 원본 브랜치 무변경, remove 실패 잔존 디렉터리는 임시 인덱스 판독
 (read-tree→add→diff-index --cached) 후 commit-tree·update-ref로 수렴한다(C29).
+salvage 후에는 재판정 루프(동시 작성 감지·3라운드)로 제거 직전 수렴을 확인한다(H3, r25).
 """
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -211,36 +213,62 @@ def du_bytes(path: str) -> int | None:
 # ------------------------------------------------------------------- salvage
 
 def salvage_none(discarded: int = 0, skipped: bool = False) -> dict[str, Any]:
-    """salvage 미수행 표준 형태(null 아님 — C9 구분)."""
+    """salvage 미수행 표준 형태(null 아님 — C9 구분). rounds 0(루프 미가동)."""
     return {'performed': False, 'commit': None, 'changes': 0, 'files': [],
-            'skipped_by_option': skipped, 'discarded_changes': discarded}
+            'skipped_by_option': skipped, 'discarded_changes': discarded,
+            'rounds': 0}
+
+
+def status_z_records(stdout: str) -> list[tuple[str, str]]:
+    """porcelain -z 레코드 파서(P3) — (XY, path) NUL 구분. R·C 레코드는 다음
+    필드가 원경로다(신경로 우선 — 원경로 폐기). 개행 파일명 안전(L4)."""
+    records: list[tuple[str, str]] = []
+    fields = stdout.split('\0')
+    index = 0
+    while index < len(fields):
+        record = fields[index]
+        index += 1
+        if len(record) < 3:
+            continue
+        records.append((record[:2], record[3:]))
+        if record[0] in ('R', 'C'):
+            index += 1  # 다음 필드 = 원경로 — 폐기
+    return records
+
+
+def status_z_paths(stdout: str) -> list[str]:
+    return [path for _, path in status_z_records(stdout)]
 
 
 def status_porcelain(wt: Path) -> list[str]:
-    """worktree 상태 — porcelain은 ignored를 제외하므로 공백 ⇔ salvage 불필요(P1).
-    -uall — untracked 디렉터리를 파일 단위로 전개(salvage.files 열람 면, H4)."""
-    completed = run_git('status', '--porcelain', '-uall', cwd=str(wt))
+    """worktree 상태(경로 목록) — porcelain은 ignored를 제외하므로 공백 ⇔ salvage
+    불필요(P1). -z NUL 구분(개행 파일명 — L4)·-uall — untracked 디렉터리를 파일
+    단위로 전개(salvage.files 열람 면, H4)."""
+    completed = run_git('status', '--porcelain', '-z', '-uall', cwd=str(wt))
     if completed.returncode != 0:
         raise GateConfigError('git status 실패 — ' + git_reason(completed))
-    return [line for line in completed.stdout.splitlines() if line.strip()]
+    return status_z_paths(completed.stdout)
 
 
-def porcelain_paths(lines: list[str]) -> list[str]:
-    paths = []
-    for line in lines:
-        body = line[3:] if len(line) > 3 else line
-        if ' -> ' in body:  # rename 표기 — 새 경로만 열람 대상으로 남긴다
-            body = body.split(' -> ', 1)[1]
-        paths.append(body)
-    return paths
+def unsalvaged_paths(wt: Path) -> list[str]:
+    """미적립 delta 판독(미관리 salvage 재판정) — Y≠' '(unstaged) ∨ '??'(untracked).
+
+    commit-tree salvage는 worktree HEAD를 움직이지 않으므로 add -A 뒤에도 staging
+    잔상(`A `)이 status에 남는다 — 이미 적립된 분까지 재판정하면 루프가 quiet에
+    수렴하지 않는다. staging 잔상은 무시하고 미적립분만 salvage·측정 대상으로 본다.
+    """
+    completed = run_git('status', '--porcelain', '-z', '-uall', cwd=str(wt))
+    if completed.returncode != 0:
+        raise GateConfigError('git status 실패 — ' + git_reason(completed))
+    return [path for xy, path in status_z_records(completed.stdout)
+            if xy == '??' or (len(xy) == 2 and xy[1] != ' ')]
 
 
 def perform_salvage(task: str, wt: Path) -> dict[str, Any]:
     """관리 worktree salvage — add -A + commit(--no-verify·identity 폴백, H2·H3)."""
-    lines = status_porcelain(wt)
-    if not lines:
+    files = status_porcelain(wt)
+    if not files:
         return salvage_none()
-    files = porcelain_paths(lines)
     git_ok('add', '-A', cwd=str(wt))
     completed = run_git(*GATE_IDENTITY, 'commit', '--no-verify',
                         '-m', SALVAGE_MESSAGE.format(task=task), cwd=str(wt))
@@ -251,18 +279,18 @@ def perform_salvage(task: str, wt: Path) -> dict[str, Any]:
                 return salvage_none()
         raise GateConfigError(f'salvage 커밋 실패 — {git_reason(completed)}')
     return {'performed': True, 'commit': git_ok('rev-parse', 'HEAD', cwd=str(wt)),
-            'changes': len(lines), 'files': files,
-            'skipped_by_option': False, 'discarded_changes': 0}
+            'changes': len(files), 'files': files,
+            'skipped_by_option': False, 'discarded_changes': 0, 'rounds': 1}
 
 
 def perform_salvage_unmanaged(wt: Path) -> dict[str, Any]:
     """미관리 worktree salvage(H1) — plumbing으로 원본 브랜치 포인터 무변경:
     write-tree → commit-tree(부모 = 현 HEAD) → salvage/unmanaged-<스탬프> 브랜치 생성.
-    checkout 없이 커밋을 적립한다(게이트 금지 명령 reset·checkout 회피)."""
-    lines = status_porcelain(wt)
-    if not lines:
+    checkout 없이 커밋을 적립한다(게이트 금지 명령 reset·checkout 회피). 공백 판정은
+    미적립 delta 기준(unsalvaged_paths) — staging 잔상 재적립 방지."""
+    files = unsalvaged_paths(wt)
+    if not files:
         return salvage_none()
-    files = porcelain_paths(lines)
     git_ok('add', '-A', cwd=str(wt))
     tree = git_ok('write-tree', cwd=str(wt))
     head = git_ok('rev-parse', 'HEAD', cwd=str(wt))
@@ -274,8 +302,54 @@ def perform_salvage_unmanaged(wt: Path) -> dict[str, Any]:
     branch_name = f'salvage/unmanaged-{utc_stamp()}'
     git_ok('branch', branch_name, sha)
     return {'performed': True, 'commit': sha, 'branch': branch_name,
-            'changes': len(lines), 'files': files,
-            'skipped_by_option': False, 'discarded_changes': 0}
+            'changes': len(files), 'files': files,
+            'skipped_by_option': False, 'discarded_changes': 0, 'rounds': 1}
+
+
+def _leftover_session(wt: Path) -> tuple:
+    """잔존 디렉터리 임시 인덱스 세션 — (run, must, cleanup). 본체 인덱스 비접촉."""
+    common = git_ok('rev-parse', '--path-format=absolute', '--git-common-dir')
+    fd, index_path = tempfile.mkstemp(prefix='worktree-gate-index-')
+    os.close(fd)
+    env = {**os.environ, 'GIT_INDEX_FILE': index_path}
+    prefix = ['git', *GIT_FIXED, f'--git-dir={common}', f'--work-tree={wt}']
+
+    def run(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run([*prefix, *args], env=env, capture_output=True,
+                              text=True, errors='replace')
+
+    def must(completed: subprocess.CompletedProcess, label: str) -> str:
+        if completed.returncode != 0:
+            raise GateConfigError(f'{label} 실패 — {git_reason(completed)}')
+        return completed.stdout
+
+    def cleanup() -> None:
+        try:
+            os.unlink(index_path)
+        except OSError:
+            pass
+
+    return run, must, cleanup
+
+
+def _leftover_stage(wt: Path, branch: str, run, must) -> list[str]:
+    """read-tree tip → add -A → diff-index --cached -z — 미커밋분 파일 목록."""
+    must(run('read-tree', f'refs/heads/{branch}'), '잔존 디렉터리 read-tree')
+    must(run('add', '-A'), '잔존 디렉터리 add')
+    raw = must(run('diff-index', '--cached', '--name-only', '-z',
+                   f'refs/heads/{branch}'), '잔존 디렉터리 diff-index')
+    return [path for path in raw.split('\0') if path]
+
+
+def leftover_dirty_files(wt: Path, branch: str) -> list[str]:
+    """잔존 디렉터리 미커밋분 판독 — H3 재판정 루프의 measure_fn(파일 목록).
+
+    oid 비교라 stat 오탐 없음 — 정지 트리에서는 항상 공백(오탐 0, r24 P1 실측)."""
+    run, must, cleanup = _leftover_session(wt)
+    try:
+        return _leftover_stage(wt, branch, run, must)
+    finally:
+        cleanup()
 
 
 def perform_salvage_leftover(wt: Path, branch: str, commit: bool = True) -> dict[str, Any]:
@@ -283,52 +357,76 @@ def perform_salvage_leftover(wt: Path, branch: str, commit: bool = True) -> dict
 
     remove 실패 시 admin 메타데이터는 제거되고 디렉터리만 남는다(실측) — status
     --porcelain이 불가하므로 임시 인덱스(read-tree tip → add -A → diff-index
-    --cached)로 tip 기준 미커밋분을 판독한다(본체 인덱스 비접촉, oid 비교라 stat
-    오탐 없음). 잔존 시 commit-tree 적립 후 update-ref로 브랜치를 선진한다 —
+    --cached -z)로 tip 기준 미커밋분을 판독한다(본체 인덱스 비접촉, oid 비교라
+    stat 오탐 없음). 잔존 시 commit-tree 적립 후 update-ref로 브랜치를 선진한다 —
     salvage는 커밋 추가다. commit=False(--no-salvage)면 폐기 수만 판독해 기록하고
     커밋하지 않는다(A12·C36 — 명시 옵션은 잔존 경로에서도 유효). 브랜치 앵커가
     없으면 이 경로에 진입하지 않는다(호출부).
     """
-    common = git_ok('rev-parse', '--path-format=absolute', '--git-common-dir')
-    fd, index_path = tempfile.mkstemp(prefix='worktree-gate-index-')
-    os.close(fd)
+    run, must, cleanup = _leftover_session(wt)
     try:
-        env = {**os.environ, 'GIT_INDEX_FILE': index_path}
-        prefix = ['git', *GIT_FIXED, f'--git-dir={common}', f'--work-tree={wt}']
-
-        def run(*args: str) -> subprocess.CompletedProcess:
-            return subprocess.run([*prefix, *args], env=env, capture_output=True,
-                                  text=True, errors='replace')
-
-        def must(completed: subprocess.CompletedProcess, label: str) -> str:
-            if completed.returncode != 0:
-                raise GateConfigError(f'{label} 실패 — {git_reason(completed)}')
-            return completed.stdout.strip()
-
-        must(run('read-tree', f'refs/heads/{branch}'), '잔존 디렉터리 read-tree')
-        must(run('add', '-A'), '잔존 디렉터리 add')
-        files = [line for line in must(run('diff-index', '--cached', '--name-only',
-                                           f'refs/heads/{branch}'),
-                                       '잔존 디렉터리 diff-index').splitlines()
-                 if line]
+        files = _leftover_stage(wt, branch, run, must)
         if not commit:
             # --no-salvage — skipped_by_option은 폐기 수와 무관하게 True(정상 경로 통일)
             return salvage_none(discarded=len(files), skipped=True)
         if not files:
             return salvage_none()
-        tree = must(run('write-tree'), '잔존 디렉터리 write-tree')
-        parent = must(run('rev-parse', f'refs/heads/{branch}'), '잔존 브랜치 판독')
+        tree = must(run('write-tree'), '잔존 디렉터리 write-tree').strip()
+        parent = must(run('rev-parse', f'refs/heads/{branch}'), '잔존 브랜치 판독').strip()
         message = SALVAGE_MESSAGE.format(task=branch[len(BRANCH_PREFIX):])
-        sha = must(run(*GATE_IDENTITY, 'commit-tree', tree, '-p', parent,
-                       '-m', message), '잔존 디렉터리 commit-tree')
+        completed = run(*GATE_IDENTITY, 'commit-tree', tree, '-p', parent,
+                        '-m', message)
+        if completed.returncode != 0:
+            raise GateConfigError(
+                '잔존 디렉터리 commit-tree 실패 — ' + git_reason(completed))
+        sha = completed.stdout.strip()
         must(run('update-ref', f'refs/heads/{branch}', sha), '잔존 브랜치 갱신')
         return {'performed': True, 'commit': sha, 'changes': len(files),
-                'files': files, 'skipped_by_option': False, 'discarded_changes': 0}
+                'files': files, 'skipped_by_option': False,
+                'discarded_changes': 0, 'rounds': 1}
     finally:
-        try:
-            os.unlink(index_path)
-        except OSError:
-            pass
+        cleanup()
+
+
+class SalvageAborted(GateConfigError):
+    """동시 작성 지속(H3) — salvage dict 부착 GateConfigError. 호출부가 부분 결과
+    JSON을 stdout에 출력한 뒤 재발행한다(V5 — exit 2 보존 중단)."""
+
+    def __init__(self, message: str, salvage: dict[str, Any], rounds: int):
+        super().__init__(message)
+        self.salvage = salvage
+        self.rounds = rounds
+
+
+SALVAGE_ABORT_MESSAGE = ('동시 작성 지속 감지 — 제거 중단(worktree·salvage 커밋 보존): '
+                         '{path} — 작성 프로세스(IDE 인덱서 등)를 정지한 뒤 재실행하라.'
+                         ' 폐기를 각오할 때만 --no-salvage(활성 작성분 폐기)')
+
+
+def salvage_until_quiet(salvage_fn, measure_fn, path: str, max_rounds: int = 3,
+                        settle_sleep_s: float = 0.5) -> dict[str, Any]:
+    """salvage→재판정 수렴 루프(H3·V5) — 제거 직전 동시 작성 감지.
+
+    라운드 = ① salvage 수행(공백이면 no-op) ② measure_fn() 재판정(공백 = 정지).
+    잔존하면 settle_sleep_s 대기 후 재 salvage(커밋 추가 — salvage 원칙 준수)한다.
+    max_rounds 후에도 잔존하면 salvage dict(commit·rounds·files — 커밋 0이면
+    salvage_none+rounds)를 부착한 SalvageAborted 발행. --no-salvage 경로는 루프를
+    적용하지 않는다(A4 — 폐기를 각오한 명시 옵션). 정지 트리 재판정은 항상 공백이라
+    1라운드에 반환된다(오탐 0 — R1·r24 P1 실측).
+    """
+    salvage = salvage_none()
+    rounds = 0
+    for round_index in range(1, max_rounds + 1):
+        rounds = round_index
+        result = salvage_fn()
+        if result['performed']:
+            salvage = result
+        if not measure_fn():
+            return {**salvage, 'rounds': rounds}
+        if round_index < max_rounds:
+            time.sleep(settle_sleep_s)
+    raise SalvageAborted(SALVAGE_ABORT_MESSAGE.format(path=path),
+                         {**salvage, 'rounds': rounds}, rounds)
 
 
 def remove_worktree_force(path: str) -> None:
