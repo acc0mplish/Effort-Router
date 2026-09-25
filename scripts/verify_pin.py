@@ -2,8 +2,10 @@
 """r23 검증 핀 게이트 CLI — SHA 핀·검증 입력 분리·증거 기록(결정론·jev/LLM 무관).
 
 검증의 자기참조 구멍(검증 대상 테스트를 약화·삭제·신규 무력화해도 재실행은 같은
-약화본을 통과시킨다)과 핀 부재(옛 검증으로 새 코드가 통과한다)를 메우는 읽기 전용
-게이트다. 감지는 git(커밋·staged·unstaged·삭제 diff + untracked 신규 + 은닉 지정
+약화본을 통과시킨다)과 핀 부재(옛 검증으로 새 코드가 통과한다)를 기계 노출로 전환하는
+읽기 전용 게이트다(완전 차단이 아니다 — 검증 입력 변경은 정당화 계층 사유 기재로
+해제되고 감시 자동화 없이 호출 시점 1회 판정이다). 감지는 git(커밋·staged·unstaged·삭제
+diff + untracked 신규 + ignore 제외 untracked 스캔[r25] + 은닉 지정
 ls-files -v 스캔)과 검증명령 subprocess뿐이며 외부 전송·과금이 없다. git 호출은
 `-c core.autocrlf=false -c core.quotePath=false` 고정 — CRLF 정규화 위플래그와
 비ASCII 경로 C-인용(fnmatch 무력화)을 경로 자체에서 차단한다.
@@ -34,9 +36,9 @@ DEFAULT_TIMEOUT = 600.0
 TAIL_CHARS = 500
 GIT_FIXED = ('-c', 'core.autocrlf=false', '-c', 'core.quotePath=false')
 
-# 그룹 1 — 검증 입력(기본 7종, --pattern은 여기에만 append된다)
+# 그룹 1 — 검증 입력(기본 8종, --pattern은 여기에만 append된다)
 VERIFICATION_PATTERNS = ('tests/*', 'test/*', 'test_*.py', '*_test.py',
-                         'conftest.py', 'pytest.ini', 'tox.ini')
+                         'conftest.py', 'pytest.ini', 'tox.ini', '.github/workflows/*')
 # 그룹 2 — 다목적 설정(별도 플래그 — 검증 입력 신호 순도 유지, H5)
 MULTIPURPOSE_PATTERNS = ('pyproject.toml', 'setup.cfg')
 
@@ -44,6 +46,7 @@ FLAG_SHA = 'sha_mismatch'
 FLAG_INPUT = 'verification_input_modified'
 FLAG_MULTIPURPOSE = 'multipurpose_config_modified'
 FLAG_INPUT_HIDDEN = 'verification_input_hidden'
+FLAG_INPUT_IGNORE_HIDDEN = 'verification_input_ignore_hidden'
 FLAG_CMD_FAILED = 'verify_cmd_failed'
 FLAG_CMD_TIMEOUT = 'verify_cmd_timeout'
 
@@ -141,6 +144,31 @@ def hidden_candidates() -> list[str]:
     return paths
 
 
+def ignored_untracked_candidates() -> list[str]:
+    """ignore 은닉 스캔(r25 H4) 모수 — untracked∧ignored 차집합.
+
+    `git ls-files --others`(제외 없음) ∖ `--exclude-standard` = .gitignore·
+    .git/info/exclude·전역 excludesFile 제외 untracked — diff·untracked 검출이
+    모두 놓치는 우회 모수다. 무제외 스캔은 venv·node_modules 규모(수만 파일)에서
+    수백 ms~수 초(V10·A14) — verify-cmd 경로와 합산해 상한 없이 수용한다.
+    """
+    all_others = git_lines('ls-files', '--others')
+    standard = git_lines('ls-files', '--others', '--exclude-standard')
+    return sorted(set(all_others) - set(standard))
+
+
+def match_full_paths(candidates: list[str], patterns: tuple[str, ...]) -> list[str]:
+    """전체경로 fnmatchcase 한정 매칭 — basename 매칭 금지(RC-1).
+
+    차집합 모수는 의존성 트리(.venv*/.../site-packages/tests/test_*.py)를 포함해
+    basename 매칭이면 관행 패턴과 결합해 의존성 테스트를 오탐한다(본 저장소 실측
+    18힛) — 패턴은 경로 선두부터 fnmatch로 판정한다. 임의 깊이 무력화 파일 보완은
+    --pattern 확장 계약(A15).
+    """
+    return sorted(path for path in candidates
+                  if any(fnmatchcase(path, pattern) for pattern in patterns))
+
+
 def hidden_patterns(extra_patterns: list[str]) -> tuple[str, ...]:
     """은닉 매칭 패턴 — 검증 입력(기본+추가)과 multipurpose 양 그룹 통합(④ 재리뷰 HIGH).
 
@@ -162,15 +190,20 @@ def inspect_verification(base_sha: str | None,
     """검증 입력 그룹(기본+추가)과 multipurpose 그룹을 분리 발행한다(H5).
 
     base 미지정은 not_evaluated — 미검사 ≠ 변경 없음(M-d). 패턴 비통과 후보는 폐기한다
-    (untracked 오탐 폭주 방지 — H1 LOW). 은닉 지정 검출(파이프라인 4단계)은 base와
-    무관하게 항상 수행하며 양 그룹 패턴을 통합 적용한다(④ 재리뷰 HIGH).
+    (untracked 오탐 폭주 방지 — H1 LOW). 은닉 지정 검출(파이프라인 4단계)과 ignore
+    은닉 검출(r25)은 base와 무관하게 항상 수행하며 양 그룹 패턴을 통합 적용한다
+    (④ 재리뷰 HIGH·r25 H4).
     """
     patterns = (*VERIFICATION_PATTERNS, *extra_patterns)
     hidden = match_candidates(hidden_candidates(), hidden_patterns(extra_patterns))
+    ignore_hidden = match_full_paths(ignored_untracked_candidates(),
+                                     hidden_patterns(extra_patterns))
     if base_sha is None:
         return {'status': 'not_evaluated', 'patterns': list(patterns),
                 'modified_files': [], 'multipurpose_files': [],
-                'hidden_files': hidden}, ((FLAG_INPUT_HIDDEN,) if hidden else ())
+                'hidden_files': hidden, 'ignore_hidden_files': ignore_hidden}, \
+            ((FLAG_INPUT_HIDDEN,) if hidden else ()) \
+            + ((FLAG_INPUT_IGNORE_HIDDEN,) if ignore_hidden else ())
     candidates = collect_candidates(base_sha)
     modified = match_candidates(candidates, patterns)
     multipurpose = match_candidates(candidates, MULTIPURPOSE_PATTERNS)
@@ -178,10 +211,12 @@ def inspect_verification(base_sha: str | None,
                     'patterns': list(patterns),
                     'modified_files': modified,
                     'multipurpose_files': multipurpose,
-                    'hidden_files': hidden}
+                    'hidden_files': hidden,
+                    'ignore_hidden_files': ignore_hidden}
     flags = ((FLAG_INPUT,) if modified else ()) \
         + ((FLAG_MULTIPURPOSE,) if multipurpose else ()) \
-        + ((FLAG_INPUT_HIDDEN,) if hidden else ())
+        + ((FLAG_INPUT_HIDDEN,) if hidden else ()) \
+        + ((FLAG_INPUT_IGNORE_HIDDEN,) if ignore_hidden else ())
     return verification, flags
 
 

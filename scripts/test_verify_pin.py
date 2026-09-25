@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""r23 검증 핀 게이트 단위테스트 — 임시 git 저장소 fixture로 분기 전수(T1~T18).
+"""r23 검증 핀 게이트 단위테스트 — 임시 git 저장소 fixture로 분기 전수(T1~T23).
 
 테스트는 subprocess로 CLI를 실행한다(test_jev_judge 관습) — import 방식이면
 수집 단계 ImportError로 RED가 성립하지 않는다. RED 단계(verify_pin.py 부재·신규
 분기 미구현)에서는 해당 테스트가 실패한다.
 claims 대응: T1~T15 = 번들 §4 C1~C15, T16 = R3 fnmatch 경계, T17 = C21(비ASCII
 quotePath 우회), T18 = C22(은닉 우회), T19 = C23(multipurpose 은닉),
-C16 = 본 파일 전체 exit 0.
+T20 = r25 C2(info/exclude ignore 은닉), T21 = r25 L5(.github/workflows 기본
+패턴), T22 = r25 C3(RC-1 venv 오탐 방어), T23 = r25 C4(RH-1 전역 config 격리·
+검출 양방향), C16 = 본 파일 전체 exit 0.
 """
 from __future__ import annotations
 
@@ -26,11 +28,21 @@ FIXTURE_ENV_KEYS = ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_CONFIG_GL
 GIT_IDENTITY = ('-c', 'user.email=verify-pin-test@example.com',
                 '-c', 'user.name=verify-pin-test')
 
+# 파일 기반 전역 config 격리(RH-1) — 호스트 ~/.gitconfig·/etc/gitconfig·
+# ~/.config/git/ignore가 fixture 결과를 좌우하지 않는다. gitignore 파일은
+# 환경변수가 아니라 XDG_CONFIG_HOME 경로로 읽히므로 빈 스크래치로 전환한다.
+_ISOLATION_TMP = tempfile.TemporaryDirectory()
+XDG_ISOLATION_DIR = os.path.join(_ISOLATION_TMP.name, 'xdg')
+os.makedirs(XDG_ISOLATION_DIR, exist_ok=True)
+
 
 def clean_env():
     env = dict(os.environ)
     for key in FIXTURE_ENV_KEYS:
         env.pop(key, None)
+    env['GIT_CONFIG_GLOBAL'] = os.devnull
+    env['GIT_CONFIG_SYSTEM'] = os.devnull
+    env['XDG_CONFIG_HOME'] = XDG_ISOLATION_DIR
     return env
 
 
@@ -354,6 +366,108 @@ class VerifyPinCliTests(unittest.TestCase):
         # 완전 clean 우회 실증 — diff·multipurpose 스캔은 모두 마비되고 은닉만이 신호다
         self.assertEqual(output['verification_input']['multipurpose_files'], [])
         self.assertEqual(output['verification_input']['status'], 'clean')
+
+    def _register_info_exclude(self, repo, pattern):
+        exclude_path = Path(repo) / '.git' / 'info' / 'exclude'
+        exclude_path.parent.mkdir(parents=True, exist_ok=True)
+        existing = exclude_path.read_text(encoding='utf-8') if exclude_path.exists() else ''
+        exclude_path.write_text(existing + pattern + '\n', encoding='utf-8')
+
+    def test_t20_info_exclude_ignore_hidden_flagged(self):
+        # r25 C2(H4) — .git/info/exclude 등록 + untracked conftest.py 공격:
+        # 구 게이트는 exit 0·flags [] 무검출 — ignore 은닉 스캔이 드러낸다.
+        repo = self.make_repo()
+        init = head_sha(repo)
+        write_file(repo, 'tests/test_new.py', 'def test_new():\n    assert True\n')
+        self._register_info_exclude(repo, 'conftest.py')
+        write_file(repo, 'conftest.py', 'import pytest\n')
+        result = run_pin(repo, '--base', init)
+        self.assertEqual(result.returncode, 1)
+        output = json.loads(result.stdout)
+        self.assertIn('verification_input_ignore_hidden', output['flags'])
+        self.assertEqual(output['verification_input']['ignore_hidden_files'],
+                         ['conftest.py'])
+        self.assertIn('verification_input_modified', output['flags'])
+        self.assertEqual(output['verification_input']['modified_files'],
+                         ['tests/test_new.py'])
+        # base 미지정 변형 — ignore 은닉 스캔은 상시(base 무관)다
+        baseless = run_pin(repo)
+        self.assertEqual(baseless.returncode, 1)
+        baseless_output = json.loads(baseless.stdout)
+        self.assertEqual(baseless_output['verification_input']['status'],
+                         'not_evaluated')
+        self.assertIn('verification_input_ignore_hidden', baseless_output['flags'])
+        self.assertEqual(baseless_output['verification_input']['ignore_hidden_files'],
+                         ['conftest.py'])
+
+    def test_t21_github_workflows_default_pattern(self):
+        # r25 L5 — .github/workflows/ci.yml untracked → 기본 패턴(8종) 검출
+        repo = self.make_repo()
+        init = head_sha(repo)
+        write_file(repo, '.github/workflows/ci.yml', 'on: push\n')
+        result = run_pin(repo, '--base', init)
+        self.assertEqual(result.returncode, 1)
+        output = json.loads(result.stdout)
+        self.assertIn('verification_input_modified', output['flags'])
+        self.assertIn('.github/workflows/ci.yml',
+                      output['verification_input']['modified_files'])
+        self.assertIn('.github/workflows/*', output['verification_input']['patterns'])
+
+    def test_t22_ignored_non_verification_stays_clean(self):
+        # r25 C3(RC-1) — ignore된 비검증입력 untracked + venv 의존성 트리 내부
+        # tests/test_dep.py(untracked∧ignored): 전부 무신호 — 오탐 0 실증
+        # (basename 매칭 부재 — test_dep.py basename은 test_*.py와 일치하지만
+        #  전체경로 .venv-x/...는 어떤 기본 패턴과도 일치하지 않는다)
+        repo = self.make_repo()
+        init = head_sha(repo)
+        write_file(repo, '.gitignore', '*.log\n.venv-x/\nnotes/\n')
+        write_file(repo, 'notes/secret.txt', 'memo\n')
+        write_file(repo,
+                   '.venv-x/lib/python3.11/site-packages/tests/test_dep.py',
+                   'def test_dep():\n    assert True\n')
+        result = run_pin(repo, '--base', init)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output = json.loads(result.stdout)
+        self.assertEqual(output['flags'], [])
+        self.assertEqual(output['verification_input']['status'], 'clean')
+        self.assertEqual(output['verification_input']['modified_files'], [])
+        self.assertEqual(output['verification_input']['ignore_hidden_files'], [])
+
+    def test_t23_global_config_isolation_and_detection(self):
+        # r25 C4(RH-1) — (a) 격리 env: 파일 기반 전역 config가 마스크되어
+        # untracked conftest.py는 정상 modified 경로로 검출(호스트 전역 ignore
+        # 무영향) (b) GIT_CONFIG_GLOBAL=<fixture config> 경유 excludesFile 등록:
+        # 같은 파일이 untracked∧ignored 차집합으로만 검출 — ignore 플래그
+        repo = self.make_repo()
+        init = head_sha(repo)
+        write_file(repo, 'conftest.py', 'import pytest\n')
+        excludes = self.root / 'global-excludes'
+        excludes.write_text('conftest.py\n', encoding='utf-8')
+        global_cfg = self.root / 'global.gitconfig'
+        global_cfg.write_text(
+            '[core]\n\texcludesfile = ' + str(excludes) + '\n', encoding='utf-8')
+        # (a) 격리 env(clean_env) — fixture 전역 config 미적용
+        isolated = subprocess.run(
+            [sys.executable, str(VERIFY_PIN), '--base', init],
+            cwd=repo, capture_output=True, text=True, env=clean_env())
+        self.assertEqual(isolated.returncode, 1)
+        isolated_output = json.loads(isolated.stdout)
+        self.assertEqual(isolated_output['verification_input']['modified_files'],
+                         ['conftest.py'])
+        self.assertNotIn('verification_input_ignore_hidden',
+                         isolated_output['flags'])
+        # (b) GIT_CONFIG_GLOBAL 경유 전역 excludesFile — ignore 은닉 검출
+        override = clean_env()
+        override['GIT_CONFIG_GLOBAL'] = str(global_cfg)
+        via_global = subprocess.run(
+            [sys.executable, str(VERIFY_PIN), '--base', init],
+            cwd=repo, capture_output=True, text=True, env=override)
+        self.assertEqual(via_global.returncode, 1)
+        global_output = json.loads(via_global.stdout)
+        self.assertIn('verification_input_ignore_hidden', global_output['flags'])
+        self.assertEqual(global_output['verification_input']['ignore_hidden_files'],
+                         ['conftest.py'])
+        self.assertEqual(global_output['verification_input']['modified_files'], [])
 
 
 if __name__ == '__main__':
