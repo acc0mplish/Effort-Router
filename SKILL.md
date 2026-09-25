@@ -167,6 +167,32 @@ Stagehand 게이트는 브라우저 실행 계층(Stagehand)과 판단 계층(�
 
 패턴·종료코드 표 전문은 README '검증 핀 게이트 (r23)' 절에 위임한다.
 
+## 워크트리 수명주기 게이트(worktree_gate) — 선택 자원 격리 계층
+
+워크트리 격리(③구현 분리·팬아웃 병렬 실행)의 수명주기 — 생성·완료 제거 — 를 기계 강제하는 게이트다. 반복 관측 실패(과업 완료 후 worktree 잔존 → 디스크 고갈)의 영구 예방 장치이며 r24 구현이다. 미포스 `git worktree remove`는 작업 트리가 dirty(tracked 수정·staged)하거나 untracked 파일이 있으면 거부된다(실측) — 수동 제거가 반복 실패해 방치되는 것이 이 실패의 원인이므로, 제거는 게이트가 강제한다.
+
+**핵심 원칙 — 강제 제거가 기본, 단 데이터 파기가 아니다.** git worktree의 커밋은 본체 오브젝트 저장소에 공유되므로 디렉터리 제거 자체는 커밋 분실이 아니다. 실손 위험은 미커밋 변경분(tracked 수정·staged·untracked 비ignored)뿐이다 — done은 이들을 자동 salvage 커밋한 뒤 제거·prune한다. **salvage는 커밋 추가이지 리셋이 아니다**(§5 롤백 수단 제한 — `reset --hard`·강제 체크아웃 금지 — 과 정합). ignored 파일(node_modules·빌드 산출)은 폐기 대상이며 salvage하지 않는다.
+
+**사용 시점** — L/XL 과업에서 ③구현 격리·팬아웃 병렬 실행에 worktree 격리를 채택할 때. 선택 계층이다 — 격리 미채택 과업은 이 게이트와 무관하다.
+- `create --task <task-id> [--base REF]` — 저장소 외부 `<repo>-worktrees/<task-id>`에 worktree·브랜치 `wt/<task-id>`를 생성하고 레지스트리(docs/task-id/<task-id>/worktree.json)를 기록한다.
+- `done --task <task-id> [--drop-branch] [--no-salvage]` — salvage 커밋(필요 시) → `worktree remove --force` → prune → 레지스트리 갱신. 브랜치는 기본 보존(제거 후에도 커밋 도달 가능 — 실측)이며 `--drop-branch`는 tip SHA 기록 후 삭제하는 명시 옵션이고 `--no-salvage`는 미커밋분 폐기를 각오한 명시 옵션이다(폐기 파일 수는 기록).
+- `list [--du]` — git worktree 목록·레지스트리·state.json phase 대조. 제거 대상(done·고아) 존재 시 exit 1(attention — 디스크 적체 신호).
+- `sweep [--dry-run] [--unmanaged]` — phase=done 과업·고아(과업 폴더 소실 — 명명규칙 재구성)의 worktree에 done 절차를 일괄 적용한다. `--unmanaged`는 게이트가 생성하지 않은 worktree(수동 생성·하니스 .claude/worktrees·기존 잔존분)도 salvage 후 제거하는 명시 옵션이다(기본 off — 자동 제거 금지. salvage는 `salvage/unmanaged-*` 브랜치에 남겨 원본 브랜치를 오염하지 않는다).
+
+**호출 주체·시점**: create·done의 호출 주체는 **메인 세션 단일**이다(§5 state writer 원칙 준용) — 서브에이전트는 게이트를 호출하지 않으며, 메인이 create 후 worktree 경로를 ③구현 스폰 프롬프트에 인계한다. 팬아웃 병렬 실행은 렌즈별 하위 task-id(`<task-id>-l<n>`)로 개별 create한다(§2 팬아웃·§5 경로 고정과 연결). **sweep은 done 누락의 안전망**이다 — 메인이 새 task-id를 부여할 때(과업 개시) `sweep --dry-run`을 1회, 실제 sweep은 사용자 명시 시에만 실행한다(무인 salvage 금지 — dry-run은 무변경이라 예외).
+
+**판정 권한**: done 판정은 메인 세션이 한다(§4 평행) — 게이트는 salvage→제거의 기계 절차만 수행하며 state.json을 쓰지 않는다(레지스트리 worktree.json은 게이트 영역). 호출 계약: 메인이 state.json에 phase=done을 패치한 뒤 `done`을 호출한다.
+
+**exit 1(attention)은 확인 의무다**(jev의 exit 1 폴백=진행과 정반대 — verify_pin과 동일 어휘) — `salvage_committed`(구현 에이전트가 미커밋 상태로 남긴 변경분이 있었다 — 완료 선언·push 전 salvage 커밋·파일 목록 열람)·`removable_worktrees_present`(list — 제거 대상 잔존)·`worktree_missing`(활성 레지스트리인데 디렉터리가 게이트 밖에서 소실 — 잔여 변경분 손실 가능). exit 2 = 이유가 붙은 bypass(jev·verify_pin 폴백 계약 준용). exit 3 미사용(판단 계층 부재).
+
+**데이터 유출 면**: salvage 커밋은 미커밋 파일 전부를 브랜치에 편입한다 — 시크릿(`.env.local` 등)·대형 바이너리 포함 가능하다. 게이트 자체는 외부 전송이 없으나 **salvage 브랜치를 push하면 편입 파일이 원격에 공개된다** — `salvage_committed`의 확인 절차는 push 전 salvage 파일 목록(JSON `salvage.files`) 열람이며, 시크릿 확인 시 브랜치 drop 후 시크릿 교체로 대응한다(jev·Stagehand 절 유출 면과 계약 대칭).
+
+**호출·감사 계약**: `python3 <skill-dir>/scripts/worktree_gate.py <서브커맨드> ...` — `<skill-dir>/scripts/` 규약·**미러 동봉 대상**(저장소 국소 의존 없음 — verify_pin과 동일, Stagehand 게이트의 미동봉과 다르다). `--save DIR`로 결과 JSON을 과업 폴더에 남긴다(jev --save 계약 평행).
+
+**저장소 외부 효과**: 컨테이너 디렉터리 생성(`<repo>-worktrees/`)이 본 게이트의 유일한 저장소 밖 쓰기이며 경로는 명명규칙으로 예측 가능하다. 저장소 내부 배치(.worktrees/)는 프로젝트별 .gitignore 오염·저장소 스캔 도구의 중복 트리 훑기를 수반해 범용 배포 계약과 충돌한다 — 기각 근거는 README 절에 기재한다.
+
+서브커맨드 표·종료코드·JSON 스키마·명명·레지스트리 전문은 README '워크트리 수명주기 게이트 (r24)' 절에 위임한다.
+
 ## 2. 라우팅 테이블
 
 아래 역할만 호출한다. Codex는 `~/.codex/agents/*.toml`, Claude Code는 `~/.claude/agents/*.md`의 동명 역할을 사용한다. 테이블 밖 파일이 있어도 무시한다 — **존재 ≠ 허가**. 감시·운영 역할 `ops-supervisor`는 티어 단계 밖 구성원으로, 워치독 대상 스폰이 존재할 때만 메인 세션이 직접 호출한다(온디맨드 — 상시 배치 아니다. 근거: 결함 포착 실적 0건, r14 자아비판 K5) — 세션 토폴로지는 `platforms/claude.md`.
@@ -319,6 +345,7 @@ Codex 전역 지침은 native spawn/fan-out을 금지한다. 아래 팬아웃 �
 ### 단계 상태 = state.json (메인 세션 단일 writer)
 
 서브에이전트는 state.json을 쓰지 않는다 — 완료 보고만 하고 **메인 세션이 1회 패치**한다. 팬아웃 병렬 보고는 메인이 병합해 한 번에 반영한다. 위치 = **저장소 `docs/task-id/<task-id>/state.json`** — task-id 부여 시 메인이 `docs/task-id/<task-id>/` 폴더를 만들고 `docs/task-id/`를 저장소 `.gitignore`에 등록한다(과업 상태는 커밋하지 않는다). worktree 격리 시에도 본체 저장소의 이 경로로 고정한다(일회성 worktree 파기 대비). **task-id**: 과업 개시 시 메인이 부여하는 프로젝트 내 고유 slug(예: `r4-fix`). 재개 시 탐색 — `docs/task-id/` 하위 후보의 state.json을 최근 수정순 확인(구 규격 과업 루트가 잔존하면 그도 확인), 불명확하면 사용자에게 묻는다.
+워크트리 격리 채택 과업의 worktree 생성·완료 제거는 워크트리 수명주기 게이트(worktree_gate)로 실행한다(위 '워크트리 수명주기 게이트' 절).
 
 ```json
 {"task": "<task-id>", "tier": "L",
@@ -412,3 +439,4 @@ ChatGPT Work에서는 적용 에이전트 라인에 `없음(ChatGPT Work 단일 
 | 설계·디자인·계획 문서를 적대검토 없이 확정 | 산출 문서 = 다운스트림의 ①계획 산출물 — §1 L 고정 승격, ②팬아웃(불가 시 셀프 3렌즈 순차) 필수 |
 | 반려 후 재호출 프롬프트에 반려 근거 없이 재호출 | 재호출은 무상태다 — 반려 근거(렌즈 판정·결함 원문·심각도)를 데이터로 주입한다(§5 주입 방어 준용) |
 | 테스트 재실행만으로 검증 면역이라 착각 | 약화·삭제된 테스트는 재실행해도 같은 약화본을 통과한다 — 검증 핀(SHA 핀·검증 입력 분리)으로 드러낸다 |
+| 워크트리 격리 과업 완료 후 제거 없이 방치 — 디스크 고갈 반복 | 워크트리 수명주기 게이트 done으로 완료 시 제거를 강제한다 — 미커밋분은 salvage 커밋 보존 후 remove --force·prune |

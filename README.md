@@ -20,7 +20,7 @@ Decision(티어 판정) → Requirement → Acceptance → Task → Evidence →
 | `AGENTS.md` | 저장소 작업의 모델·에포트 정책과 역할 템플릿 오류 예방 규칙 |
 | `agents/` | Claude Code 역할 정의 10종 + ChatGPT 데스크톱 UI 메타데이터 `openai.yaml` |
 | `platforms/` | Codex·ChatGPT 실행 어댑터와 기타 하니스 파생 문서 |
-| `scripts/` | 전역 Codex 역할 라우팅·설치 검증 스크립트 + jev 판단 계층 CLI(jev_judge.py·jev_modes.py — CLI 12종: tier·prune·escalation·memory-gate·stall·done·dup·loop·verify-run·watch·route·guard) + Stagehand 게이트 CLI(stagehand_gate.py 3종) + 검증 핀 게이트 CLI(verify_pin.py) |
+| `scripts/` | 전역 Codex 역할 라우팅·설치 검증 스크립트 + jev 판단 계층 CLI(jev_judge.py·jev_modes.py — CLI 12종: tier·prune·escalation·memory-gate·stall·done·dup·loop·verify-run·watch·route·guard) + Stagehand 게이트 CLI(stagehand_gate.py 3종) + 검증 핀 게이트 CLI(verify_pin.py) + 워크트리 수명주기 게이트 CLI(worktree_gate.py 4종: create·done·list·sweep) |
 | `TESTS.md` | 검증 프로토콜·측정 결과·라운드별 개정 이력·재현 절차 |
 
 ## 설치 (Codex + ChatGPT 데스크톱 앱)
@@ -206,6 +206,95 @@ python3 scripts/verify_pin.py --base <앵커> \
 ```
 
 `verify_cmd`는 미지정 시 `null`. `saved_to`는 --save 미지정·실패 모두 `null`. 타임아웃 시 `verify_cmd_timeout`만 발행하고 `verify_cmd_failed`를 병기하지 않는다(배타성). `ok` = `len(flags)==0`. 게이트 분기 전수는 임시 git 저장소 fixture로 `python3 scripts/test_verify_pin.py`에서 결정적으로 검증한다(T1~T16). 사용 시점·플래그 2계층·호출·감사·폴백 계약은 SKILL.md의 '검증 핀 게이트(verify_pin)' 절을 따른다.
+
+### 워크트리 수명주기 게이트 (r24)
+
+`scripts/worktree_gate.py`는 워크트리 격리 과업의 수명주기 — 생성·완료 제거 — 를 기계 강제하는 게이트다(원 요구: "작업완료시 제거를 강제해야될꺼 같은데 맨날 용량없음"). 미포스 `git worktree remove`는 작업 트리가 dirty(tracked 수정·staged)하거나 untracked 파일이 있으면 `--force` 요구로 거부된다 — 수동 제거가 반복 실패해 방치되는 경로다. 게이트는 미커밋 변경분(tracked 수정·staged·untracked 비ignored)만 자동 salvage 커밋으로 보존한 뒤 `remove --force`·prune한다 — 강제 제거가 기본이되 데이터 파기는 아니며, ignored 파일(venv·node_modules·빌드 산출)은 폐기 대상이다. 커밋은 본체 오브젝트 저장소에 공유되므로 디렉터리 제거 자체는 커밋 분실이 아니다.
+
+```bash
+# 생성 — 저장소 외부 <repo>-worktrees/<task-id>에 worktree + 브랜치 wt/<task-id>
+python3 scripts/worktree_gate.py create --task <task-id> [--base <커밋>]
+
+# 완료 — salvage(필요 시) → remove --force → prune → 레지스트리 갱신
+python3 scripts/worktree_gate.py done --task <task-id> [--drop-branch] [--no-salvage]
+
+# 적체 대조 — 제거 대상(done·고아) 존재 시 exit 1
+python3 scripts/worktree_gate.py list [--du]
+
+# 일괄 정리 — 보고 먼저, 실제 sweep은 사용자 명시 시에만
+python3 scripts/worktree_gate.py sweep --dry-run
+python3 scripts/worktree_gate.py sweep [--drop-branch]
+python3 scripts/worktree_gate.py sweep --unmanaged   # 미관리(수동·기존 잔존분)도 salvage 후 제거
+```
+
+**exit 1은 attention — 셸 체인에서 조용히 무시하지 않는다**(jev의 exit 1 폴백=진행과 정반대). rc 확인 패턴:
+
+```bash
+python3 scripts/worktree_gate.py done --task <task-id>
+rc=$?
+if [ "$rc" -eq 1 ]; then
+  echo "salvage 커밋 발생 — push 전 salvage.files 열람 필요"  # 확인 후 진행
+elif [ "$rc" -ne 0 ]; then
+  exit "$rc"  # exit 2 — 사유는 stderr
+fi
+```
+
+| 서브커맨드 | 인자 | 동작 |
+|---|---|---|
+| `create` | `--task`(필수) `--base REF`(기본 HEAD) | task-id 검증 → 중복 레지스트리·경로·잔존 브랜치·base 선행 검사 → `worktree add -b wt/<task-id>` → 레지스트리 기록. add 실패 시 생성된 브랜치 best-effort 정리(부분 실패 원자성) |
+| `done` | `--task`(필수) `--drop-branch` `--no-salvage` | 7단계: 대상 확정(레지스트리리스 경로 포함) → 멱등 → locked → salvage → remove --force → prune → 기록 |
+| `list` | `--du` | worktree·레지스트리·state.json phase 대조 entries + summary. 제거 대상 1건 이상 시 exit 1 |
+| `sweep` | `--dry-run` `--unmanaged` `--drop-branch` | eligible(done·고아)에 done 절차 일괄 적용. `--dry-run`은 보고만(무변경), `--unmanaged`는 미관리도 salvage 후 제거 |
+
+| 종료코드 | 의미 |
+|---|---|
+| 0 | 완료 — 절차 성공. list는 제거 대상 0건. `done --no-salvage`·멱등 already_removed·`sweep --dry-run`도 0(명시 폐기·보고는 확인 의무가 아니다 — JSON 기록으로 남는다) |
+| 1 | attention — 확인 의무 플래그 1건 이상. **jev의 exit 1(폴백=진행)과 정반대** — verify_pin과 동일 어휘 |
+| 2 | config·env·git 오류 — 즉시 종료, stderr `FAIL worktree gate: <사유>`, stdout 없음. **저장(--save) 실패만 예외**: 결과 stdout JSON(`saved_to: null`) 출력 후 exit 2 |
+| 3 | 미사용 — 판단 계층(jev)이 없어 상향(escalation) 경로 자체가 없다(번호 재용 않음) |
+
+| 플래그 | 발행 조건 | 확인 절차 |
+|---|---|---|
+| `salvage_committed` | done·sweep에서 미커밋 변경분을 salvage 커밋했다 | 완료 선언·push 전 `salvage.files` 열람 — 시크릿 확인 시 브랜치 drop 후 시크릿 교체 |
+| `removable_worktrees_present` | list에서 제거 대상(done·고아) 잔존 | done·sweep으로 해소 |
+| `worktree_missing` | 활성 레지스트리인데 디렉터리가 게이트 밖에서 소실 | 잔여 미커밋분 손실 가능 — 수동 확인 후 정리 |
+
+**명명·레지스트리** — worktree 경로 `<본체 저장소 부모>/<저장소 디렉터리명>-worktrees/<task-id>`, 브랜치 `wt/<task-id>`(미관리 salvage 전용 `salvage/unmanaged-<UTC스탬프>`), 레지스트리 본체 `<repo>/docs/task-id/<task-id>/worktree.json`(worktree 파기에도 본체에 생존 — 고아 판정·명명규칙 재구성의 뿌리). task-id 검증 `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` — 팬아웃 렌즈용 `<task-id>-l<n>`도 통과한다. 모든 경로 파생은 `git rev-parse --git-common-dir` 본체 식별 기준 — worktree 내부에서 실행해도 본체 기준으로 동작한다.
+
+```json
+{"version": 1, "gate": "worktree-gate", "task": "r25-x", "path": "<abs>",
+ "branch": "wt/r25-x", "base_ref": "HEAD", "base_sha": "<sha>",
+ "created_utc": "...", "done_utc": null, "salvage_commit": null,
+ "dropped_branch_tip": null}
+```
+
+done 결과 JSON(레지스트리리스·고아 경로의 복구 기록은 stdout·--save JSON이 담당한다):
+
+```json
+{"ok": false, "gate": "worktree-gate", "subcommand": "done", "task": "r24-x",
+ "timestamp_utc": "...",
+ "worktree": {"path": "<abs>", "branch": "wt/r24-x", "removed": true,
+              "already_removed": false, "registry_less": false},
+ "salvage": {"performed": true, "commit": "<sha>", "changes": 3,
+             "files": ["src/a.py", "notes.txt"],
+             "skipped_by_option": false, "discarded_changes": 0},
+ "pruned": true,
+ "branch": {"name": "wt/r24-x", "preserved": true, "dropped": false, "tip_sha": "<sha>"},
+ "registry": {"path": "docs/task-id/r24-x/worktree.json", "updated": true},
+ "flags": ["salvage_committed"], "saved_to": null}
+```
+
+**왜 저장소 외부인가** — 저장소 내부 배치(`.worktrees/`)는 (a) 게이트가 타 저장소의 .gitignore를 수정해야 하고(범용 배포 계약과 충돌) (b) grep·LSP·파일 감시가 중복 소스 트리 전체를 훑는다(토큰·인덱싱 오염). 외부 컨테이너는 프로젝트 무변경이며 쓰기 범위가 명명규칙 단일 디렉터리로 예측 가능하다. 부모 디렉터리 쓰기 불가 시 exit 2(fail-closed).
+
+**sweep 자격** — managed(레지스트리 존재, 또는 고아 시 명명규칙 재구성: 컨테이너 내 디렉터리명=task-id ∧ 브랜치 `wt/<task-id>`) 전제로 (a) `state.json`의 `phase=="done"` 리터럴 (b) 고아 — 과업 폴더 자체 소실. **폴더가 남아 있고 state.json만 파손·부재면 고아가 아니다 — 보존한다**(판독 불가 = 판단 보류). 활성 phase·불일치(phase≠done ∧ done_utc 기록)·미관리(컨테이너 밖·수동 생성·detached HEAD)는 기본 보고만이며 제거는 `--unmanaged` 명시 시뿐이다 — 존재 ≠ 허가. 본체 작업 트리(porcelain 첫 항목)는 항상 제외다. `--unmanaged`의 salvage는 `salvage/unmanaged-*` 브랜치에 적립해 **원본 브랜치 포인터를 변경하지 않는다**.
+
+**데이터 유출 면** — salvage 커밋은 미커밋 파일 전부를 브랜치에 편입한다 — 시크릿(`.env.local` 등)·대형 바이너리 포함 가능하며 편입분은 본체 오브젝트 저장소에 영구 추가된다. 게이트 자체는 외부 전송이 없으나 **salvage 브랜치를 push하면 편입 파일이 원격에 공개된다** — `salvage_committed`(exit 1)의 확인 절차가 push 전 `salvage.files` 열람이다. 폐기 각오 시 `done --no-salvage`(폐기 수 JSON 기록 — done 전용, sweep에는 미제공).
+
+**salvage의 디스크 비용 — 부분 해소다** — 주 절감은 worktree 디렉터리 해분(ignored 대다수 = venv·node_modules·빌드 산출)이다. salvage 편입분은 비ignored 내용 크기만큼 본체 `.git`에 영구 추가된다 — 대량 산출물이 .gitignore 미등록이면 절감이 상쇄될 수 있다. `.gitignore` 등록이 병행 전제다.
+
+**locked worktree** — lock은 사용자의 보존 신호다. 게이트는 자동 unlock하지 않고 exit 2 사유에 안내한다: `git worktree unlock <path>` 후 재시도. 사용자 확인 후 강제하려면 `git worktree remove -f -f <path>`(문서로만 제공 — 게이트가 실행하지 않는다).
+
+**기타 한정** — `list --du`는 `du -sb`(GNU 전용 — 실패·비GNU 시 bytes null). salvage 커밋은 identity 미정의 환경에서도 게이트 identity(`worktree-gate <worktree-gate@local>`)로 성립하고 pre-commit hook은 `--no-verify`로 우회한다(기계 절차 — hook 판단 무의미). remove 실패(파일 잠금·권한) 시 exit 2 — 재호출이 salvage 재판정(공백)으로 2중 커밋 없이 수렴한다. 게이트 분기 전수는 임시 git 저장소 fixture로 `python3 scripts/test_worktree_gate.py`에서 결정적으로 검증한다(T1~T34). 사용 시점·호출 주체(메인 세션 단일)·시점 계약·저장소 외부 효과는 SKILL.md의 '워크트리 수명주기 게이트(worktree_gate)' 절을 따른다.
 
 ## 모델 매핑
 

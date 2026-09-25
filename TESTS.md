@@ -599,3 +599,46 @@ revfactory/codex-harness 비교에서 차용 기준 O(1)·일회성 비용 통�
 ④ 재리뷰 라운드2 재구현 기록: G3 multipurpose 그룹 은닉 우회 → 은닉 매칭을 양 그룹 패턴 통합으로 확장(플래그 종수 불변 6종·hidden_files는 통합 목록. T19 실측 — skip-worktree + addopts 무력화가 라운드1에서 exit 0·완전 clean이던 것을 `verification_input_hidden` 단독 플래그로 검출)·G4 비UTF-8 파일명 디코드 → git·verify-cmd subprocess에 `errors='replace'`(엄격 디코드 크래시가 JSON 없는 exit 1 오분류되는 경로 수선). G3의 원인은 v3 계약 구멍이었다 — 은닉 매칭이 그룹 1 패턴에만 적용된 것은 구현이 v3 계약을 문자대로 준수한 결과며 번들 v4가 양 그룹 통합으로 계약을 수정했다.
 
 구조 증명: SKILL.md +25/−0 순수 삽입(`git diff --numstat -- SKILL.md`) — check_structure.py가 기준선(git HEAD) 전 라인 보존까지 대조한다. SKILL §5 verify 정의("검증 전용 에이전트는 없다")는 유지 — verify_pin은 대체가 아니라 보강이다.
+
+## r24 워크트리 수명주기 게이트 — 강제 제거·salvage 보존 (2026-09-25)
+
+원 요구 "워크트리격리 작업완료시 제거를 강제해야될꺼 같은데 맨날 용량없음 씨발" — 반복 관측 실패(완료 후 worktree 잔존 → 디스크 고갈)의 영구 예방 장치. 기술적 원인 실측: 미포스 `git worktree remove`는 dirty(tracked 수정·staged)·untracked 존재 시 거부 — 수동 제거 반복 실패 경로. `scripts/worktree_gate.py`·`scripts/worktree_gate_lib.py`(공용 git 계층 — 650줄 분할)·`scripts/test_worktree_gate.py`(신규 3파일 — T1~T34 임시 git 저장소 fixture 전수) + SKILL.md 신규 절 '워크트리 수명주기 게이트(worktree_gate)' + README '워크트리 수명주기 게이트 (r24)' 섹션.
+
+계약 요지 (증류):
+
+| 항목 | 계약 |
+|------|------|
+| 강제 제거 | done 7단계 기계 절차 — salvage(필요 시) → `remove --force` → prune → 기록. 판정 없음, done 판정 권한은 메인(state.json phase=done 패치 후 호출) |
+| salvage 무손실 | 미커밋분(tracked 수정·staged·untracked 비ignored)만 `add -A` + 커밋 보존 — porcelain은 ignored를 제외하므로 공백 ⇔ salvage 불필요가 정확히 일치(빈 salvage 커밋 미생성). ignored는 폐기 대상. `--no-salvage`는 폐기 수 기록의 명시 옵션(done 전용) |
+| 실행 환경 독립성 | identity 폴백 `-c user.name=worktree-gate -c user.email=worktree-gate@local`(미정의 환경 fatal 차단)·`commit --no-verify`(pre-commit hook 차단 차단) — 어떤 로컬 환경에서도 salvage 성립 |
+| 브랜치 보존 | 제거 후에도 커밋 도달 가능(오브젝트 공유 실측) — 기본 보존, `--drop-branch`는 tip SHA 기록 후 삭제하는 명시 옵션 |
+| --unmanaged 명시 | 미관리(수동·기존 잔존분) 제거는 명시 옵션뿐(기본 off·자동 금지) — salvage는 `salvage/unmanaged-*` 브랜치에 적립, 원본 브랜치 포인터 무변경 |
+| sweep 자격 | managed 전제로 `phase=="done"` 리터럴 ∨ 고아(과업 폴더 소실 — 명명규칙 재구성). 폴더 존재·state.json 파손은 고아 아님 → 보존. 활성·불일치·미관리는 보고만. 본체 작업 트리 상시 제외. 자동(비dry) sweep은 사용자 명시 시만 |
+| exit 1 attention | `salvage_committed`·`removable_worktrees_present`·`worktree_missing` — 확인 의무(jev exit 1 폴백=진행과 정반대, verify_pin과 동일 어휘). 셸 체인은 rc 확인 패턴(README) |
+| 폴백 exit 2 | 비저장소·무효 task-id·무효 ref·중복 create·잔존 브랜치·대상 전부 부재 done·locked·remove 실패 — stderr `FAIL worktree gate: <사유>`. exit 3 미사용(판단 계층 부재) |
+
+검증 기록 (③구현 실측 — 명령 원문·exit code. 기입 시점: ③ = C1~C23·C25~C36, 메인 verify = C24 미러):
+
+| claims | 명령 원문 | 결과 |
+|---|---|---|
+| C1~C19·C25~C36 (T1~T31)·C20 (전체) | `python3 scripts/test_worktree_gate.py` | exit 0 — Ran 34 tests, OK(T32~T33 라운드1 가드·T34 라운드2 M1). RED 선실증: worktree_gate.py 부재 시점 동일 스위트 31 failures |
+| 라운드2 M1 (T34) | `python3 scripts/test_worktree_gate.py WorktreeGateTests.test_t34_done_drop_branch_on_leftover_keeps_tip` | exit 0 — 잔존 경로 done --drop-branch에서 tip을 삭제 전 판독: JSON branch.tip_sha·레지스트리 dropped_branch_tip non-null ∧ 브랜치 소멸(C10 순서 계약과 정합) |
+| 라운드1 G1·G2 (T32·T33) | `python3 scripts/test_worktree_gate.py WorktreeGateTests.test_t32_done_after_completion_ignores_reappeared_dir` / `...test_t33_done_no_salvage_on_leftover` | 둘 다 exit 0 — 완료 과업 재등장 디렉터리는 멱등 유지·미삭제 ∧ 잔존 경로 --no-salvage는 신규 파일 미커밋·폐기 수 기록·1차 salvage SHA 레지스트리 기록 |
+| C7 (T7 대표) | `python3 scripts/test_worktree_gate.py WorktreeGateTests.test_t7_done_salvage_tracked` | exit 0 — tracked 수정 salvage 커밋·`salvage.files` 포함·`git show wt/t-a:<파일>` 내용 일치·디렉터리 소멸 |
+| C26 (T21 — H2) | `python3 scripts/test_worktree_gate.py WorktreeGateTests.test_t21_done_identity_fallback` | exit 0 — identity 미정의 환경에서 salvage 커밋 author/committer = `worktree-gate <worktree-gate@local>` |
+| C29 (T24 — R2 수렴) | `python3 scripts/test_worktree_gate.py WorktreeGateTests.test_t24_done_remove_failure_converges` | exit 0 — remove 실패(쓰기금지 chmod) exit 2 → 권한 회복 후 재 done exit 0 ∧ salvage 커밋 정확히 1개(2중 커밋 없음) |
+| C31 (T26) | `python3 scripts/test_worktree_gate.py WorktreeGateTests.test_t26_sweep_drop_branch` | exit 0 — swept 브랜치 소멸 ∧ JSON tip SHA 기록 |
+| C35 (T30 — H1) | `python3 scripts/test_worktree_gate.py WorktreeGateTests.test_t30_sweep_unmanaged_salvage_branch` | exit 0 — 수동 worktree 제거 ∧ `salvage/unmanaged-*` 브랜치에 미커밋분 적립 ∧ 원본 브랜치 포인터 무변경 |
+| C21 | `python3 docs/task-id/r24-worktree-gate/check_structure.py` | exit 0 — PASS (SKILL 순수 삽입 +28줄·3단편 verbatim·README/TESTS 헤더) |
+| C22 | `git diff --name-only 3a12a43 -- scripts/jev_judge.py scripts/jev_modes.py scripts/stagehand_gate.py scripts/stagehand_gate_policy.py scripts/stagehand_runner.py scripts/verify_pin.py` | 빈 출력, exit 0 — 기존 스크립트 무변경 |
+| C23 | `wc -l scripts/worktree_gate.py scripts/worktree_gate_lib.py scripts/test_worktree_gate.py` | 366·384·543 — 각 ≤650 ∧ README '### 워크트리 수명주기 게이트 (r24)'·TESTS '## r24' 헤더 존재(위 check_structure.py 동일 실행) |
+| C24 | (메인 verify 단계) 설치본 2곳 `diff -q` | 메인 수행 — 게이트 3파일 미러 diff 0 목표 |
+
+구현 실측 정정(번들 가정 대비): `git worktree remove --force` 실패 시(실측 — 임시 저장소 chmod 555, remove rc 255) git은 **admin 메타데이터를 제거하고 디렉터리만 남긴다** — 번들 §5 done 2단계의 "재판정 후 재 remove" 가정과 달라진다. 이에 잔존 수렴 경로를 구현했다: porcelain 부재 ∧ 레지스트리 활성 ∧ 브랜치 앵커 존재 ∧ 레지스트리 path 디렉터리 잔존이면, 임시 인덱스(read-tree tip → add -A → diff-index --cached — oid 비교라 stat 오탐 없음, 본체 인덱스 비접촉)로 미커밋분 재판정 후 commit-tree·update-ref로 salvage 적립하고 잔존 디렉터리를 rmtree로 마무리한다(C29 exit 0 수렴 — T24 실측). 브랜치 앵커가 없으면 진입하지 않는다(attention 보존 — fail-closed). rmtree·update-ref는 이 수렴 경로 한정이며 게이트의 일상 파기 수단이 아니다.
+
+구조 증명: SKILL.md +28/−0 순수 삽입(기준선 3a12a43) — check_structure.py가 기준선 전 라인 보존까지 대조한다. SKILL §5 worktree 경로 고정·state writer 원칙은 유지 — 게이트는 state.json을 읽기만 하고 레지스트리 worktree.json만 쓴다.
+
+라운드1 재구현 기록 (④ 수정요청 경증 — gap 4건): G1 잔존 수렴 진입 가드 보강 — 활성 레지스트리(done_utc 없음)·정규 명명 경로(레지스트리 path == 컨테이너/<task-id>)·브랜치 앵커 3중 조건으로 좁혀 완료 과업의 재등장 디렉터리는 멱등(already_removed)을 유지하고 레지스트리 path 변조의 임의 경로 rmtree를 차단(T32 실측)·G2 --no-salvage를 잔존 경로에도 전달 — 재판정은 임시 인덱스로 폐기 수만 판독(commit=False)하고 커밋하지 않는다(T33 실측)·G3 discard_leftover_dir의 rmtree OSError를 exit 2(사유)로 변환 — traceback+exit 1의 의미 충돌 제거·G4 문서 정정 — TESTS "+30→+28" 2곳·README exit 2 행에 --save 실패 예외(stdout JSON 후 exit 2) 명시·sweep --drop-branch 도움말에 "미관리 원본 브랜치는 삭제하지 않는다" 교정. LOW-6 동반 수선: 순수 수렴(재판정 공백) 시 레지스트리 salvage_commit에 1차 실패 당시 salvage SHA를 기록(log --grep=^salvage( 조회 — T33 후단 실측).
+
+마이크로 수정 기록 (④ 재리뷰 종결 전 M1·니트 2건): M1 잔존 경로 --drop-branch의 tip 판독을 branch -D 실행 전으로 이동(정상 경로와 동일 순서 — 삭제 후 복구는 fsck --lost-found까지 단절되는 순서 위반 수선, T34 실측)·니트 잔존 경로 --no-salvage의 skipped_by_option을 폐기 수 0이어도 True로 통일(정상 경로와의 불일치 제거 — perform_salvage_leftover의 commit=False 분기를 files 공백 판정 앞으로 이동)·니트 README "기타 한정" 테스트 범위 표기 T1~T31 → T1~T34.
+
