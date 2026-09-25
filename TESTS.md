@@ -679,3 +679,38 @@ revfactory/codex-harness 비교에서 차용 기준 O(1)·일회성 비용 통�
 
 L6 DrvFs 지연 기록(양측 실측 — 같은 머신 WSL2): test_worktree_gate.py ext4 10.7s vs DrvFs 76.2s(약 7배)·test_worktree_gate_hardening.py ext4 7.6s vs DrvFs 41.6s(약 5배) — 번들 R8 예상(~8배)과 정합. 일상 실행은 /tmp(ext4) 기본, DrvFs는 H1 실증용 일회 검증이다.
 
+
+## r26 게이트 강화 — 실행 엔진 4기능 (2026-09-25)
+
+원 요구 — todo-flow(JakeB-5, v0.0.4) 적대검토에서 도출된 verify_pin 게이트 결함 4종 수선: ①프로세스 그룹 제어 없음 ②verify-cmd 전후 클린 검사 없음 ③fresh-checkout 검증 모드 없음 ④증분 영수증 없음. `scripts/verify_exec.py`(신규 실행 엔진 — capability probe·프로세스 그룹·verify-window·fresh 절차)·`scripts/verify_pin.py`(리와이어 — 신규 플래그 3종·--fresh-checkout·ReceiptWriter)·`scripts/test_verify_exec.py`(신규 T24~T42) + SKILL·README·TESTS 계약 등재. 기존 플래그 7종·exit 코드·`test_verify_pin.py`(T1~T23) 무변경 보존.
+
+계약 요지 (증류):
+
+| 항목 | 계약 |
+|------|------|
+| 프로세스 그룹 제어 | 검증명령은 `start_new_session` 그룹 실행 — 타임아웃·정상 종료 뒤 SIGTERM→1.5s pgid 폴링→SIGKILL→드레인→2s 폴링 전멸(todo-flow verification.py 원형 어휘 이식). 잔존 관측은 `verify_cmd_survivors`(재검증 계층 — 프로세스 정지 후 재실행으로 소멸 확인). **같은 pgid 잔류 자손 한정** — setsid 이탈은 범위 밖(계약 한계 문서화). 실행 중 ps 실패는 exit 2(생존자 판정 불능 — 조용한 통과 금지) |
+| 파이프 상속 orphan 판별 | communicate 타임아웃 시 poll()로 직속 자식 종료 여부 판별 — (a) 미종료=진성 타임아웃·(b) 이미 종료=파이프 잡은 orphan(타임아웃 오분류 금지·survivors로 정확 분류). 그룹 사멸 후 드레인 순서 강제로 P6 교착 제거, 드레인 타임아웃 시 fd close+wait 회수 |
+| 실행창 전후 클린 검사 | verify-cmd 실행 직전 HEAD·porcelain -z -uall·info/exclude 스냅샷→직후 재판정. HEAD 이동=`head_moved_during_verify`·tracked 변형·exclude 변화·검증입력 패턴 매칭 untracked=`verify_workspace_mutated`(정당화 계층 — 1회성 사건, 재실행 소멸≠해제). 패턴 밖 untracked(산출물)는 델타 상세에만 기록 — 오탐 없음(메인 승인 트레이드오프) |
+| fresh-checkout 검증 | --fresh-checkout(--verify-cmd 필수, 단독 exit 2) — r24 이름 충돌 가드(`wt/verify-pin-fresh`·`docs/task-id/verify-pin-fresh/` 사전 거부)→잔존 복구→`worktree add --detach <시작 HEAD>`→cwd=fresh 검증→`remove --force`+`prune`. remove 실패는 부분 결과 stdout JSON 1회 후 exit 2(r24 M3 패턴). 커밋 트리 한정·은닉 플래그는 메인 스캔에서 여전히 발행·fresh 잔존은 fresh 재실행으로만 정리(r24 sweep detached 스킵) |
+| 증분 영수증 | --save 시 단계(init→inspected→fresh_checkout→verify_cmd→complete)마다 tmp+fsync+os.replace 원자 재기록 — 크래시 시 마지막 성공 stage 보존. 실패 종료 시 강제 기록 없음(최종 stdout이 사유 운반), 중간 기록 실패는 검사 계속·최종 저장까지 실패 시 exit 2 합류. stdout 최종 JSON은 stage 키 없음 |
+
+검증 기록 (③구현 실측 — 명령 원문·exit code):
+
+| claims | 명령 원문 | 결과 |
+|---|---|---|
+| C1 | `python3 scripts/test_verify_pin.py` ∧ `git diff c75dcb7 -- scripts/test_verify_pin.py` | exit 0 — Ran 23 tests, OK ∧ diff 빈 출력(무변경) |
+| C2·C2b·C3 | `python3 scripts/test_verify_exec.py VerifyExecEngineTests.test_t24_background_writer_survivors_detected` · `...test_t25_timeout_kills_sigterm_ignoring_grandchild` · `...test_t26_pipe_holding_orphan_finite_exit_and_classification` | 각 exit 0 — T24 생존자 감지+late-write 마커 부재·T25 타임아웃 손자(SIGTERM 무시) SIGKILL 종료+마커 부재+survivors false(독립 축)·T26 파이프 상속 orphan 유한 종료(duration<15s)+exit_code 0+타임아웃 오분류 없음 |
+| C2c | `python3 scripts/test_verify_exec.py VerifyExecEngineTests.test_t33_ps_failure_midrun_exit2` | exit 0 — exit 1 ps 심(PATH)에서 게이트 exit 2·stderr `FAIL verify pin`·생존자 사유·stdout 없음(조용한 통과 금지) |
+| C4·C5·C6·C7 | `python3 scripts/test_verify_exec.py VerifyExecEngineTests.test_t28_head_moved_during_verify` · `...test_t29_tracked_mutation_during_verify` · `...test_t30_untracked_verification_input_new_during_verify` · `...test_t31_non_pattern_artifacts_no_false_flag` | 각 exit 0 — HEAD 이동·tracked 변형·conftest 신규 검출, 패턴 밖 .pytest_cache 생성은 무플래그 exit 0(델타 상세에는 기록) |
+| C5b | `python3 scripts/test_verify_exec.py VerifyExecEngineTests.test_t39_fresh_main_tracked_mutation_detected` | exit 0 — verify-cmd cwd=fresh여도 실행 중 메인 tracked 변형 검출(`verify_workspace_mutated`) ∧ fresh.removed true |
+| C8·C8b | `python3 scripts/test_verify_exec.py VerifyExecEngineTests.test_t34_fresh_basic_flow_reflects_commit_only` · `...test_t38_fresh_without_verify_cmd_exit2` | 각 exit 0 — dirty 메인에서 fresh는 커밋 내용만 반영·종료 후 worktree·`.git/worktrees`·컨테이너 소멸·exit 0 ∧ fresh 단독 exit 2 |
+| C9·C10·C10b·C11 | `...test_t35_fresh_neutralizes_hidden_untracked` · `...test_t36_fresh_leftover_recovery` · `...test_t40_fresh_name_collision_guard` · `...test_t37_fresh_remove_failure_partial_result` | 각 exit 0 — exclude 은닉 untracked가 fresh 검증에 부재(exit_code 0)·은닉 플래그는 여전히 발행 ∧ 등록·미등록 잔존 복구(leftovers_cleaned 기록) ∧ 브랜치·task-id 디렉터리 양변형 exit 2+잔존 미진입 증명 ∧ remove 심 실패 시 stdout JSON 1회(`fresh.removed` false·`incomplete_step` worktree_remove) 후 exit 2 |
+| C12·C13 | `python3 scripts/test_verify_exec.py VerifyExecEngineTests.test_t41_receipt_survives_sigkill_midrun` · `...test_t42_receipt_complete_matches_stdout` | 각 exit 0 — SIGKILL 후 영수증 잔존·파싱·stage(inspected/fresh_checkout)·head_sha 보존·fresh 크래시 시 잔여 worktree 시사 ∧ 정상 종료 stage complete+stdout JSON과 키 일치(stage 제외) |
+| C14 | `python3 scripts/test_verify_exec.py VerifyExecEngineTests.test_t27_no_ps_fallback_transparent` | exit 0 — PATH에서 ps 제거 시 `process_group: false`·`survivors` null·성공·타임아웃 플래그 기존 동작 불변 |
+| C15 | `wc -l scripts/verify_pin.py scripts/verify_exec.py scripts/test_verify_exec.py scripts/test_verify_pin.py` | 444·418·508·474 — 각 ≤650 |
+| C16 | `python3 scripts/test_verify_exec.py` | exit 0 — Ran 19 tests, OK(T24~T42 전수) |
+| C17 | `git diff c75dcb7 -- scripts/test_verify_pin.py scripts/worktree_gate.py scripts/worktree_gate_lib.py scripts/test_worktree_gate.py scripts/test_worktree_gate_hardening.py` | 빈 출력 — 무변경 대상 5파일 보존 |
+| C18 | `python3 scripts/verify_pin.py --base c75dcb7 --verify-cmd 'python3 scripts/test_verify_pin.py' --fresh-checkout` | exit 1 ∧ flags `['verification_input_modified']`(구현 산출물 — 검증 입력 변경 보고: test_verify_exec.py 신규 작성) ∧ verify_cmd.exit_code 0 ∧ fresh.removed true |
+| C19 | `diff -q ~/.claude/skills/effort-router/<경로> <저장소>/<경로>` ∧ 동일 for `~/.codex/...` — 6종×2미러 | 12쌍 전부 무출력(동일) |
+| RED 선실증 | Phase 1: `python3 scripts/test_verify_exec.py` → exit 1 — Ran 10 tests, FAILED(failures=6, errors=4 — 신규 키 KeyError·플래그 부재·T33 exit 0 조용한 통과) / Phase 2: exit 1 — Ran 17 tests, FAILED(failures=6, errors=1 — --fresh-checkout unrecognized) / Phase 3: exit 1 — Ran 19 tests, FAILED(failures=1, errors=1 — stage 키 부재·폴링 타임아웃) | 기록 완료 |
+

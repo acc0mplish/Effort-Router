@@ -148,24 +148,25 @@ Stagehand 게이트는 브라우저 실행 계층(Stagehand)과 판단 계층(�
 
 ## 검증 핀 게이트(verify_pin) — 선택 검증 보강 계층
 
-검증의 자기참조 구멍(검증 대상인 테스트를 약화·삭제·신규 무력화 파일로 우회해도 재실행은 같은 약화본을 통과시킨다)과 핀 부재(옛 검증으로 새 코드가 통과한다)를 기계 노출로 전환하는 결정론 게이트다(완전 차단이 아니다 — 하단 '완전 차단이 아니다' 단락). jev·LLM 무관 — 읽기 전용 git과 검증명령 subprocess만 쓰며 외부 전송·과금이 없다(verify-cmd 출력 tail은 과업 감사 JSON에만 남는다). r23 구현이며 §5 verify 정의(핵심 테스트 1회 재실행)를 **대체하지 않는다** — 재실행에 핀·검증 입력 분리 증거를 붙이는 보강이다.
+검증의 자기참조 구멍(검증 대상인 테스트를 약화·삭제·신규 무력화 파일로 우회해도 재실행은 같은 약화본을 통과시킨다)과 핀 부재(옛 검증으로 새 코드가 통과한다)를 기계 노출로 전환하는 결정론 게이트다(완전 차단이 아니다 — 하단 '완전 차단이 아니다' 단락). jev·LLM 무관 — 읽기 전용 git과 검증명령 subprocess(실행 엔진 verify_exec.py — 프로세스 그룹 제어·실행창 전후 클린 검사·fresh-checkout·증분 영수증, r26)만 쓰며 외부 전송·과금이 없다(verify-cmd 출력 tail은 과업 감사 JSON에만 남는다). 프로세스 그룹 제어는 **같은 pgid에 머무는 자손 한정**이다 — 손자가 setsid(daemon화) 등으로 신규 pgid를 만들면 killpg·ps 폴링 모두 범위 밖이다(r26 한계 명시). r23 구현이며 §5 verify 정의(핵심 테스트 1회 재실행)를 **대체하지 않는다** — 재실행에 핀·검증 입력 분리 증거를 붙이는 보강이다.
 
 **사용 시점** — M+ 코드 과업의 verify 단계(④리뷰 통과 후 done 전)에서 핵심 테스트 재실행에 앞세운다. 문서·설정 과업은 기존 대체 확인 수단(§3) 그대로.
 - **핀**: 실행 시점 HEAD SHA를 결과 JSON에 기록한다. `--expect-sha`에 직전 검증의 SHA를 주면 불일치 시 `sha_mismatch` — "옛 검증으로 새 코드"를 기계적으로 드러낸다.
 - **검증 입력 분리**: `--base <앵커>`(앵커 = 구현 착수 전 커밋, §5 계보) 지정 시 앵커→작업 트리 diff(커밋·staged·unstaged·삭제)와 untracked 신규 파일 중 검증 입력 패턴 통과분(테스트·conftest·러너 설정)을 검출해 `verification_input_modified`와 변경 파일 목록을 낸다. 다목적 설정 파일(pyproject.toml 등)은 별도 `multipurpose_config_modified`로 분리 검출한다. 검증 입력 변경 자체가 금지가 아니다 — 검증 입력을 바꾼 구현은 그 변경을 보고·정당화해야 한다(§3 검증 입력 변경 보고). **`not_evaluated`(base 미지정)는 '변경 없음'이 아니라 '미검사'다** — M+ 코드 과업에서 base 앵커 지정이 원칙이며 미지정 시 보고에 사유를 남긴다. **은닉 우회도 검출한다** — `assume-unchanged`·`skip-worktree`로 지정된 검증 입력·다목적 설정 파일은 그룹 구분 없이 `verification_input_hidden` + `hidden_files`로 드러난다(diff·status 양쪽에서 감춰지는 우회 경로). ignore 은닉(untracked 파일의 .gitignore·.git/info/exclude·전역 excludesFile 제외)도 제외 해제 스캔으로 `verification_input_ignore_hidden` + `ignore_hidden_files`에 드러난다(r25 — 매칭은 전체경로 한정·원인 파일은 `git check-ignore -v`로 확인), 비ASCII 파일명 인용 우회는 git 호출 `-c core.quotePath=false` 고정으로 차단한다.
-- **증거 기록**: `--save DIR`에 결과 JSON을 남긴다(과업 폴더 감사 — jev --save 계약 평행). `--verify-cmd`를 주면 재실행 명령의 exit code까지 JSON에 포함한다(재실행과 게이트 1호출 통합).
+- **증거 기록**: `--save DIR`에 결과 JSON을 남긴다(과업 폴더 감사 — jev --save 계약 평행). `--verify-cmd`를 주면 재실행 명령의 exit code까지 JSON에 포함한다(재실행과 게이트 1호출 통합). --save는 **증분 영수증**이다(r26) — 단계(init→inspected→fresh_checkout→verify_cmd→complete)마다 원자 기록돼 크래시 시 마지막 성공 단계까지 보존되고, 최종 파일만 stage `complete`다.
+- **fresh-checkout 검증**: `--fresh-checkout`(--verify-cmd 필수)을 주면 핀 SHA의 detached 클린 체크아웃에서 검증한다(r26) — info/exclude 은닉·은닉 지정·untracked 오염 클래스를 전멸시킨다(체크아웃에 그 파일이 없다). **커밋 트리 한정** — untracked·unstaged 변경은 fresh 대상이 아니며 그것이 기본 모드의 영역이다. 은닉·변경 검출 플래그는 메인 스캔에서 **여전히 발행**된다("검증된 것과 워크스페이스의 괴리" 투명성 — 은닉 자체가 위생 이상 신호). **fresh 잔존은 fresh 모드 재실행으로만 정리된다** — r24 sweep은 detached를 스킵해 fresh 잔존을 못 치우며, r24 list가 unmanaged detached로 `verify-pin-fresh` 고정명을 보고할 수 있다(정상 — fresh 진행·크래시 잔존의 사유).
 
 **플래그는 차단이 아니라 확인 의무며, 계층이 다르다** — 판정 권한은 메인(jev 권한 계약 준용)이나 해제 조건은 차등이다:
-- **재검증 계층** — `sha_mismatch`·`verify_cmd_failed`·`verify_cmd_timeout`: 확인 대화만으로 done 불가 — 게이트 재실행으로 플래그 소멸을 확인한다(예: sha_mismatch는 현재 HEAD로 `--expect-sha` 갱신 후 재실행).
-- **정당화 계층** — `verification_input_modified`·`multipurpose_config_modified`·`verification_input_hidden`·`verification_input_ignore_hidden`: 해당 diff·은닉·제외 확인과 사유 기재로 해제된다(은닉은 해제 후, ignore는 제외 해제 후 재실행으로 소멸 확인 권장).
+- **재검증 계층** — `sha_mismatch`·`verify_cmd_failed`·`verify_cmd_timeout`·`verify_cmd_survivors`(r26 — 검증이 남긴 프로세스 잔존·강제 종료 확인): 확인 대화만으로 done 불가 — 게이트 재실행으로 플래그 소멸을 확인한다(예: sha_mismatch는 현재 HEAD로 `--expect-sha` 갱신 후 재실행, survivors는 프로세스 정지 후 재실행).
+- **정당화 계층** — `verification_input_modified`·`multipurpose_config_modified`·`verification_input_hidden`·`verification_input_ignore_hidden`·`head_moved_during_verify`·`verify_workspace_mutated`(r26 — 검증 실행창 내 HEAD 이동·워크스페이스 변형): 해당 diff·은닉·제외·사건 원인 확인과 사유 기재로 해제된다(은닉은 해제 후, ignore는 제외 해제 후 재실행으로 소멸 확인 권장). r26 신규 2종은 **1회성 사건**이라 재실행 소멸≠해제다 — 사건 원인 기재로 해제한다.
 
 **완전 차단이 아니다** — 게이트는 약화 가능성을 기계 노출로 전환할 뿐이다. 구현과 검증 입력을 동시에 약화하는 공모 변경도 플래그로 노출되나 해제는 정당화 계층(확인·사유 기재)이다 — 사유 없는 해제는 ④리뷰 claims 밖 보고 표적이다. 감시 자동화는 없다: 판정은 호출 시점 1회뿐이며 미호출·`--base` 미지정 검사는 일어나지 않는다(r25).
 
 **exit 1은 jev의 exit 1(폴백=진행)과 정반대다** — verify_pin exit 1은 '확인 의무 잔존' 신호로, 확인 없이 진행하면 계약 위반이다.
 
-**호출·감사 계약**: `python3 <skill-dir>/scripts/verify_pin.py --base <앵커> [--verify-cmd <명령>] [--save docs/task-id/<task-id>/]` — jev와 같은 `<skill-dir>/scripts/` 규약이며 **미러 동봉 대상이다**(저장소 국소 의존 — venv·fixtures — 이 없어서. Stagehand 게이트의 저장소 루트 상대·미동봉과 다르다).
+**호출·감사 계약**: `python3 <skill-dir>/scripts/verify_pin.py --base <앵커> [--verify-cmd <명령>] [--fresh-checkout] [--save docs/task-id/<task-id>/]` — jev와 같은 `<skill-dir>/scripts/` 규약이며 **미러 동봉 대상이다**(verify_pin.py·verify_exec.py 스크립트 2파일 — 저장소 국소 의존 — venv·fixtures — 이 없어서. Stagehand 게이트의 저장소 루트 상대·미동봉과 다르다).
 
-**폴백 계약**: 비저장소·무효 ref·인자 위반·저장 실패 = exit 2 = "이 게이트 없이 기존 verify 절차 진행" — 실패는 이유가 붙은 bypass다(jev 폴백 계약 준용. 저장 실패 시에만 검사 결과 stdout을 버리지 않는다). 하니스 무관(subprocess CLI)이며 저장소를 변경하지 않는다(읽기 전용 git).
+**폴백 계약**: 비저장소·무효 ref·인자 위반·저장 실패 = exit 2 = "이 게이트 없이 기존 verify 절차 진행" — 실패는 이유가 붙은 bypass다(jev 폴백 계약 준용. 저장 실패 시에만 검사 결과 stdout을 버리지 않는다). 하니스 무관(subprocess CLI)이며 **기본 모드는 읽기 전용**이다. --fresh-checkout 모드는 저장소 밖 컨테이너(r24 명명 관례 `<repo.parent>/<repo.name>-worktrees/`)와 `.git/worktrees/verify-pin-fresh` 관리 메타데이터만 쓰며 — 후자는 종료 전 `remove --force`+`prune`으로 소멸한다. 메인 워크스페이스 tracked·인덱스·HEAD는 어떤 모드에서도 기록하지 않는다.
 
 패턴·종료코드 표 전문은 README '검증 핀 게이트 (r23)' 절에 위임한다.
 

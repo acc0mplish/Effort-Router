@@ -20,7 +20,7 @@ Decision(티어 판정) → Requirement → Acceptance → Task → Evidence →
 | `AGENTS.md` | 저장소 작업의 모델·에포트 정책과 역할 템플릿 오류 예방 규칙 |
 | `agents/` | Claude Code 역할 정의 10종 + ChatGPT 데스크톱 UI 메타데이터 `openai.yaml` |
 | `platforms/` | Codex·ChatGPT 실행 어댑터와 기타 하니스 파생 문서 |
-| `scripts/` | 전역 Codex 역할 라우팅·설치 검증 스크립트 + jev 판단 계층 CLI(jev_judge.py·jev_modes.py — CLI 12종: tier·prune·escalation·memory-gate·stall·done·dup·loop·verify-run·watch·route·guard) + Stagehand 게이트 CLI(stagehand_gate.py 3종) + 검증 핀 게이트 CLI(verify_pin.py) + 워크트리 수명주기 게이트 CLI(worktree_gate.py 4종: create·done·list·sweep) |
+| `scripts/` | 전역 Codex 역할 라우팅·설치 검증 스크립트 + jev 판단 계층 CLI(jev_judge.py·jev_modes.py — CLI 12종: tier·prune·escalation·memory-gate·stall·done·dup·loop·verify-run·watch·route·guard) + Stagehand 게이트 CLI(stagehand_gate.py 3종) + 검증 핀 게이트 CLI(verify_pin.py + 실행 엔진 verify_exec.py) + 워크트리 수명주기 게이트 CLI(worktree_gate.py 4종: create·done·list·sweep) |
 | `TESTS.md` | 검증 프로토콜·측정 결과·라운드별 개정 이력·재현 절차 |
 
 ## 설치 (Codex + ChatGPT 데스크톱 앱)
@@ -151,7 +151,7 @@ SDK 미설치 환경에서는 `--runner stagehand`가 exit 2로 실패-폐쇄한
 
 ### 검증 핀 게이트 (r23)
 
-`scripts/verify_pin.py`는 검증의 자기참조 구멍(검증 대상인 테스트를 약화·삭제·신규 무력화 파일로 우회해도 재실행은 같은 약화본을 통과시킨다)과 핀 부재(옛 검증으로 새 코드가 통과한다)를 메우는 결정론 게이트다. 읽기 전용 git과 검증명령 subprocess만 쓰며 jev·LLM·외부 전송·과금이 없다 — 저장소 국소 의존(venv·fixtures)이 없어 **미러 동봉 대상**이다(Stagehand 게이트의 저장소 루트 상대·미동봉과 다르다).
+`scripts/verify_pin.py`(+실행 엔진 `scripts/verify_exec.py`, r26)는 검증의 자기참조 구멍(검증 대상인 테스트를 약화·삭제·신규 무력화 파일로 우회해도 재실행은 같은 약화본을 통과시킨다)과 핀 부재(옛 검증으로 새 코드가 통과한다)를 메우는 결정론 게이트다. 읽기 전용 git과 검증명령 subprocess만 쓰며 jev·LLM·외부 전송·과금이 없다 — 저장소 국소 의존(venv·fixtures)이 없어 **미러 동봉 대상**이다(Stagehand 게이트의 저장소 루트 상대·미동봉과 다르다). r26에서 todo-flow 적대검토에서 도출된 결함 4종(프로세스 그룹 제어 부재·실행창 전후 클린 검사 부재·fresh-checkout 부재·증분 영수증 부재)을 수선했다.
 
 ```bash
 # M+ 코드 과업 verify 단계 — 앵커(구현 착수 전 커밋) 지정이 원칙
@@ -159,6 +159,9 @@ python3 scripts/verify_pin.py --base <앵커> \
   --expect-sha <직전 검증 HEAD> \
   --verify-cmd 'python3 scripts/test_verify_pin.py' \
   --save docs/task-id/<task-id>/
+# 워크스페이스 오염 클래스 전멸이 필요하면 — 핀 SHA의 detached 클린 체크아웃에서 검증
+python3 scripts/verify_pin.py --base <앵커> \
+  --verify-cmd 'python3 scripts/test_verify_pin.py' --fresh-checkout
 ```
 
 | 플래그 | 기본 | 설명 |
@@ -168,18 +171,19 @@ python3 scripts/verify_pin.py --base <앵커> \
 | `--verify-cmd CMD` | 없음 | 재실행 검증명령(shlex 분할 — 셸 미경유, 파이프·리다이렉션 불가, 필요 시 `bash -c "..."` 전달) |
 | `--timeout SEC` | 600 | verify-cmd 타임아웃(양수 유한 — 위반 시 exit 2) |
 | `--pattern PAT` | 없음(반복 가능) | 검증 입력 패턴 추가(기본 패턴에 append — multipurpose 그룹 미적용) |
-| `--save DIR` | 없음 | 결과 JSON 저장 디렉터리(`verify-pin-<UTC타임스탬프>.json` — jev --save 계약 평행) |
+| `--save DIR` | 없음 | 결과 JSON 저장 디렉터리(`verify-pin-<UTC타임스탬프>.json` — jev --save 계약 평행). r26부터 **증분 영수증** — 단계(init→inspected→fresh_checkout→verify_cmd→complete)마다 원자 기록, 크래시 시 마지막 성공 단계까지 보존 |
+| `--fresh-checkout` | off | 핀 SHA의 detached 클린 체크아웃에서 검증(r26). **`--verify-cmd` 필수 — 단독 지정은 exit 2**(verify-cmd 없는 fresh는 검증 부재) |
 
 | 계층 | 플래그 | 해제 조건 |
 |---|---|---|
-| 재검증 | `sha_mismatch`·`verify_cmd_failed`·`verify_cmd_timeout` | 확인 대화만으로 done 불가 — 게이트 재실행으로 플래그 소멸 확인(예: `--expect-sha`를 현재 HEAD로 갱신 후 재실행) |
-| 정당화 | `verification_input_modified`·`multipurpose_config_modified`·`verification_input_hidden`·`verification_input_ignore_hidden` | 해당 diff·은닉 확인 + 사유 기재(은닉은 `git update-index --no-assume-unchanged`/`--no-skip-worktree` 해제, ignore는 .gitignore·.git/info/exclude 제외 해제 후 재실행으로 소멸 확인 권장) |
+| 재검증 | `sha_mismatch`·`verify_cmd_failed`·`verify_cmd_timeout`·`verify_cmd_survivors`(r26) | 확인 대화만으로 done 불가 — 게이트 재실행으로 플래그 소멸 확인(예: `--expect-sha`를 현재 HEAD로 갱신 후 재실행, survivors는 프로세스 정지 후 재실행) |
+| 정당화 | `verification_input_modified`·`multipurpose_config_modified`·`verification_input_hidden`·`verification_input_ignore_hidden`·`head_moved_during_verify`(r26)·`verify_workspace_mutated`(r26) | 해당 diff·은닉 확인 + 사유 기재(은닉은 `git update-index --no-assume-unchanged`/`--no-skip-worktree` 해제, ignore는 .gitignore·.git/info/exclude 제외 해제 후 재실행으로 소멸 확인 권장). r26 신규 2종은 1회성 사건 — **재실행 소멸≠해제**, 사건 원인 기재로 해제 |
 
 | 종료코드 | 의미 |
 |---|---|
 | 0 | pass — 플래그 0건(수행한 검사 전부 통과, 미지정 검사는 평가 제외) |
 | 1 | attention — 확인 의무 플래그 1건 이상. **jev의 exit 1(폴백=진행)과 정반대** — 확인 없이 진행하면 계약 위반 |
-| 2 | config·env·git 오류 — 즉시 종료, stderr `FAIL verify pin: <사유>`, stdout 없음. **저장(--save) 실패만 예외**: 검사 결과 stdout JSON(`saved_to: null`) 출력 후 exit 2 |
+| 2 | config·env·git 오류 — 즉시 종료, stderr `FAIL verify pin: <사유>`, stdout 없음. **저장(--save) 실패·fresh remove 실패는 예외**: 검사 결과 stdout JSON(`saved_to: null`·remove 실패는 `fresh.removed: false`+`incomplete_step`) 출력 후 exit 2 |
 | 3 | 미사용 — 판단 계층(jev)이 없어 상향(escalation) 경로 자체가 없다(번호 재용 않음) |
 
 검증 입력 패턴 — `fnmatchcase`(경로 전체 또는 basename, 플랫폼 대소문자 무관. Python fnmatch의 `*`는 `/`를 관통하므로 `tests/*`가 `tests/unit/x.py`까지 덮는다):
@@ -190,6 +194,8 @@ python3 scripts/verify_pin.py --base <앵커> \
 | 다목적 설정 | `pyproject.toml` · `setup.cfg` | `multipurpose_config_modified` |
 
 검출 파이프라인: `git diff --name-only <base>`(tracked — 커밋·staged·unstaged·삭제) ∪ `git ls-files --others --exclude-standard`(untracked 신규 — **패턴 통과분만 반영**, 신규 conftest·테스트 우회 차단) ∪ `git ls-files -v` 은닉 스캔(`h` assume-unchanged·`S` skip-worktree 태그 — diff·status 양쪽에서 파일을 감춰 증거 워크플로 동반 마비시키는 우회를 검증 입력·다목적 설정 파일에 그룹 구분 없이 `verification_input_hidden` + `hidden_files`(양 그룹 통합 목록)로 드러낸다 — 그룹 2 은닉은 pyproject 무력화 직통 우회다). `--exclude-standard`라 제외된 untracked는 diff·untracked 검출 밖이다 — 검증 파일을 ignore하는 구성 자체가 저장소 위생 이상 신호다. 이 구멍은 `git ls-files --others`(제외 없음) 대조로 메운다: 제외된 untracked 검증 입력·다목적 파일은 `verification_input_ignore_hidden` + `ignore_hidden_files`로 드러난다(.gitignore·.git/info/exclude·전역 excludesFile 전부 — 원인은 `git check-ignore -v`로 확인, 매칭은 전체경로 한정·의존성 트리 test 파일 오탐 방지, r25). **완전 차단이 아니다** — 공모 약화는 노출되나 해제는 사유 기재고 감시 자동화 없이 호출 시점 1회 판정이다(r25). git 호출은 `-c core.autocrlf=false -c core.quotePath=false` 고정(CRLF 정규화 위플래그·비ASCII 경로 C-인용 fnmatch 무력화 차단), subprocess 디코드는 `errors='replace'`(비UTF-8 파일명 크래시 방지).
+
+r26 실행창·프로세스 그룹: `--verify-cmd` 지정 시 실행 직전 HEAD·`git status --porcelain -z -uall`·`.git/info/exclude` 내용을 스냅샷하고 직후 재판정한다(실행 창 전후 델타 — 게이트 시작 아님, 사전 dirty는 대상 아니다). HEAD 불일치는 `head_moved_during_verify`, tracked 레코드 변화·exclude 변화·검증입력 패턴 매칭 untracked 신규·소실은 `verify_workspace_mutated`다(패턴 밖 untracked — .pytest_cache·__pycache__ 등 산출물 — 는 `window_delta` 상세에만 기록되고 플래그 없다: 오탐 경보 피로 방지, 메인 승인 트레이드오프). 검증명령은 `start_new_session` 프로세스 그룹으로 실행된다 — 타임아웃·정상 종료 뒤 SIGTERM→폴링→SIGKILL로 그룹 전멸시키고 잔존 관측 시 `verify_cmd_survivors`(비POSIX 환경은 legacy 폴백·`process_group: false` 투명 표기). **한계**: 같은 pgid에 머무는 자손 한정 — setsid 등 신규 pgid 이탈 자손은 범위 밖이다. 실행 중 ps 실패는 생존자 판정 불능으로 exit 2다(조용한 통과 금지). `--fresh-checkout`은 r24 이름 충돌 가드(`wt/verify-pin-fresh` 브랜치·`docs/task-id/verify-pin-fresh/` 존재 시 exit 2)→잔존 복구→`worktree add --detach <시작 시점 HEAD>`→cwd=fresh 검증→`remove --force`+`prune` 순서며, **fresh 잔존은 fresh 모드 재실행으로만 정리된다** — r24 sweep은 detached를 스킵해 fresh 잔존을 못 치운다. fresh 검증은 커밋 트리 한정(untracked·unstaged는 기본 모드 영역)이며 은닉 플래그는 메인 스캔에서 여전히 발행된다.
 
 ```json
 {"ok": false, "gate": "verify-pin", "timestamp_utc": "...", "head_sha": "<HEAD 전체 SHA>",
@@ -202,11 +208,16 @@ python3 scripts/verify_pin.py --base <앵커> \
                         "hidden_files": [],
                         "ignore_hidden_files": []},
  "verify_cmd": {"command": "<원문>", "exit_code": 0, "timed_out": false, "duration_s": 1.2,
-                "stdout_tail": "<말미 500자>", "stderr_tail": "<말미 500자>"},
+                "stdout_tail": "<말미 500자>", "stderr_tail": "<말미 500자>",
+                "process_group": true, "survivors": false, "group_killed": false,
+                "window_delta": {"head_moved": false, "tracked_changed": [],
+                                 "untracked_new": [], "untracked_gone": [],
+                                 "exclude_changed": false, "untracked_matched": []}},
+ "fresh": null,
  "flags": ["verification_input_modified"], "saved_to": null}
 ```
 
-`verify_cmd`는 미지정 시 `null`. `saved_to`는 --save 미지정·실패 모두 `null`. 타임아웃 시 `verify_cmd_timeout`만 발행하고 `verify_cmd_failed`를 병기하지 않는다(배타성). `ok` = `len(flags)==0`. 게이트 분기 전수는 임시 git 저장소 fixture로 `python3 scripts/test_verify_pin.py`에서 결정적으로 검증한다(T1~T23 — r25에서 info/exclude 은닉·의존성 트리 무오탐·전역 config 격리 경화). 사용 시점·플래그 2계층·호출·감사·폴백 계약은 SKILL.md의 '검증 핀 게이트(verify_pin)' 절을 따른다.
+`verify_cmd`는 미지정 시 `null`. `fresh`는 `--fresh-checkout` 미사용 시 `null`, 사용 시 `{"used": true, "checkout_sha": ..., "worktree_path": ..., "removed": true, "leftovers_cleaned": []}`. `survivors`는 legacy 폴백 시 `null`. `saved_to`는 --save 미지정·실패 모두 `null`. 타임아웃 시 `verify_cmd_timeout`만 발행하고 `verify_cmd_failed`를 병기하지 않는다(배타성 — `verify_cmd_survivors`는 독립 축으로 병기 가능). `ok` = `len(flags)==0`. 게이트 분기 전수는 임시 git 저장소 fixture로 `python3 scripts/test_verify_pin.py`(T1~T23 — r25 경화)와 `python3 scripts/test_verify_exec.py`(T24~T42 — r26 실행 엔진·fresh·영수증)에서 결정적으로 검증한다. 사용 시점·플래그 2계층·호출·감사·폴백 계약은 SKILL.md의 '검증 핀 게이트(verify_pin)' 절을 따른다.
 
 ### 워크트리 수명주기 게이트 (r24)
 
@@ -370,4 +381,4 @@ FrontierSWE·ProgramBench는 [1]의 평가 벤치마크다(개별 링크는 [1] 
 
 ## Thanks to
 
-- **[TODO Flow](https://github.com/JakeB-5/todo-flow)** (JakeB-5, MIT) — r23~r25 게이트 3종의 설계 참조원이다. 정확-후보 SHA 핀닝(`verify_pin`의 핀 원형), 완료 시 체크아웃 자동 정리·salvage 브랜치 보존 원칙(`worktree_gate`의 수명주기 원형)을 가져왔고, 그들의 검증 게이트를 적대검토하며 발견한 결함들(검증 자기참조·환경 격차·은닉 우회)이 이 저장소의 동일 결함을 r25에서 스스로 수선하는 계기가 됐다.
+- **[TODO Flow](https://github.com/JakeB-5/todo-flow)** (JakeB-5, MIT) — r23~r26 게이트 3종의 설계 참조원이다. 정확-후보 SHA 핀닝(`verify_pin`의 핀 원형), 완료 시 체크아웃 자동 정리·salvage 브랜치 보존 원칙(`worktree_gate`의 수명주기 원형)을 가져왔고, 그들의 검증 게이트를 적대검토하며 발견한 결함들(검증 자기참조·환경 격차·은닉 우회)이 이 저장소의 동일 결함을 r25에서 스스로 수선하는 계기가 됐다. r26에서는 todo-flow의 `verification.py` stop_group(프로세스 그룹 원형)·`engine.py` require_clean(실행창 전후 클린 검사 원형)·`land()` 통합 체크아웃(fresh-checkout 원형)·`cleanup.py` write_json(증분 영수증 원형)을 어휘 이식해 검증 핀 게이트의 결함 4종을 수선했다.
