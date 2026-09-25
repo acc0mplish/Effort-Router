@@ -206,7 +206,7 @@ python3 scripts/verify_pin.py --base <앵커> \
  "flags": ["verification_input_modified"], "saved_to": null}
 ```
 
-`verify_cmd`는 미지정 시 `null`. `saved_to`는 --save 미지정·실패 모두 `null`. 타임아웃 시 `verify_cmd_timeout`만 발행하고 `verify_cmd_failed`를 병기하지 않는다(배타성). `ok` = `len(flags)==0`. 게이트 분기 전수는 임시 git 저장소 fixture로 `python3 scripts/test_verify_pin.py`에서 결정적으로 검증한다(T1~T16). 사용 시점·플래그 2계층·호출·감사·폴백 계약은 SKILL.md의 '검증 핀 게이트(verify_pin)' 절을 따른다.
+`verify_cmd`는 미지정 시 `null`. `saved_to`는 --save 미지정·실패 모두 `null`. 타임아웃 시 `verify_cmd_timeout`만 발행하고 `verify_cmd_failed`를 병기하지 않는다(배타성). `ok` = `len(flags)==0`. 게이트 분기 전수는 임시 git 저장소 fixture로 `python3 scripts/test_verify_pin.py`에서 결정적으로 검증한다(T1~T23 — r25에서 info/exclude 은닉·의존성 트리 무오탐·전역 config 격리 경화). 사용 시점·플래그 2계층·호출·감사·폴백 계약은 SKILL.md의 '검증 핀 게이트(verify_pin)' 절을 따른다.
 
 ### 워크트리 수명주기 게이트 (r24)
 
@@ -367,3 +367,7 @@ FrontierSWE·ProgramBench는 [1]의 평가 벤치마크다(개별 링크는 [1] 
 | `books/절차_그래프의_이해_procedural-graphs-ko.pdf` | [5] Procedural Graphs — LLM 에이전트를 위한 자기진화 실행 구조 (2026-09) |
 | `books/루프를_닫다_magenta-ko.pdf` | [6] Magenta — 수학 추론과 Lean 검증 사이의 루프 (2026-09) |
 | `books/많이_줄수록_여럿일수록_정말_더_잘할까_agent-papers-2026-ko.pdf` | 멀티 에이전트 논문집(번역 시리즈) |
+
+## Thanks to
+
+- **[TODO Flow](https://github.com/JakeB-5/todo-flow)** (JakeB-5, MIT) — r23~r25 게이트 3종의 설계 참조원이다. 정확-후보 SHA 핀닝(`verify_pin`의 핀 원형), 완료 시 체크아웃 자동 정리·salvage 브랜치 보존 원칙(`worktree_gate`의 수명주기 원형)을 가져왔고, 그들의 검증 게이트를 적대검토하며 발견한 결함들(검증 자기참조·환경 격차·은닉 우회)이 이 저장소의 동일 결함을 r25에서 스스로 수선하는 계기가 됐다.
