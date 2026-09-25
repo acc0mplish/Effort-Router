@@ -95,9 +95,9 @@ class VerifyExecEngineTests(unittest.TestCase):
         if inside.returncode == 0 and inside.stdout.strip() == 'true':
             self.fail(f'fixture 루트가 git 저장소 내부다({self.root}) — 호스트 오염 방지')
 
-    def make_repo(self):
+    def make_repo(self, name='repo'):
         """패턴 비통과 파일 3종뿐인 초기 커밋 저장소(test_verify_pin.make_repo 준용)."""
-        repo = self.root / 'repo'
+        repo = self.root / name
         repo.mkdir()
         write_file(repo, 'docs/readme.md', 'readme\n')
         write_file(repo, 'src/main.py', 'print("main")\n')
@@ -283,6 +283,155 @@ class VerifyExecEngineTests(unittest.TestCase):
         self.assertIn('FAIL verify pin', result.stderr)
         self.assertIn('생존자', result.stderr)
         self.assertFalse(result.stdout.strip())
+
+    # --- T34~T40 — fresh-checkout 검증 모드 ---
+
+    def make_git_shim_block_worktree_remove(self):
+        """r25 PATH git 심 패턴 — worktree remove만 exit 1 실패 유도(자체 중복)."""
+        real_git = shutil.which('git')
+        assert real_git, 'git 실행 파일을 찾을 수 없다'
+        shim_dir = self.root / 'git-shim-remove'
+        shim_dir.mkdir()
+        body = f'''#!/usr/bin/env python3
+import subprocess, sys
+RG = {real_git!r}; A = sys.argv[1:]
+if any(A[i] == 'worktree' and A[i + 1] == 'remove' for i in range(len(A) - 1)):
+    sys.stderr.write('fatal: shim blocked worktree remove\\n'); sys.exit(1)
+sys.exit(subprocess.run([RG, *A]).returncode)
+'''
+        shim = shim_dir / 'git'
+        shim.write_text(body, encoding='utf-8')
+        shim.chmod(0o755)
+        return shim_dir
+
+    def container(self, repo):
+        return repo.parent / f'{repo.name}-worktrees'
+
+    def fresh_wt(self, repo):
+        return self.container(repo) / 'verify-pin-fresh'
+
+    def test_t34_fresh_basic_flow_reflects_commit_only(self):
+        # C8 — dirty 메인 + --fresh-checkout: fresh는 커밋 내용만 반영(grep은 커밋
+        # 버전의 print를 요구 — dirty 본문이면 실패할 명령) ∧ 종료 후 worktree·
+        # .git/worktrees 소멸 ∧ 빈 컨테이너 rmdir(best-effort 성공) ∧ exit 0
+        repo = self.make_repo()
+        write_file(repo, 'src/main.py', 'DIRTY without print\n')  # 미커밋 dirty
+        cmd = "bash -c 'grep -q print src/main.py'"
+        result = run_pin(repo, '--verify-cmd', cmd, '--fresh-checkout')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output = json.loads(result.stdout)
+        self.assertEqual(output['flags'], [])
+        fresh = output['fresh']
+        self.assertTrue(fresh['used'])
+        self.assertEqual(fresh['checkout_sha'], head_sha(repo))
+        self.assertTrue(fresh['worktree_path'].endswith('verify-pin-fresh'))
+        self.assertTrue(fresh['removed'])
+        self.assertEqual(fresh['leftovers_cleaned'], [])
+        self.assertFalse(self.container(repo).exists())
+        self.assertFalse((repo / '.git' / 'worktrees').exists())
+        # 메인 워크스페이스는 게이트가 건드리지 않는다 — dirty 본문 유지(§3-8)
+        self.assertEqual((repo / 'src/main.py').read_text(encoding='utf-8'),
+                         'DIRTY without print\n')
+
+    def test_t35_fresh_neutralizes_hidden_untracked(self):
+        # C9 — info/exclude 은닉 untracked conftest.py: fresh 검증은 그 파일 없이
+        # 실행(cwd conftest 존재 시 fail하는 명령의 exit_code 0)·은닉 플래그는
+        # 메인 스캔에서 여전히 발행(투명성 — 검증된 것과 워크스페이스의 괴리)
+        repo = self.make_repo()
+        init = head_sha(repo)
+        exclude_path = repo / '.git' / 'info' / 'exclude'
+        exclude_path.parent.mkdir(parents=True, exist_ok=True)
+        exclude_path.write_text('conftest.py\n', encoding='utf-8')
+        write_file(repo, 'conftest.py', 'import pytest\n')
+        cmd = "bash -c 'test ! -f conftest.py'"
+        result = run_pin(repo, '--verify-cmd', cmd, '--fresh-checkout', '--base', init)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        output = json.loads(result.stdout)
+        self.assertIn('verification_input_ignore_hidden', output['flags'])
+        self.assertEqual(output['verify_cmd']['exit_code'], 0)
+        self.assertNotIn('verify_cmd_failed', output['flags'])
+        self.assertNotIn('verify_workspace_mutated', output['flags'])
+        self.assertTrue(output['fresh']['removed'])
+
+    def test_t36_fresh_leftover_recovery(self):
+        # C10 — 더미 잔존 양변형: 등록 worktree(detached)·미등록 디렉터리 — 정리 후
+        # 정상 완료(leftovers_cleaned 기록)
+        repo = self.make_repo()
+        # 변형 1 — 등록 worktree 잔존
+        self.assertEqual(git(repo, 'worktree', 'add', '--detach',
+                             str(self.fresh_wt(repo)), 'HEAD').returncode, 0)
+        result = run_pin(repo, '--verify-cmd', '/bin/true', '--fresh-checkout')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output = json.loads(result.stdout)
+        self.assertEqual(output['fresh']['leftovers_cleaned'],
+                         [str(self.fresh_wt(repo))])
+        self.assertTrue(output['fresh']['removed'])
+        self.assertFalse((repo / '.git' / 'worktrees').exists())
+        # 변형 2 — 미등록 디렉터리 잔존(등록 해제 후 디렉터리만 남은 형태)
+        self.fresh_wt(repo).mkdir(parents=True)
+        write_file(self.fresh_wt(repo), 'junk.txt', 'leftover\n')
+        result2 = run_pin(repo, '--verify-cmd', '/bin/true', '--fresh-checkout')
+        self.assertEqual(result2.returncode, 0, result2.stderr)
+        output2 = json.loads(result2.stdout)
+        self.assertEqual(output2['fresh']['leftovers_cleaned'],
+                         [str(self.fresh_wt(repo))])
+        self.assertFalse(self.container(repo).exists())
+
+    def test_t37_fresh_remove_failure_partial_result(self):
+        # C11(r24 M3 패턴) — worktree remove 심 실패: stdout JSON(fresh.removed
+        # false·incomplete_step worktree_remove) 출력 후 exit 2 — 검사 결과 폐기 금지
+        repo = self.make_repo()
+        shim_dir = self.make_git_shim_block_worktree_remove()
+        result = run_pin(repo, '--verify-cmd', '/bin/true', '--fresh-checkout',
+                         path_prefix=shim_dir)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        output = json.loads(result.stdout)  # 부분 결과 — stdout에 정확 1회
+        self.assertFalse(output['fresh']['removed'])
+        self.assertEqual(output['incomplete_step'], 'worktree_remove')
+        self.assertTrue(output['error'])
+        self.assertEqual(output['verify_cmd']['exit_code'], 0)
+        self.assertIsNone(output['saved_to'])
+        self.assertIn('FAIL verify pin', result.stderr)
+
+    def test_t38_fresh_without_verify_cmd_exit2(self):
+        # C8b(M3) — --fresh-checkout 단독(verify-cmd 미지정) exit 2 — 검증 부재
+        repo = self.make_repo()
+        result = run_pin(repo, '--fresh-checkout')
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn('FAIL verify pin', result.stderr)
+        self.assertFalse(result.stdout.strip())
+
+    def test_t39_fresh_main_tracked_mutation_detected(self):
+        # C5b(M4) — verify-cmd cwd=fresh여도 실행 중 메인 tracked 변형은 검출
+        repo = self.make_repo()
+        cmd = f"bash -c 'echo x >> {repo}/src/main.py'"
+        result = run_pin(repo, '--verify-cmd', cmd, '--fresh-checkout')
+        self.assertEqual(result.returncode, 1, result.stderr)
+        output = json.loads(result.stdout)
+        self.assertIn('verify_workspace_mutated', output['flags'])
+        self.assertTrue(any(record.endswith('src/main.py') for record
+                            in output['verify_cmd']['window_delta']['tracked_changed']))
+        self.assertTrue(output['fresh']['removed'])
+
+    def test_t40_fresh_name_collision_guard(self):
+        # C10b(H4) — wt/verify-pin-fresh 브랜치 ∨ docs/task-id/verify-pin-fresh/
+        # 존재 시 잔존 복구 진입 없이 exit 2 거부(양변형) — r24 관리 대상 데이터 소실 차단
+        repo = self.make_repo()
+        # 변형 1 — 브랜치 존재 + 잔존 디렉터리 병치(진입 없음의 증명: 잔존 미정리)
+        self.assertEqual(git(repo, 'branch', 'wt/verify-pin-fresh').returncode, 0)
+        self.fresh_wt(repo).mkdir(parents=True)
+        result = run_pin(repo, '--verify-cmd', '/bin/true', '--fresh-checkout')
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn('충돌', result.stderr)
+        self.assertFalse(result.stdout.strip())
+        self.assertTrue(self.fresh_wt(repo).exists(), '잔존 복구가 진입해선 안 된다')
+        self.assertTrue(self.container(repo).exists())
+        # 변형 2 — task-id 디렉터리 존재
+        repo2 = self.make_repo('repo-collision-dir')
+        (repo2 / 'docs/task-id/verify-pin-fresh').mkdir(parents=True)
+        result2 = run_pin(repo2, '--verify-cmd', '/bin/true', '--fresh-checkout')
+        self.assertEqual(result2.returncode, 2, result2.stdout)
+        self.assertIn('충돌', result2.stderr)
 
 
 if __name__ == '__main__':

@@ -8,7 +8,10 @@
 diff + untracked 신규 + ignore 제외 untracked 스캔[r25] + 은닉 지정
 ls-files -v 스캔)과 검증명령 subprocess[r26: 프로세스 그룹 제어·실행창 전후
 클린 검사 — verify_exec.py 실행 엔진]뿐이며 외부 전송·과금이 없다. 기본 모드는
-메인 워크스페이스 tracked·인덱스·HEAD를 기록하지 않는다. git 호출은
+읽기 전용이다. --fresh-checkout 모드(--verify-cmd 필수)는 저장소 밖 컨테이너
+(r24 명명 관례)와 `.git/worktrees/verify-pin-fresh` 관리 메타데이터만 쓰며 —
+후자는 종료 전 remove --force+prune으로 소멸한다. 메인 워크스페이스 tracked·
+인덱스·HEAD는 어떤 모드에서도 기록하지 않는다. git 호출은
 `-c core.autocrlf=false -c core.quotePath=false` 고정 — CRLF 정규화 위플래그와
 비ASCII 경로 C-인용(fnmatch 무력화)을 경로 자체에서 차단한다.
 종료코드: 0 pass · 1 attention(확인 의무 플래그 — jev의 exit 1 폴백과 정반대다,
@@ -77,6 +80,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                              'multipurpose 그룹 미적용)')
     parser.add_argument('--save',
                         help='결과 JSON 저장 디렉터리(verify-pin-<UTC타임스탬프>.json)')
+    parser.add_argument('--fresh-checkout', action='store_true',
+                        help='핀 SHA의 detached 클린 체크아웃에서 검증(r26 — 워크스페이스 '
+                             '오염 클래스 전멸. --verify-cmd 필수, 단독 지정은 exit 2)')
     return parser.parse_args(argv)
 
 
@@ -227,7 +233,8 @@ def inspect_verification(base_sha: str | None,
 
 
 def run_verify_window(command: str, timeout: float, process_group: bool,
-                      patterns: tuple[str, ...]) -> tuple[dict[str, Any], list[str]]:
+                      patterns: tuple[str, ...],
+                      cwd: Path | None = None) -> tuple[dict[str, Any], list[str]]:
     """verify-cmd 실행창 — 직전 스냅샷 → 실행 → 직후 재판정 델타(r26 §5.1).
 
     기준은 실행 창 전후 델타(게이트 시작 아님) — 선행 inspect_verification과
@@ -236,9 +243,9 @@ def run_verify_window(command: str, timeout: float, process_group: bool,
     오탐 방지 — §12-3 승인 트레이드오프), exclude 내용 변화는 무조건 변형이다(M8).
     ps 실패 등 엔진 오류는 verify_exec.GateConfigError — 호출부가 exit 2로
     변환한다(H2)."""
-    before = verify_exec.window_snapshot()
-    verify_cmd = verify_exec.run_verify_cmd(command, timeout, Path.cwd(),
-                                            process_group)
+    before = verify_exec.window_snapshot()  # 메인 워크스페이스 기준(fresh여도 동일, M4)
+    verify_cmd = verify_exec.run_verify_cmd(command, timeout,
+                                            cwd or Path.cwd(), process_group)
     delta = verify_exec.window_delta(before, verify_exec.window_snapshot())
     untracked_matched = match_candidates(
         delta['untracked_new'] + delta['untracked_gone'], patterns)
@@ -273,7 +280,8 @@ def verify_cmd_flags(verify: dict[str, Any]) -> tuple[str, ...]:
 def assemble_result(head_sha: str, expect_sha: str | None, base_ref: str | None,
                     base_sha: str | None, sha_matched: bool | None,
                     verification: dict[str, Any], verify_cmd: dict[str, Any] | None,
-                    flags: list[str]) -> dict[str, Any]:
+                    flags: list[str],
+                    fresh: dict[str, Any] | None = None) -> dict[str, Any]:
     """결과 dict 새 조립 — 돌연변이 없다(번들 §5 구현 노트)."""
     return {'ok': len(flags) == 0,
             'gate': GATE,
@@ -283,6 +291,7 @@ def assemble_result(head_sha: str, expect_sha: str | None, base_ref: str | None,
                     'base_sha': base_sha, 'sha_matched': sha_matched},
             'verification_input': verification,
             'verify_cmd': verify_cmd,
+            'fresh': fresh,
             'flags': list(flags),
             'saved_to': None}
 
@@ -302,13 +311,50 @@ def save_result(save_dir: str, result: dict[str, Any]) -> tuple[str | None, str 
     return str(path), None
 
 
+def fresh_prologue(head: str) -> tuple[Path, dict[str, Any]]:
+    """fresh 절차 전반 — 가드(H4)→잔존 복구→worktree add --detach(§5.2 순서).
+
+    가드·잔존 복구·add 실패는 GateConfigError — 호출부가 exit 2로 변환한다.
+    잔존 복구는 r24 sweep이 detached를 스킵해 fresh 잔존을 못 치우므로(M12)
+    fresh 모드 재실행으로만 정리된다."""
+    repo = verify_exec.main_toplevel()
+    verify_exec.fresh_guard(repo)
+    leftovers = verify_exec.fresh_leftover_cleanup(repo)
+    worktree = verify_exec.fresh_checkout(repo, head)
+    fresh = {'used': True, 'checkout_sha': head, 'worktree_path': str(worktree),
+             'removed': False, 'leftovers_cleaned': leftovers}
+    return worktree, fresh
+
+
+def fresh_epilogue(repo: Path, worktree: Path, fresh: dict[str, Any],
+                   result: dict[str, Any]) -> dict[str, Any]:
+    """fresh 절차 후반 — remove --force + prune + 빈 컨테이너 rmdir.
+
+    remove 실패는 부분 결과 JSON을 stdout에 정확 1회 출력한 뒤 exit 2(r24 M3
+    패턴 — 검사 결과 폐기 금지, §3-2 대칭). 오염 있어도 --force로 제거된다(P2)."""
+    try:
+        verify_exec.fresh_remove(repo, worktree)
+    except (GateConfigError, verify_exec.GateConfigError) as error:
+        partial = {**result, 'fresh': {**fresh, 'removed': False},
+                   'incomplete_step': 'worktree_remove', 'error': str(error)}
+        print(json.dumps(partial, ensure_ascii=False))
+        fail_config(f'fresh worktree remove 실패 — {error}')
+    return {**fresh, 'removed': True}
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     try:
         timeout = validate_timeout(args.timeout)
+        if args.fresh_checkout and args.verify_cmd is None:
+            raise GateConfigError('--fresh-checkout은 --verify-cmd와 함께 사용해야 한다'
+                                  ' — verify-cmd 없는 fresh는 검증 부재다')
         head = resolve_head()
         base_sha = resolve_base(args.base) if args.base is not None else None
-    except GateConfigError as error:
+        worktree, fresh = (None, None)
+        if args.fresh_checkout:
+            worktree, fresh = fresh_prologue(head)
+    except (GateConfigError, verify_exec.GateConfigError) as error:
         fail_config(str(error))
     verification, verification_flags = inspect_verification(base_sha, args.pattern or [])
     sha_matched = None if args.expect_sha is None else head == args.expect_sha
@@ -317,16 +363,20 @@ def main(argv: list[str] | None = None) -> None:
     window_flags: tuple[str, ...] = ()
     if args.verify_cmd is not None:
         patterns = (*VERIFICATION_PATTERNS, *(args.pattern or []))
+        cwd = worktree if worktree is not None else None
         try:
             verify_cmd, _ = run_verify_window(args.verify_cmd, timeout,
-                                              verify_exec.capability(), patterns)
+                                              verify_exec.capability(), patterns, cwd)
         except (GateConfigError, verify_exec.GateConfigError) as error:
             fail_config(str(error))
         window_flags = verify_window_flags(verify_cmd['window_delta'])
     cmd_flags = verify_cmd_flags(verify_cmd) if verify_cmd is not None else ()
     flags = [*sha_flags, *verification_flags, *cmd_flags, *window_flags]
     result = assemble_result(head, args.expect_sha, args.base, base_sha,
-                             sha_matched, verification, verify_cmd, flags)
+                             sha_matched, verification, verify_cmd, flags, fresh)
+    if worktree is not None:
+        fresh = fresh_epilogue(verify_exec.main_toplevel(), worktree, fresh, result)
+        result = {**result, 'fresh': fresh}
     if args.save is not None:
         saved, save_error = save_result(args.save, result)
         if saved is None:

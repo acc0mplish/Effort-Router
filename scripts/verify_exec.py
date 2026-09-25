@@ -337,6 +337,11 @@ def window_delta(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any
 
 # ------------------------------------------------- fresh-checkout(Phase 2 이후)
 
+def main_toplevel() -> Path:
+    """메인 저장소 루트 — fresh 경로 파생 기준(verify_pin은 메인 cwd 전제)."""
+    return Path(git_ok('rev-parse', '--show-toplevel'))
+
+
 def fresh_container(repo: Path) -> Path:
     """컨테이너 경로 — <repo.parent>/<repo.name>-worktrees(r24 명명 관례 준용)."""
     return repo.parent / f'{repo.name}-worktrees'
