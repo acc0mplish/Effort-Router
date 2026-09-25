@@ -173,7 +173,7 @@ python3 scripts/verify_pin.py --base <앵커> \
 | 계층 | 플래그 | 해제 조건 |
 |---|---|---|
 | 재검증 | `sha_mismatch`·`verify_cmd_failed`·`verify_cmd_timeout` | 확인 대화만으로 done 불가 — 게이트 재실행으로 플래그 소멸 확인(예: `--expect-sha`를 현재 HEAD로 갱신 후 재실행) |
-| 정당화 | `verification_input_modified`·`multipurpose_config_modified`·`verification_input_hidden` | 해당 diff·은닉 확인 + 사유 기재(은닉은 `git update-index --no-assume-unchanged`/`--no-skip-worktree` 해제 후 재실행으로 소멸 확인 권장) |
+| 정당화 | `verification_input_modified`·`multipurpose_config_modified`·`verification_input_hidden`·`verification_input_ignore_hidden` | 해당 diff·은닉 확인 + 사유 기재(은닉은 `git update-index --no-assume-unchanged`/`--no-skip-worktree` 해제, ignore는 .gitignore·.git/info/exclude 제외 해제 후 재실행으로 소멸 확인 권장) |
 
 | 종료코드 | 의미 |
 |---|---|
@@ -186,10 +186,10 @@ python3 scripts/verify_pin.py --base <앵커> \
 
 | 그룹 | 기본 패턴 | 플래그 |
 |---|---|---|
-| 검증 입력(기본 7종 + `--pattern` 확장) | `tests/*` · `test/*` · `test_*.py` · `*_test.py` · `conftest.py` · `pytest.ini` · `tox.ini` | `verification_input_modified` |
+| 검증 입력(기본 8종 + `--pattern` 확장) | `tests/*` · `test/*` · `test_*.py` · `*_test.py` · `conftest.py` · `pytest.ini` · `tox.ini` · `.github/workflows/*` | `verification_input_modified` |
 | 다목적 설정 | `pyproject.toml` · `setup.cfg` | `multipurpose_config_modified` |
 
-검출 파이프라인: `git diff --name-only <base>`(tracked — 커밋·staged·unstaged·삭제) ∪ `git ls-files --others --exclude-standard`(untracked 신규 — **패턴 통과분만 반영**, 신규 conftest·테스트 우회 차단) ∪ `git ls-files -v` 은닉 스캔(`h` assume-unchanged·`S` skip-worktree 태그 — diff·status 양쪽에서 파일을 감춰 증거 워크플로 동반 마비시키는 우회를 검증 입력·다목적 설정 파일에 그룹 구분 없이 `verification_input_hidden` + `hidden_files`(양 그룹 통합 목록)로 드러낸다 — 그룹 2 은닉은 pyproject 무력화 직통 우회다). `--exclude-standard`라 gitignore 등록 파일은 검출 밖이다 — 검증 파일을 ignore하는 구성 자체가 저장소 위생 이상 신호다. git 호출은 `-c core.autocrlf=false -c core.quotePath=false` 고정(CRLF 정규화 위플래그·비ASCII 경로 C-인용 fnmatch 무력화 차단), subprocess 디코드는 `errors='replace'`(비UTF-8 파일명 크래시 방지).
+검출 파이프라인: `git diff --name-only <base>`(tracked — 커밋·staged·unstaged·삭제) ∪ `git ls-files --others --exclude-standard`(untracked 신규 — **패턴 통과분만 반영**, 신규 conftest·테스트 우회 차단) ∪ `git ls-files -v` 은닉 스캔(`h` assume-unchanged·`S` skip-worktree 태그 — diff·status 양쪽에서 파일을 감춰 증거 워크플로 동반 마비시키는 우회를 검증 입력·다목적 설정 파일에 그룹 구분 없이 `verification_input_hidden` + `hidden_files`(양 그룹 통합 목록)로 드러낸다 — 그룹 2 은닉은 pyproject 무력화 직통 우회다). `--exclude-standard`라 제외된 untracked는 diff·untracked 검출 밖이다 — 검증 파일을 ignore하는 구성 자체가 저장소 위생 이상 신호다. 이 구멍은 `git ls-files --others`(제외 없음) 대조로 메운다: 제외된 untracked 검증 입력·다목적 파일은 `verification_input_ignore_hidden` + `ignore_hidden_files`로 드러난다(.gitignore·.git/info/exclude·전역 excludesFile 전부 — 원인은 `git check-ignore -v`로 확인, 매칭은 전체경로 한정·의존성 트리 test 파일 오탐 방지, r25). **완전 차단이 아니다** — 공모 약화는 노출되나 해제는 사유 기재고 감시 자동화 없이 호출 시점 1회 판정이다(r25). git 호출은 `-c core.autocrlf=false -c core.quotePath=false` 고정(CRLF 정규화 위플래그·비ASCII 경로 C-인용 fnmatch 무력화 차단), subprocess 디코드는 `errors='replace'`(비UTF-8 파일명 크래시 방지).
 
 ```json
 {"ok": false, "gate": "verify-pin", "timestamp_utc": "...", "head_sha": "<HEAD 전체 SHA>",
@@ -199,7 +199,8 @@ python3 scripts/verify_pin.py --base <앵커> \
                         "patterns": ["<검증 입력 그룹 패턴 전체>"],
                         "modified_files": ["tests/test_a.py"],
                         "multipurpose_files": ["pyproject.toml"],
-                        "hidden_files": []},
+                        "hidden_files": [],
+                        "ignore_hidden_files": []},
  "verify_cmd": {"command": "<원문>", "exit_code": 0, "timed_out": false, "duration_s": 1.2,
                 "stdout_tail": "<말미 500자>", "stderr_tail": "<말미 500자>"},
  "flags": ["verification_input_modified"], "saved_to": null}
@@ -242,7 +243,7 @@ fi
 | 서브커맨드 | 인자 | 동작 |
 |---|---|---|
 | `create` | `--task`(필수) `--base REF`(기본 HEAD) | task-id 검증 → 중복 레지스트리·경로·잔존 브랜치·base 선행 검사 → `worktree add -b wt/<task-id>` → 레지스트리 기록. add 실패 시 생성된 브랜치 best-effort 정리(부분 실패 원자성) |
-| `done` | `--task`(필수) `--drop-branch` `--no-salvage` | 7단계: 대상 확정(레지스트리리스 경로 포함) → 멱등 → locked → salvage → remove --force → prune → 기록 |
+| `done` | `--task`(필수) `--drop-branch` `--no-salvage` | 7단계: 대상 확정(레지스트리리스 경로 포함) → 멱등 → locked → phase 검사(r25) → salvage(동시 작성 감지 루프, r25) → remove --force → prune → 기록 |
 | `list` | `--du` | worktree·레지스트리·state.json phase 대조 entries + summary. 제거 대상 1건 이상 시 exit 1 |
 | `sweep` | `--dry-run` `--unmanaged` `--drop-branch` | eligible(done·고아)에 done 절차 일괄 적용. `--dry-run`은 보고만(무변경), `--unmanaged`는 미관리도 salvage 후 제거 |
 
@@ -277,7 +278,7 @@ done 결과 JSON(레지스트리리스·고아 경로의 복구 기록은 stdout
               "already_removed": false, "registry_less": false},
  "salvage": {"performed": true, "commit": "<sha>", "changes": 3,
              "files": ["src/a.py", "notes.txt"],
-             "skipped_by_option": false, "discarded_changes": 0},
+             "skipped_by_option": false, "discarded_changes": 0, "rounds": 1},
  "pruned": true,
  "branch": {"name": "wt/r24-x", "preserved": true, "dropped": false, "tip_sha": "<sha>"},
  "registry": {"path": "docs/task-id/r24-x/worktree.json", "updated": true},
@@ -286,7 +287,7 @@ done 결과 JSON(레지스트리리스·고아 경로의 복구 기록은 stdout
 
 **왜 저장소 외부인가** — 저장소 내부 배치(`.worktrees/`)는 (a) 게이트가 타 저장소의 .gitignore를 수정해야 하고(범용 배포 계약과 충돌) (b) grep·LSP·파일 감시가 중복 소스 트리 전체를 훑는다(토큰·인덱싱 오염). 외부 컨테이너는 프로젝트 무변경이며 쓰기 범위가 명명규칙 단일 디렉터리로 예측 가능하다. 부모 디렉터리 쓰기 불가 시 exit 2(fail-closed).
 
-**sweep 자격** — managed(레지스트리 존재, 또는 고아 시 명명규칙 재구성: 컨테이너 내 디렉터리명=task-id ∧ 브랜치 `wt/<task-id>`) 전제로 (a) `state.json`의 `phase=="done"` 리터럴 (b) 고아 — 과업 폴더 자체 소실. **폴더가 남아 있고 state.json만 파손·부재면 고아가 아니다 — 보존한다**(판독 불가 = 판단 보류). 활성 phase·불일치(phase≠done ∧ done_utc 기록)·미관리(컨테이너 밖·수동 생성·detached HEAD)는 기본 보고만이며 제거는 `--unmanaged` 명시 시뿐이다 — 존재 ≠ 허가. 본체 작업 트리(porcelain 첫 항목)는 항상 제외다. `--unmanaged`의 salvage는 `salvage/unmanaged-*` 브랜치에 적립해 **원본 브랜치 포인터를 변경하지 않는다**.
+**sweep 자격** — managed(레지스트리 존재, 또는 고아 시 명명규칙 재구성: 컨테이너 내 디렉터리명=task-id ∧ 브랜치 `wt/<task-id>`) 전제로 (a) `state.json`의 `phase=="done"` 리터럴 (b) 고아 — 과업 폴더 자체 소실. **폴더가 남아 있고 state.json만 파손·부재면 고아가 아니다 — 보존한다**(판독 불가 = 판단 보류). 활성 phase·불일치(phase≠done ∧ done_utc 기록)·미관리(컨테이너 밖·수동 생성·detached HEAD)는 기본 보고만이며 제거는 `--unmanaged` 명시 시뿐이다 — 존재 ≠ 허가. 본체 작업 트리(porcelain 첫 항목)는 항상 제외다. `--unmanaged`의 salvage는 `salvage/unmanaged-*` 브랜치에 적립해 **원본 브랜치 포인터를 변경하지 않는다**. locked worktree는 `--unmanaged`에서도 제거하지 않는다(salvage 전 보존 분류 — unlock 후 재시도, r25).
 
 **데이터 유출 면** — salvage 커밋은 미커밋 파일 전부를 브랜치에 편입한다 — 시크릿(`.env.local` 등)·대형 바이너리 포함 가능하며 편입분은 본체 오브젝트 저장소에 영구 추가된다. 게이트 자체는 외부 전송이 없으나 **salvage 브랜치를 push하면 편입 파일이 원격에 공개된다** — `salvage_committed`(exit 1)의 확인 절차가 push 전 `salvage.files` 열람이다. 폐기 각오 시 `done --no-salvage`(폐기 수 JSON 기록 — done 전용, sweep에는 미제공).
 
@@ -294,7 +295,7 @@ done 결과 JSON(레지스트리리스·고아 경로의 복구 기록은 stdout
 
 **locked worktree** — lock은 사용자의 보존 신호다. 게이트는 자동 unlock하지 않고 exit 2 사유에 안내한다: `git worktree unlock <path>` 후 재시도. 사용자 확인 후 강제하려면 `git worktree remove -f -f <path>`(문서로만 제공 — 게이트가 실행하지 않는다).
 
-**기타 한정** — `list --du`는 `du -sb`(GNU 전용 — 실패·비GNU 시 bytes null). salvage 커밋은 identity 미정의 환경에서도 게이트 identity(`worktree-gate <worktree-gate@local>`)로 성립하고 pre-commit hook은 `--no-verify`로 우회한다(기계 절차 — hook 판단 무의미). remove 실패(파일 잠금·권한) 시 exit 2 — 재호출이 salvage 재판정(공백)으로 2중 커밋 없이 수렴한다. 게이트 분기 전수는 임시 git 저장소 fixture로 `python3 scripts/test_worktree_gate.py`에서 결정적으로 검증한다(T1~T34). 사용 시점·호출 주체(메인 세션 단일)·시점 계약·저장소 외부 효과는 SKILL.md의 '워크트리 수명주기 게이트(worktree_gate)' 절을 따른다.
+**기타 한정** — `list --du`는 `du -sb`(GNU 전용 — 실패·비GNU 시 bytes null). salvage 커밋은 identity 미정의 환경에서도 게이트 identity(`worktree-gate <worktree-gate@local>`)로 성립하고 pre-commit hook은 `--no-verify`로 우회한다(기계 절차 — hook 판단 무의미). remove 실패(파일 잠금·권한) 시 exit 2 — 재호출이 salvage 재판정(공백)으로 2중 커밋 없이 수렴한다. phase≠done 활성 과업 done·동시 작성 지속 감지 시에도 exit 2로 차단한다(보존 방향 — 동시 작성 중단 시에도 부분 결과 JSON이 stdout에 남는다, r25). 제거 후 기록 단계 실패 시 부분 결과 JSON을 stdout에 남긴 뒤 exit 2한다(r25). 게이트 분기 전수는 임시 git 저장소 fixture로 `python3 scripts/test_worktree_gate.py`에서 결정적으로 검증한다(T1~T34·r25 hardening T35~T44 — 별도 파일 test_worktree_gate_hardening.py). 사용 시점·호출 주체(메인 세션 단일)·시점 계약·저장소 외부 효과는 SKILL.md의 '워크트리 수명주기 게이트(worktree_gate)' 절을 따른다.
 
 ## 모델 매핑
 

@@ -148,16 +148,18 @@ Stagehand 게이트는 브라우저 실행 계층(Stagehand)과 판단 계층(�
 
 ## 검증 핀 게이트(verify_pin) — 선택 검증 보강 계층
 
-검증의 자기참조 구멍(검증 대상인 테스트를 약화·삭제·신규 무력화 파일로 우회해도 재실행은 같은 약화본을 통과시킨다)과 핀 부재(옛 검증으로 새 코드가 통과한다)를 메우는 결정론 게이트다. jev·LLM 무관 — 읽기 전용 git과 검증명령 subprocess만 쓰며 외부 전송·과금이 없다(verify-cmd 출력 tail은 과업 감사 JSON에만 남는다). r23 구현이며 §5 verify 정의(핵심 테스트 1회 재실행)를 **대체하지 않는다** — 재실행에 핀·검증 입력 분리 증거를 붙이는 보강이다.
+검증의 자기참조 구멍(검증 대상인 테스트를 약화·삭제·신규 무력화 파일로 우회해도 재실행은 같은 약화본을 통과시킨다)과 핀 부재(옛 검증으로 새 코드가 통과한다)를 기계 노출로 전환하는 결정론 게이트다(완전 차단이 아니다 — 하단 '완전 차단이 아니다' 단락). jev·LLM 무관 — 읽기 전용 git과 검증명령 subprocess만 쓰며 외부 전송·과금이 없다(verify-cmd 출력 tail은 과업 감사 JSON에만 남는다). r23 구현이며 §5 verify 정의(핵심 테스트 1회 재실행)를 **대체하지 않는다** — 재실행에 핀·검증 입력 분리 증거를 붙이는 보강이다.
 
 **사용 시점** — M+ 코드 과업의 verify 단계(④리뷰 통과 후 done 전)에서 핵심 테스트 재실행에 앞세운다. 문서·설정 과업은 기존 대체 확인 수단(§3) 그대로.
 - **핀**: 실행 시점 HEAD SHA를 결과 JSON에 기록한다. `--expect-sha`에 직전 검증의 SHA를 주면 불일치 시 `sha_mismatch` — "옛 검증으로 새 코드"를 기계적으로 드러낸다.
-- **검증 입력 분리**: `--base <앵커>`(앵커 = 구현 착수 전 커밋, §5 계보) 지정 시 앵커→작업 트리 diff(커밋·staged·unstaged·삭제)와 untracked 신규 파일 중 검증 입력 패턴 통과분(테스트·conftest·러너 설정)을 검출해 `verification_input_modified`와 변경 파일 목록을 낸다. 다목적 설정 파일(pyproject.toml 등)은 별도 `multipurpose_config_modified`로 분리 검출한다. 검증 입력 변경 자체가 금지가 아니다 — 검증 입력을 바꾼 구현은 그 변경을 보고·정당화해야 한다(§3 검증 입력 변경 보고). **`not_evaluated`(base 미지정)는 '변경 없음'이 아니라 '미검사'다** — M+ 코드 과업에서 base 앵커 지정이 원칙이며 미지정 시 보고에 사유를 남긴다. **은닉 우회도 검출한다** — `assume-unchanged`·`skip-worktree`로 지정된 검증 입력·다목적 설정 파일은 그룹 구분 없이 `verification_input_hidden` + `hidden_files`로 드러난다(diff·status 양쪽에서 감춰지는 우회 경로), 비ASCII 파일명 인용 우회는 git 호출 `-c core.quotePath=false` 고정으로 차단한다.
+- **검증 입력 분리**: `--base <앵커>`(앵커 = 구현 착수 전 커밋, §5 계보) 지정 시 앵커→작업 트리 diff(커밋·staged·unstaged·삭제)와 untracked 신규 파일 중 검증 입력 패턴 통과분(테스트·conftest·러너 설정)을 검출해 `verification_input_modified`와 변경 파일 목록을 낸다. 다목적 설정 파일(pyproject.toml 등)은 별도 `multipurpose_config_modified`로 분리 검출한다. 검증 입력 변경 자체가 금지가 아니다 — 검증 입력을 바꾼 구현은 그 변경을 보고·정당화해야 한다(§3 검증 입력 변경 보고). **`not_evaluated`(base 미지정)는 '변경 없음'이 아니라 '미검사'다** — M+ 코드 과업에서 base 앵커 지정이 원칙이며 미지정 시 보고에 사유를 남긴다. **은닉 우회도 검출한다** — `assume-unchanged`·`skip-worktree`로 지정된 검증 입력·다목적 설정 파일은 그룹 구분 없이 `verification_input_hidden` + `hidden_files`로 드러난다(diff·status 양쪽에서 감춰지는 우회 경로). ignore 은닉(untracked 파일의 .gitignore·.git/info/exclude·전역 excludesFile 제외)도 제외 해제 스캔으로 `verification_input_ignore_hidden` + `ignore_hidden_files`에 드러난다(r25 — 매칭은 전체경로 한정·원인 파일은 `git check-ignore -v`로 확인), 비ASCII 파일명 인용 우회는 git 호출 `-c core.quotePath=false` 고정으로 차단한다.
 - **증거 기록**: `--save DIR`에 결과 JSON을 남긴다(과업 폴더 감사 — jev --save 계약 평행). `--verify-cmd`를 주면 재실행 명령의 exit code까지 JSON에 포함한다(재실행과 게이트 1호출 통합).
 
 **플래그는 차단이 아니라 확인 의무며, 계층이 다르다** — 판정 권한은 메인(jev 권한 계약 준용)이나 해제 조건은 차등이다:
 - **재검증 계층** — `sha_mismatch`·`verify_cmd_failed`·`verify_cmd_timeout`: 확인 대화만으로 done 불가 — 게이트 재실행으로 플래그 소멸을 확인한다(예: sha_mismatch는 현재 HEAD로 `--expect-sha` 갱신 후 재실행).
-- **정당화 계층** — `verification_input_modified`·`multipurpose_config_modified`·`verification_input_hidden`: 해당 diff·은닉 확인과 사유 기재로 해제된다(은닉은 해제 후 재실행으로 소멸 확인 권장).
+- **정당화 계층** — `verification_input_modified`·`multipurpose_config_modified`·`verification_input_hidden`·`verification_input_ignore_hidden`: 해당 diff·은닉·제외 확인과 사유 기재로 해제된다(은닉은 해제 후, ignore는 제외 해제 후 재실행으로 소멸 확인 권장).
+
+**완전 차단이 아니다** — 게이트는 약화 가능성을 기계 노출로 전환할 뿐이다. 구현과 검증 입력을 동시에 약화하는 공모 변경도 플래그로 노출되나 해제는 정당화 계층(확인·사유 기재)이다 — 사유 없는 해제는 ④리뷰 claims 밖 보고 표적이다. 감시 자동화는 없다: 판정은 호출 시점 1회뿐이며 미호출·`--base` 미지정 검사는 일어나지 않는다(r25).
 
 **exit 1은 jev의 exit 1(폴백=진행)과 정반대다** — verify_pin exit 1은 '확인 의무 잔존' 신호로, 확인 없이 진행하면 계약 위반이다.
 
@@ -171,17 +173,17 @@ Stagehand 게이트는 브라우저 실행 계층(Stagehand)과 판단 계층(�
 
 워크트리 격리(③구현 분리·팬아웃 병렬 실행)의 수명주기 — 생성·완료 제거 — 를 기계 강제하는 게이트다. 반복 관측 실패(과업 완료 후 worktree 잔존 → 디스크 고갈)의 영구 예방 장치이며 r24 구현이다. 미포스 `git worktree remove`는 작업 트리가 dirty(tracked 수정·staged)하거나 untracked 파일이 있으면 거부된다(실측) — 수동 제거가 반복 실패해 방치되는 것이 이 실패의 원인이므로, 제거는 게이트가 강제한다.
 
-**핵심 원칙 — 강제 제거가 기본, 단 데이터 파기가 아니다.** git worktree의 커밋은 본체 오브젝트 저장소에 공유되므로 디렉터리 제거 자체는 커밋 분실이 아니다. 실손 위험은 미커밋 변경분(tracked 수정·staged·untracked 비ignored)뿐이다 — done은 이들을 자동 salvage 커밋한 뒤 제거·prune한다. **salvage는 커밋 추가이지 리셋이 아니다**(§5 롤백 수단 제한 — `reset --hard`·강제 체크아웃 금지 — 과 정합). ignored 파일(node_modules·빌드 산출)은 폐기 대상이며 salvage하지 않는다.
+**핵심 원칙 — 강제 제거가 기본, 단 데이터 파기가 아니다.** git worktree의 커밋은 본체 오브젝트 저장소에 공유되므로 디렉터리 제거 자체는 커밋 분실이 아니다. 실손 위험은 미커밋 변경분(tracked 수정·staged·untracked 비ignored)뿐이다 — done은 이들을 자동 salvage 커밋한 뒤 제거·prune한다. **salvage는 커밋 추가이지 리셋이 아니다**(§5 롤백 수단 제한 — `reset --hard`·강제 체크아웃 금지 — 과 정합). ignored 파일(node_modules·빌드 산출)은 폐기 대상이며 salvage하지 않는다. 동시 작성(활성 프로세스)이 감지되면 제거를 중단한다(exit 2 — 디렉터리·salvage 커밋 보존) — '0손실'은 작성 정지 상태 전제며 감지~제거 사이 극소 경합 창이 남는다(r25).
 
 **사용 시점** — L/XL 과업에서 ③구현 격리·팬아웃 병렬 실행에 worktree 격리를 채택할 때. 선택 계층이다 — 격리 미채택 과업은 이 게이트와 무관하다.
 - `create --task <task-id> [--base REF]` — 저장소 외부 `<repo>-worktrees/<task-id>`에 worktree·브랜치 `wt/<task-id>`를 생성하고 레지스트리(docs/task-id/<task-id>/worktree.json)를 기록한다.
-- `done --task <task-id> [--drop-branch] [--no-salvage]` — salvage 커밋(필요 시) → `worktree remove --force` → prune → 레지스트리 갱신. 브랜치는 기본 보존(제거 후에도 커밋 도달 가능 — 실측)이며 `--drop-branch`는 tip SHA 기록 후 삭제하는 명시 옵션이고 `--no-salvage`는 미커밋분 폐기를 각오한 명시 옵션이다(폐기 파일 수는 기록).
+- `done --task <task-id> [--drop-branch] [--no-salvage]` — salvage 커밋(필요 시) → `worktree remove --force` → prune → 레지스트리 갱신. 브랜치는 기본 보존(제거 후에도 커밋 도달 가능 — 실측)이며 `--drop-branch`는 tip SHA 기록 후 삭제하는 명시 옵션이고 `--no-salvage`는 미커밋분 폐기를 각오한 명시 옵션이다(폐기 파일 수는 기록). done은 salvage 후 재판정 루프로 동시 작성을 감지한다(지속 시 exit 2 보존 — 작성 프로세스 정지가 유일한 정상 탈출이며 `--no-salvage`는 활성 작성분 폐기를 각오한 비상구다, r25).
 - `list [--du]` — git worktree 목록·레지스트리·state.json phase 대조. 제거 대상(done·고아) 존재 시 exit 1(attention — 디스크 적체 신호).
 - `sweep [--dry-run] [--unmanaged]` — phase=done 과업·고아(과업 폴더 소실 — 명명규칙 재구성)의 worktree에 done 절차를 일괄 적용한다. `--unmanaged`는 게이트가 생성하지 않은 worktree(수동 생성·하니스 .claude/worktrees·기존 잔존분)도 salvage 후 제거하는 명시 옵션이다(기본 off — 자동 제거 금지. salvage는 `salvage/unmanaged-*` 브랜치에 남겨 원본 브랜치를 오염하지 않는다).
 
 **호출 주체·시점**: create·done의 호출 주체는 **메인 세션 단일**이다(§5 state writer 원칙 준용) — 서브에이전트는 게이트를 호출하지 않으며, 메인이 create 후 worktree 경로를 ③구현 스폰 프롬프트에 인계한다. 팬아웃 병렬 실행은 렌즈별 하위 task-id(`<task-id>-l<n>`)로 개별 create한다(§2 팬아웃·§5 경로 고정과 연결). **sweep은 done 누락의 안전망**이다 — 메인이 새 task-id를 부여할 때(과업 개시) `sweep --dry-run`을 1회, 실제 sweep은 사용자 명시 시에만 실행한다(무인 salvage 금지 — dry-run은 무변경이라 예외).
 
-**판정 권한**: done 판정은 메인 세션이 한다(§4 평행) — 게이트는 salvage→제거의 기계 절차만 수행하며 state.json을 쓰지 않는다(레지스트리 worktree.json은 게이트 영역). 호출 계약: 메인이 state.json에 phase=done을 패치한 뒤 `done`을 호출한다.
+**판정 권한**: done 판정은 메인 세션이 한다(§4 평행) — 게이트는 salvage→제거의 기계 절차만 수행하며 state.json을 쓰지 않는다(레지스트리 worktree.json은 게이트 영역). 호출 계약: 메인이 state.json에 phase=done을 패치한 뒤 `done`을 호출한다 — 게이트가 phase를 검사해 phase≠done이면 exit 2로 차단한다(r25·과업 중단·폐기·레지스트리 소실 혼합도 phase 전환 후).
 
 **exit 1(attention)은 확인 의무다**(jev의 exit 1 폴백=진행과 정반대 — verify_pin과 동일 어휘) — `salvage_committed`(구현 에이전트가 미커밋 상태로 남긴 변경분이 있었다 — 완료 선언·push 전 salvage 커밋·파일 목록 열람)·`removable_worktrees_present`(list — 제거 대상 잔존)·`worktree_missing`(활성 레지스트리인데 디렉터리가 게이트 밖에서 소실 — 잔여 변경분 손실 가능). exit 2 = 이유가 붙은 bypass(jev·verify_pin 폴백 계약 준용). exit 3 미사용(판단 계층 부재).
 
@@ -440,3 +442,4 @@ ChatGPT Work에서는 적용 에이전트 라인에 `없음(ChatGPT Work 단일 
 | 반려 후 재호출 프롬프트에 반려 근거 없이 재호출 | 재호출은 무상태다 — 반려 근거(렌즈 판정·결함 원문·심각도)를 데이터로 주입한다(§5 주입 방어 준용) |
 | 테스트 재실행만으로 검증 면역이라 착각 | 약화·삭제된 테스트는 재실행해도 같은 약화본을 통과한다 — 검증 핀(SHA 핀·검증 입력 분리)으로 드러낸다 |
 | 워크트리 격리 과업 완료 후 제거 없이 방치 — 디스크 고갈 반복 | 워크트리 수명주기 게이트 done으로 완료 시 제거를 강제한다 — 미커밋분은 salvage 커밋 보존 후 remove --force·prune |
+| 동시 작성 중인 worktree를 done으로 제거 — 작성 분 실손 | done의 동시 작성 감지가 제거를 중단한다(exit 2 보존) — 작성 프로세스 정지 후 재실행 |

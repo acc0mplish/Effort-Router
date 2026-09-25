@@ -608,8 +608,8 @@ revfactory/codex-harness 비교에서 차용 기준 O(1)·일회성 비용 통�
 
 | 항목 | 계약 |
 |------|------|
-| 강제 제거 | done 7단계 기계 절차 — salvage(필요 시) → `remove --force` → prune → 기록. 판정 없음, done 판정 권한은 메인(state.json phase=done 패치 후 호출) |
-| salvage 무손실 | 미커밋분(tracked 수정·staged·untracked 비ignored)만 `add -A` + 커밋 보존 — porcelain은 ignored를 제외하므로 공백 ⇔ salvage 불필요가 정확히 일치(빈 salvage 커밋 미생성). ignored는 폐기 대상. `--no-salvage`는 폐기 수 기록의 명시 옵션(done 전용) |
+| 강제 제거 | done 7단계 기계 절차 — salvage(필요 시) → `remove --force` → prune → 기록. 판정 없음, done 판정 권한은 메인(state.json phase=done 패치 후 호출); phase≠done 활성 과업 done은 exit 2 차단(r25) |
+| salvage 무손실 | 미커밋분(tracked 수정·staged·untracked 비ignored)만 `add -A` + 커밋 보존 — porcelain은 ignored를 제외하므로 공백 ⇔ salvage 불필요가 정확히 일치(빈 salvage 커밋 미생성). ignored는 폐기 대상. `--no-salvage`는 폐기 수 기록의 명시 옵션(done 전용). done은 salvage 후 재판정 3라운드로 동시 작성을 감지한다(지속 시 salvage 현황 부분 JSON 후 exit 2 보존 — 극소 경합 창 잔존, r25 정정) |
 | 실행 환경 독립성 | identity 폴백 `-c user.name=worktree-gate -c user.email=worktree-gate@local`(미정의 환경 fatal 차단)·`commit --no-verify`(pre-commit hook 차단 차단) — 어떤 로컬 환경에서도 salvage 성립 |
 | 브랜치 보존 | 제거 후에도 커밋 도달 가능(오브젝트 공유 실측) — 기본 보존, `--drop-branch`는 tip SHA 기록 후 삭제하는 명시 옵션 |
 | --unmanaged 명시 | 미관리(수동·기존 잔존분) 제거는 명시 옵션뿐(기본 off·자동 금지) — salvage는 `salvage/unmanaged-*` 브랜치에 적립, 원본 브랜치 포인터 무변경 |
@@ -621,7 +621,7 @@ revfactory/codex-harness 비교에서 차용 기준 O(1)·일회성 비용 통�
 
 | claims | 명령 원문 | 결과 |
 |---|---|---|
-| C1~C19·C25~C36 (T1~T31)·C20 (전체) | `python3 scripts/test_worktree_gate.py` | exit 0 — Ran 34 tests, OK(T32~T33 라운드1 가드·T34 라운드2 M1). RED 선실증: worktree_gate.py 부재 시점 동일 스위트 31 failures |
+| C1~C19·C25~C36 (T1~T31)·C20 (전체) | `python3 scripts/test_worktree_gate.py` | exit 0 — Ran 34 tests, OK(T32~T33 라운드1 가드·T34 라운드2 M1). RED 선실증: worktree_gate.py 부재 시점 동일 스위트 34 failures(r25 M5 정정 — 오기) |
 | 라운드2 M1 (T34) | `python3 scripts/test_worktree_gate.py WorktreeGateTests.test_t34_done_drop_branch_on_leftover_keeps_tip` | exit 0 — 잔존 경로 done --drop-branch에서 tip을 삭제 전 판독: JSON branch.tip_sha·레지스트리 dropped_branch_tip non-null ∧ 브랜치 소멸(C10 순서 계약과 정합) |
 | 라운드1 G1·G2 (T32·T33) | `python3 scripts/test_worktree_gate.py WorktreeGateTests.test_t32_done_after_completion_ignores_reappeared_dir` / `...test_t33_done_no_salvage_on_leftover` | 둘 다 exit 0 — 완료 과업 재등장 디렉터리는 멱등 유지·미삭제 ∧ 잔존 경로 --no-salvage는 신규 파일 미커밋·폐기 수 기록·1차 salvage SHA 레지스트리 기록 |
 | C7 (T7 대표) | `python3 scripts/test_worktree_gate.py WorktreeGateTests.test_t7_done_salvage_tracked` | exit 0 — tracked 수정 salvage 커밋·`salvage.files` 포함·`git show wt/t-a:<파일>` 내용 일치·디렉터리 소멸 |
@@ -631,7 +631,7 @@ revfactory/codex-harness 비교에서 차용 기준 O(1)·일회성 비용 통�
 | C35 (T30 — H1) | `python3 scripts/test_worktree_gate.py WorktreeGateTests.test_t30_sweep_unmanaged_salvage_branch` | exit 0 — 수동 worktree 제거 ∧ `salvage/unmanaged-*` 브랜치에 미커밋분 적립 ∧ 원본 브랜치 포인터 무변경 |
 | C21 | `python3 docs/task-id/r24-worktree-gate/check_structure.py` | exit 0 — PASS (SKILL 순수 삽입 +28줄·3단편 verbatim·README/TESTS 헤더) |
 | C22 | `git diff --name-only 3a12a43 -- scripts/jev_judge.py scripts/jev_modes.py scripts/stagehand_gate.py scripts/stagehand_gate_policy.py scripts/stagehand_runner.py scripts/verify_pin.py` | 빈 출력, exit 0 — 기존 스크립트 무변경 |
-| C23 | `wc -l scripts/worktree_gate.py scripts/worktree_gate_lib.py scripts/test_worktree_gate.py` | 366·384·543 — 각 ≤650 ∧ README '### 워크트리 수명주기 게이트 (r24)'·TESTS '## r24' 헤더 존재(위 check_structure.py 동일 실행) |
+| C23 | `wc -l scripts/worktree_gate.py scripts/worktree_gate_lib.py scripts/test_worktree_gate.py` | 374·404·605(r25 M5 정정 — 오기) — 각 ≤650 ∧ README '### 워크트리 수명주기 게이트 (r24)'·TESTS '## r24' 헤더 존재(위 check_structure.py 동일 실행) |
 | C24 | (메인 verify 단계) 설치본 2곳 `diff -q` | 메인 수행 — 게이트 3파일 미러 diff 0 목표 |
 
 구현 실측 정정(번들 가정 대비): `git worktree remove --force` 실패 시(실측 — 임시 저장소 chmod 555, remove rc 255) git은 **admin 메타데이터를 제거하고 디렉터리만 남긴다** — 번들 §5 done 2단계의 "재판정 후 재 remove" 가정과 달라진다. 이에 잔존 수렴 경로를 구현했다: porcelain 부재 ∧ 레지스트리 활성 ∧ 브랜치 앵커 존재 ∧ 레지스트리 path 디렉터리 잔존이면, 임시 인덱스(read-tree tip → add -A → diff-index --cached — oid 비교라 stat 오탐 없음, 본체 인덱스 비접촉)로 미커밋분 재판정 후 commit-tree·update-ref로 salvage 적립하고 잔존 디렉터리를 rmtree로 마무리한다(C29 exit 0 수렴 — T24 실측). 브랜치 앵커가 없으면 진입하지 않는다(attention 보존 — fail-closed). rmtree·update-ref는 이 수렴 경로 한정이며 게이트의 일상 파기 수단이 아니다.
@@ -641,4 +641,41 @@ revfactory/codex-harness 비교에서 차용 기준 O(1)·일회성 비용 통�
 라운드1 재구현 기록 (④ 수정요청 경증 — gap 4건): G1 잔존 수렴 진입 가드 보강 — 활성 레지스트리(done_utc 없음)·정규 명명 경로(레지스트리 path == 컨테이너/<task-id>)·브랜치 앵커 3중 조건으로 좁혀 완료 과업의 재등장 디렉터리는 멱등(already_removed)을 유지하고 레지스트리 path 변조의 임의 경로 rmtree를 차단(T32 실측)·G2 --no-salvage를 잔존 경로에도 전달 — 재판정은 임시 인덱스로 폐기 수만 판독(commit=False)하고 커밋하지 않는다(T33 실측)·G3 discard_leftover_dir의 rmtree OSError를 exit 2(사유)로 변환 — traceback+exit 1의 의미 충돌 제거·G4 문서 정정 — TESTS "+30→+28" 2곳·README exit 2 행에 --save 실패 예외(stdout JSON 후 exit 2) 명시·sweep --drop-branch 도움말에 "미관리 원본 브랜치는 삭제하지 않는다" 교정. LOW-6 동반 수선: 순수 수렴(재판정 공백) 시 레지스트리 salvage_commit에 1차 실패 당시 salvage SHA를 기록(log --grep=^salvage( 조회 — T33 후단 실측).
 
 마이크로 수정 기록 (④ 재리뷰 종결 전 M1·니트 2건): M1 잔존 경로 --drop-branch의 tip 판독을 branch -D 실행 전으로 이동(정상 경로와 동일 순서 — 삭제 후 복구는 fsck --lost-found까지 단절되는 순서 위반 수선, T34 실측)·니트 잔존 경로 --no-salvage의 skipped_by_option을 폐기 수 0이어도 True로 통일(정상 경로와의 불일치 제거 — perform_salvage_leftover의 commit=False 분기를 files 공백 판정 앞으로 이동)·니트 README "기타 한정" 테스트 범위 표기 T1~T31 → T1~T34.
+
+
+## r25 게이트 경화 — 적대검토 결함 수선 (2026-09-25)
+
+원 요구 "ㄱㄱㄸ" — r23(verify_pin)·r24(worktree_gate) 사후 적대검토에서 확정된 결함 수선(HIGH 4·MEDIUM 5·LOW 판단 6·②반려 RC-1·RH 4). `scripts/verify_pin.py`(ignore 은닉 검출·기본 패턴 8종)·`scripts/worktree_gate.py`+`worktree_gate_lib.py`(동시 작성 감지 루프·phase·경로 가드·부분 결과 보존·-z 파싱)·테스트 2건 경화 + 신규 `scripts/test_worktree_gate_hardening.py`(T35~T44) + SKILL·README·TESTS 계약 정정.
+
+계약 요지 (증류):
+
+| 항목 | 계약 |
+|------|------|
+| ignore 은닉 검출(H4·RC-1) | untracked∧ignored(.gitignore·.git/info/exclude·전역 excludesFile) 검증 입력·다목적 파일 → `verification_input_ignore_hidden` + `ignore_hidden_files`(무제외 스캔 차집합·base 무관 상시). 매칭은 전체경로 한정 — 의존성 트리 내부 test 파일 basename 오탐 방지(본 저장소 18파일 실측). 원인 파일은 `git check-ignore -v`로 확인 |
+| 동시 작성 감지(H3·V5·RH-2) | done은 salvage 후 재판정 3라운드 — 잔존 변경이면 재 salvage, 지속 시 salvage 현황 부분 JSON(stdout) 후 exit 2 보존 중단. daemon writer는 프로세스 정지 후 재실행이 유일한 정상 탈출(`--no-salvage`는 활성 작성분 폐기 각오 비상구). '0손실'은 작성 정지 상태 전제(극소 경합 창 문서화) |
+| 유도법 전환(H1) | remove 실패 유도를 chmod에서 PATH git 심으로 — FS 무관(ext4·DrvFs 동일 실측)·root 무의존. WORKTREE_GATE_TEST_ROOT DrvFs 실행으로 잔존 수렴 엔진 실증 |
+| 호스트 오염 방어(H2)·머신 의존 차단(RH-1) | fixture 루트가 git 저장소 내부면 setUp에서 전 테스트 fail(오염 전 차단). fixture env는 파일 기반 전역 config도 격리(GIT_CONFIG_GLOBAL·GIT_CONFIG_SYSTEM=/dev/null·XDG_CONFIG_HOME 전환) — 테스트가 머신 gitignore와 무관 |
+| done 사전 차단(M1·M2·V7) | 명명규칙 경로 일치(레지스트리 유무 무관)·state.json phase≠done → exit 2(레지스트리 소실+활성 phase 혼합 포함 — phase 패치 주체는 메인) |
+| 감사 보존(M3·V5) | 제거 성공 후 기록 단계 실패·동시 작성 중단 모두 부분 결과 stdout JSON 후 exit 2 |
+| 완전 차단 아님(M4) | verify_pin은 약화 가능성을 기계 노출로 전환 — 공모 약화 해제는 사유 기재, 감시 자동화 없음(호출 시점 1회) |
+
+검증 기록 (③구현 실측 — 명령 원문·exit code):
+
+| claims | 명령 원문 | 결과 |
+|---|---|---|
+| C1 | `python3 scripts/test_verify_pin.py` | exit 0 — Ran 23 tests, OK(기존 T1~T19 무수정 통과 + 신규 T20~T23) |
+| C2 | `python3 scripts/test_verify_pin.py VerifyPinCliTests.test_t20_info_exclude_ignore_hidden_flagged` | exit 0 — .git/info/exclude 등록 + untracked conftest.py 공격에서 exit 1 ∧ `verification_input_ignore_hidden` ∧ `ignore_hidden_files==['conftest.py']` ∧ base 미지정 변형도 동일 검출(not_evaluated·상시 스캔). 구 게이트는 exit 0·flags [] 무검출(H4) |
+| C3 | `python3 scripts/test_verify_pin.py VerifyPinCliTests.test_t22_ignored_non_verification_stays_clean` | exit 0 — ignore된 비검증입력 untracked + venv 의존성 트리 내부 `tests/test_dep.py`(basename은 `test_*.py`와 일치) 모두 무신호 — 오탐 0(전체경로 한정 실증, RC-1) |
+| C4 | `python3 scripts/test_verify_pin.py VerifyPinCliTests.test_t23_global_config_isolation_and_detection` | exit 0 — 격리 env에서 fixture 전역 config 미적용(conftest.py가 정상 modified 경로로 검출) ∧ `GIT_CONFIG_GLOBAL` 경유 전역 excludesFile 등록 시 `verification_input_ignore_hidden` 검출(RH-1 양방향) |
+| C5 | `python3 scripts/test_worktree_gate.py` | exit 0 — Ran 34 tests, OK(T24·T33·T34 PATH 심 전환 포함·root skip 제거) |
+| C6 | `mkdir -p /mnt/d/tmp/wgate-r25 && WORKTREE_GATE_TEST_ROOT=/mnt/d/tmp/wgate-r25 python3 scripts/test_worktree_gate.py` ∧ 동일 env `python3 scripts/test_worktree_gate_hardening.py` | 각 exit 0 — Ran 34 tests, OK(76.2s) ∧ Ran 10 tests, OK(41.6s). chmod 유도 시점 DrvFs 실패 4/34 → 0(H1 해소 — 심 유도·잔존 수렴 엔진 DrvFs 실증) |
+| C7 | `python3 scripts/worktree_gate.py list`(본 저장소 cwd) | exit 0 ∧ `summary.total==0` ∧ entries [](자기적용 스모크 — 잔존 0) |
+| C8 | `python3 scripts/verify_pin.py --base 0588175 --verify-cmd 'python3 scripts/test_worktree_gate.py'` | exit 1 ∧ flags `verification_input_modified`(변경 `scripts/test_verify_pin.py`) ∧ `verify_cmd.exit_code==0` ∧ `verification_input.ignore_hidden_files==[]`(RC-1 전체경로 매칭으로 venv 18파일 오탐 해소 실증) |
+| C9 | `wc -l scripts/verify_pin.py scripts/test_verify_pin.py scripts/worktree_gate.py scripts/worktree_gate_lib.py scripts/test_worktree_gate.py scripts/test_worktree_gate_hardening.py` | 326·474·493·502·650·352 — 각 ≤650 |
+| C10 | `git diff --name-only 0588175 -- scripts/jev_judge.py … test_plan_routing.py`(13파일) | 빈 출력, exit 0 — 기존 스크립트 무변경 |
+| C11 | `git diff 0588175 -- scripts/test_verify_pin.py \| grep -c '^-.*def test_t'` | 출력 0 — 기존 테스트 메서드 정의 무삭제 |
+| C16 | `git diff 0588175 -- scripts/test_worktree_gate.py \| grep -c '^-.*def test_t'` | 출력 0 — 기존 테스트 메서드 정의 무삭제·diff hunk는 §3 허용 편집 5종(심 전환·root skip 제거·setUp 가드·심 헬퍼 공개·독스트링+clean_env 격리) |
+| C15 | RED 선실증: `python3 scripts/test_verify_pin.py` → exit 1 — Ran 23 tests, FAILED(failures=3, errors=1 — T20 FAIL·T21 FAIL·T22 ERROR·T23 FAIL) ∧ `python3 scripts/test_worktree_gate_hardening.py` → exit 1 — Ran 10 tests, FAILED(failures=8, errors=1 — T36~T44 전부, T35는 인프라 단계 GREEN으로 실패 목록 부재) | 기록 완료 |
+
+L6 DrvFs 지연 기록(양측 실측 — 같은 머신 WSL2): test_worktree_gate.py ext4 10.7s vs DrvFs 76.2s(약 7배)·test_worktree_gate_hardening.py ext4 7.6s vs DrvFs 41.6s(약 5배) — 번들 R8 예상(~8배)과 정합. 일상 실행은 /tmp(ext4) 기본, DrvFs는 H1 실증용 일회 검증이다.
 
