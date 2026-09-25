@@ -565,3 +565,37 @@ revfactory/codex-harness 비교에서 차용 기준 O(1)·일회성 비용 통�
 | 실경로 | 미검증 캐베 — 러너 표면 vs SDK 4.1.0 공식 표면(Stagehand.create·model_api_key) 불일치 가능, 첫 실실행 소규모 수동 확인 |
 
 검증 기록: ④리뷰(review-pr-xhigh 1스폰) **승인** — claims C1·C2·C5·C7·C8 verified, C6 부분(대조 반영 4건 확인 — 기록 매체 부재·404 URL은 LOW로 축소 수용), C3·C4 Phase 2 메인 검증(미러 6/6 diff 0·'## r22' 1매치). ② 라운드1 반려(HIGH 4: exit3 오라우팅·비용 상한 스텝 수 탈락·extract 유출면·실경로 무경고) → 수정 라운드(초안 작성 재호출·반려 근거 주입) → 재② 3렌즈 전부 approve → M1·M2(act/observe 유출 면·env 삽입 미지원) 메인 직접 보강 — ④ 실측 정합 확인. round 1/0, spawns 9. 커밋 위경: r21 스크립트 선커밋 후 문서 3파일 스테이징(plan §6 제약6)
+
+## r23 검증 핀 게이트 — SHA 핀·검증 입력 분리·증거 기록 (2026-09-25)
+
+원 요구 "우리프로젝트로 검증하고 모자라다 생각한거 가져와서 필요한거 구현해" — todo-flow 비교·적대검토에서 도출된 갭 3종(검증 자기참조 구멍 — 약화·삭제·untracked 신규 무력화 테스트가 재실행에 그대로 통과 / SHA 핀 부재 — 옛 검증으로 새 코드 통과 / 외부 효과 멱등 부재)의 대응. `scripts/verify_pin.py`·`scripts/test_verify_pin.py`(신규 2파일 — T1~T16 임시 git 저장소 fixture 전수) + SKILL.md 신규 절 '검증 핀 게이트(verify_pin)' + README '검증 핀 게이트 (r23)' 섹션.
+
+계약 요지 (증류):
+
+| 항목 | 계약 |
+|------|------|
+| 핀 | 실행 시점 HEAD SHA 기록·`--expect-sha` 불일치 시 `sha_mismatch` — "옛 검증으로 새 코드" 기계 검출 |
+| 검증 입력 분리 | diff(tracked — 커밋·staged·unstaged·삭제) ∪ untracked 패턴 통과분 → `verification_input_modified`, 다목적 설정(pyproject.toml·setup.cfg)은 `multipurpose_config_modified` 별도 발행(신호 순도 유지). 은닉 지정(`assume-unchanged`·`skip-worktree` — diff·status 마비 우회)은 `ls-files -v` 태그(h·S) 스캔으로 `verification_input_hidden` + `hidden_files` 발행 |
+| 증거 기록 | `--save DIR` 결과 JSON(jev --save 계약 평행)·`--verify-cmd` exit code 동봉(재실행과 게이트 1호출 통합) |
+| 플래그 2계층 | 재검증(sha_mismatch·verify_cmd_failed·verify_cmd_timeout — 게이트 재실행으로 소멸 확인) / 정당화(verification_input_modified·multipurpose_config_modified·verification_input_hidden — diff·은닉 확인+사유 기재, 은닉은 해제 후 재실행 권장) |
+| 결정론 | git 호출 `-c core.autocrlf=false -c core.quotePath=false` 고정 — CRLF 정규화 위플래그·비ASCII 경로 C-인용(fnmatch 무력화) 경로 차단 |
+| 종료코드 | exit 1 = 확인 의무 잔존(jev exit 1 폴백=진행과 정반대)·exit 2 = bypass(저장 실패만 stdout JSON 유지·`saved_to: null`)·exit 3 미사용(판단 계층이 없어 상향 경로 부재) |
+
+검증 기록 (③구현 실측 — 명령 원문·exit code):
+
+| claims | 명령 원문 | 결과 |
+|---|---|---|
+| C1~C15 (T1~T15)·C16 (T1~T19 전 분기) | `python3 scripts/test_verify_pin.py` | exit 0 — Ran 19 tests, OK |
+| C21 (T17 — ④ HIGH-2) | `python3 scripts/test_verify_pin.py VerifyPinCliTests.test_t17_non_ascii_paths_detected` | exit 0 — 비ASCII untracked 신규·tracked 수정 양쪽 modified_files 포함(quotePath 인용 우회 차단) |
+| C22 (T18 — ④ HIGH-1) | `python3 scripts/test_verify_pin.py VerifyPinCliTests.test_t18_hidden_verification_input_flagged` | exit 0 — assume-unchanged·skip-worktree 은닉 시 `verification_input_hidden` ∧ hidden_files 포함 ∧ modified_files 비움(마비 실증) |
+| C23 (T19 — ④ 재리뷰 HIGH) | `python3 scripts/test_verify_pin.py VerifyPinCliTests.test_t19_hidden_multipurpose_flagged` | exit 0 — skip-worktree + pyproject addopts 무력화 → `verification_input_hidden` 단독 플래그 ∧ hidden_files 포함 ∧ multipurpose_files 비움(라운드1의 완전 clean 우회 차단 실증) |
+| C17 (H2) | `python3 docs/task-id/r23-verify-pin/check_structure.py` | exit 0 — PASS (SKILL 순수 삽입 +25줄·5단편 verbatim·README/TESTS 헤더) |
+| C18 | `git diff --name-only 6674612 -- scripts/jev_judge.py scripts/jev_modes.py scripts/stagehand_gate.py scripts/stagehand_gate_policy.py scripts/stagehand_runner.py` | 빈 출력, exit 0 — 기존 스크립트 무변경 |
+| C19 | `wc -l scripts/verify_pin.py scripts/test_verify_pin.py` | verify_pin.py 291·test_verify_pin.py 360 — 각 ≤650 ∧ README '### 검증 핀 게이트 (r23)'·TESTS '## r23' 헤더 존재(위 check_structure.py 동일 실행) |
+| C20 | (메인 verify 단계) 설치본 2곳 `diff -q` | 메인 수행 — 미러 diff 0 목표 |
+
+④리뷰 gap 2건(HIGH) 재구현 기록: G1 quotePath 비ASCII 인용 우회 → git 고정 플래그에 `-c core.quotePath=false` 추가(T17 실측 — 미적용 시 C-인용 출력이 fnmatch를 무력화해 clean 오판)·G2 assume-unchanged/skip-worktree 은닉 우회 → `git ls-files -v`(read-only) 태그 스캔 신규 플래그 `verification_input_hidden`(T18 실측 — diff·status 마비 상태에서도 검출. 앵커 시점에 테스트가 커밋돼 있어 인덱스==base인 실제 워크플로 기준 재현).
+
+④ 재리뷰 라운드2 재구현 기록: G3 multipurpose 그룹 은닉 우회 → 은닉 매칭을 양 그룹 패턴 통합으로 확장(플래그 종수 불변 6종·hidden_files는 통합 목록. T19 실측 — skip-worktree + addopts 무력화가 라운드1에서 exit 0·완전 clean이던 것을 `verification_input_hidden` 단독 플래그로 검출)·G4 비UTF-8 파일명 디코드 → git·verify-cmd subprocess에 `errors='replace'`(엄격 디코드 크래시가 JSON 없는 exit 1 오분류되는 경로 수선). G3의 원인은 v3 계약 구멍이었다 — 은닉 매칭이 그룹 1 패턴에만 적용된 것은 구현이 v3 계약을 문자대로 준수한 결과며 번들 v4가 양 그룹 통합으로 계약을 수정했다.
+
+구조 증명: SKILL.md +25/−0 순수 삽입(`git diff --numstat -- SKILL.md`) — check_structure.py가 기준선(git HEAD) 전 라인 보존까지 대조한다. SKILL §5 verify 정의("검증 전용 에이전트는 없다")는 유지 — verify_pin은 대체가 아니라 보강이다.
