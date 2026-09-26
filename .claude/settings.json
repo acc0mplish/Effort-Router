@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/jev_hooks.py prompt",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/jev_hooks.py\" prompt",
             "timeout": 10,
             "statusMessage": "jev memory-gate..."
           }
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/jev_hooks.py logbash",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/jev_hooks.py\" logbash",
             "timeout": 5
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/jev_hooks.py guard",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/jev_hooks.py\" guard",
             "timeout": 10,
             "statusMessage": "jev guard..."
           }
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/jev_hooks.py stop",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/jev_hooks.py\" stop",
             "timeout": 12,
             "statusMessage": "jev verify-run..."
           }
