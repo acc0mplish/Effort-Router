@@ -1,0 +1,7 @@
+node_modules/
+build/frames/
+build/smoke-*.png
+*.log
+.claude
+fonts.css
+woff2/

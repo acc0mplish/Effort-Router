@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>히어로 모션</title>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <header class="hero-bar">
+      <button id="btn-play" type="button" aria-pressed="false">▶ 재생</button>
+      <label><input id="chk-loop" type="checkbox" checked />반복</label>
+      <input
+        id="scrub"
+        type="range"
+        min="0"
+        max="24"
+        step="0.05"
+        value="0"
+        aria-label="재생 시간(초) — 임의 시점으로 이동"
+      />
+      <span id="playback-state" role="status">일시정지</span>
+      <span id="time-label">0.00초 · 프레임 0</span>
+    </header>
+    <main>
+      <canvas
+        id="hero-canvas"
+        width="1920"
+        height="1080"
+        role="img"
+        aria-label="제품 소개 모션 캔버스"
+      ></canvas>
+    </main>
+    <script src="js/config.js"></script>
+    <script src="js/engine.js"></script>
+    <script src="js/scenes.js"></script>
+    <script src="js/scenes-b.js"></script>
+    <script src="js/controls.js"></script>
+  </body>
+</html>

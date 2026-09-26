@@ -1,0 +1,10 @@
+{
+  "name": "hero-motion-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "hero-motion 프레임 내보내기·GIF 조립 도구 (격리 설치 — 저장소 루트 의존성 불변)",
+  "type": "module",
+  "dependencies": {
+    "playwright": "1.63.0"
+  }
+}
