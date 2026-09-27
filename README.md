@@ -20,7 +20,7 @@ Decision(티어 판정) → Requirement → Acceptance → Task → Evidence →
 | `AGENTS.md` | 저장소 작업의 모델·에포트 정책과 역할 템플릿 오류 예방 규칙 |
 | `agents/` | Claude Code 역할 정의 10종 + ChatGPT 데스크톱 UI 메타데이터 `openai.yaml` |
 | `platforms/` | Codex·ChatGPT 실행 어댑터와 기타 하니스 파생 문서 |
-| `scripts/` | 전역 Codex 역할 라우팅·설치 검증 스크립트 + jev 판단 계층 CLI(jev_judge.py·jev_modes.py — CLI 12종: tier·prune·escalation·memory-gate·stall·done·dup·loop·verify-run·watch·route·guard) + Stagehand 게이트 CLI(stagehand_gate.py 3종) + 검증 핀 게이트 CLI(verify_pin.py + 실행 엔진 verify_exec.py) + 워크트리 수명주기 게이트 CLI(worktree_gate.py 4종: create·done·list·sweep) |
+| `scripts/` | 전역 Codex 역할 라우팅·설치 검증 스크립트 + jev 판단 계층 CLI(jev_judge.py·jev_modes.py — CLI 12종: tier·prune·escalation·memory-gate·stall·done·dup·loop·verify-run·watch·route·guard) + Stagehand 게이트 CLI(stagehand_gate.py 3종) + 검증 핀 게이트 CLI(verify_pin.py + 실행 엔진 verify_exec.py) + 워크트리 수명주기 게이트 CLI(worktree_gate.py 4종: create·done·list·sweep) + 트리 소유 게이트 CLI(tree_gate.py 5종: claim·release·check·status·prune) |
 | `TESTS.md` | 검증 프로토콜·측정 결과·라운드별 개정 이력·재현 절차 |
 
 ## 설치 (Codex + ChatGPT 데스크톱 앱)
@@ -307,6 +307,76 @@ done 결과 JSON(레지스트리리스·고아 경로의 복구 기록은 stdout
 **locked worktree** — lock은 사용자의 보존 신호다. 게이트는 자동 unlock하지 않고 exit 2 사유에 안내한다: `git worktree unlock <path>` 후 재시도. 사용자 확인 후 강제하려면 `git worktree remove -f -f <path>`(문서로만 제공 — 게이트가 실행하지 않는다).
 
 **기타 한정** — `list --du`는 `du -sb`(GNU 전용 — 실패·비GNU 시 bytes null). salvage 커밋은 identity 미정의 환경에서도 게이트 identity(`worktree-gate <worktree-gate@local>`)로 성립하고 pre-commit hook은 `--no-verify`로 우회한다(기계 절차 — hook 판단 무의미). remove 실패(파일 잠금·권한) 시 exit 2 — 재호출이 salvage 재판정(공백)으로 2중 커밋 없이 수렴한다. phase≠done 활성 과업 done·동시 작성 지속 감지 시에도 exit 2로 차단한다(보존 방향 — 동시 작성 중단 시에도 부분 결과 JSON이 stdout에 남는다, r25). 제거 후 기록 단계 실패 시 부분 결과 JSON을 stdout에 남긴 뒤 exit 2한다(r25). 게이트 분기 전수는 임시 git 저장소 fixture로 `python3 scripts/test_worktree_gate.py`에서 결정적으로 검증한다(T1~T34·r25 hardening T35~T44 — 별도 파일 test_worktree_gate_hardening.py). 사용 시점·호출 주체(메인 세션 단일)·시점 계약·저장소 외부 효과는 SKILL.md의 '워크트리 수명주기 게이트(worktree_gate)' 절을 따른다.
+
+### 트리 소유 게이트 (r27)
+
+`scripts/tree_gate.py`는 복수 기록자(병렬 세션·헬퍼)가 같은 저장소를 다룰 때의 트리 소유 조율 게이트다(배경: 타 세션의 미커밋 변경을 추정만으로 revert한 사건 — 복수 기록자 + 트리 소유 조율 장치 부재). 작업 착수 전 세션id·트리·스코프·시각을 claim 레지스트리에 기록하고, 같은 트리의 살아있는 타 세션 claim을 check가 기계 노출한다. 레지스트리는 `$(git rev-parse --git-common-dir)/effort-router-tree-claims/` — common-dir은 모든 워크트리가 공유하므로 워크트리 간 가시성이 확보된다. `.git` 내부 비관리 디렉터리라 git이 무시하며 커밋 대상이 아니고 `.gitignore` 등록도 불필요하다. stdlib만 사용하며 저장소 국소 의존이 없어 **미러 동봉 대상**이다(verify_pin·worktree_gate와 동일, Stagehand 게이트의 미동봉과 다름).
+
+```bash
+# claim — 작업 착수 전 자기 세션 기록(타 alive claim 존재 시에도 기록은 되고 exit 1)
+python3 scripts/tree_gate.py claim --session <id> [--scope <텍스트>] [--pid N] [--tree <경로>]
+
+# release — 작업 종료 시 자기 claim 제거(멱등 — 소유 대조 후 제거)
+python3 scripts/tree_gate.py release --session <id> [--tree <경로>]
+
+# check — 같은 트리의 살아있는 타 세션 claim 탐색(1건 이상 시 exit 1)
+python3 scripts/tree_gate.py check [--session <id>] [--tree <경로>]
+
+# status — claim 전체 보고(stale 1건 이상 시 exit 1)
+python3 scripts/tree_gate.py status [--tree <경로>]
+
+# prune — stale(죽은) claim만 제거(alive 불가침) — 보고 먼저
+python3 scripts/tree_gate.py prune --dry-run
+python3 scripts/tree_gate.py prune
+```
+
+| 서브커맨드 | 인자 | 동작 |
+|---|---|---|
+| `claim` | `--session`(필수¹) `--scope`(선택) `--tree`(기본: cwd toplevel) `--pid N`(선택²) `--ttl-hours N`(기본 24) | claim 파일 원자 생성(temp+fsync+os.replace). 동일 (tree, session) 재claim은 updated_utc만 갱신 멱등 = heartbeat(claimed_utc 최초 고정). 타 alive claim 존재 시 **기록은 수행** + `foreign_claim_present` |
+| `release` | `--session`(필수) `--tree`(기본 동일) | 자기 (tree, session) claim 제거. **제거 전 레코드 session_id 대조** — 불일치·파손은 제거 거부 exit 2(파일명 충돌 방어). 부재 시 멱등 `already_released: true` |
+| `check` | `--session`(선택³) `--tree`(기본 동일) `--ttl-hours N` | 같은 트리의 살아있는 **타 세션** claim 탐색 — 상대 session_id·scope·claimed_utc·alive 근거(pid∨TTL) 보고 |
+| `status` | `--tree`(선택 — 미지정 시 레지스트리 전체) `--ttl-hours N` | 전체 claim 보고(alive·stale 판정 포함). stale 1건 이상 시 exit 1 + `stale_claims_present` |
+| `prune` | `--dry-run` `--ttl-hours N` | **stale 판정 claim만 제거**(alive 절대 불가침). stale = updated_utc TTL 초과 ∧ pid 생존 아님(사망 확인 또는 판정 불능 — pid 미전달·호스트 상이·비POSIX 포함). `--dry-run`은 보고만(무변경) |
+
+¹ `CLAUDE_SESSION_ID` 환경변수 폴백(있으면 인자 생략). ² 래퍼·세션 프로세스 pid를 호출자가 전달할 때만 유효 — 미전달 시 TTL만 의존(정직한 기본). ³ 미지정 시 자기 claim 없음 전제 전수 탐색(claim 전 사전 확인 용도).
+
+| 종료코드 | 의미 |
+|---|---|
+| 0 | 정상 — claim 성공(타 claim 없음)·release 완료(멱등 포함)·check 간섭 없음·status stale 0건·prune 완료(--dry-run 포함 — 보고는 확인 의무가 아니다, JSON 기록으로 남는다) |
+| 1 | attention — 확인 의무 플래그 1건 이상. **claim 서브커맨드의 경우 기록은 수행된 상태다**(`set -e` 셸에서 exit 1로 중단돼도 claim 파일은 이미 존재한다 — 재실행은 heartbeat 멱등). **jev의 exit 1(폴백=진행)과 정반대** — verify_pin·worktree_gate와 동일 어휘. 확인 없이 진행하면 계약 위반 |
+| 2 | config·env·git 오류 — 즉시 종료, stderr `FAIL tree gate: <사유>`, stdout 없음. 비저장소 cwd·bare 저장소·common-dir 쓰기 불가·무효 session-id·release 레코드 불일치 제거 거부. **저장(--save) 실패만 예외**: 결과 stdout JSON(`saved_to: null`) 출력 후 exit 2 |
+| 3 | 미사용 — 판단 계층(jev)이 없어 상향(escalation) 경로 자체가 없다(번호 재용 않음) |
+
+| 플래그 | 발행 조건 | 확인 절차 |
+|---|---|---|
+| `foreign_claim_present` | claim·check에서 같은 트리의 살아있는 타 세션 claim 탐색(파손 claim도 보수 alive 취급 대상) | 보고된 상대 session_id·scope·alive 근거 확인 → 읽기전용 전환 또는 신규 worktree 스폰 — 판정 권한은 메인 |
+| `stale_claims_present` | status에서 stale claim 잔존 | `prune --dry-run` 열람 후 `prune`(죽은 것만 지운다 — alive 불가침) |
+
+**명명·레지스트리** — 파일명 `<tree-hash16>-<session-sanitized>.json`(tree-hash = sha256(작업 트리 절대경로 resolved) 앞 16자, session sanitize는 `[^A-Za-z0-9._-]`→`_`). session-id 검증 `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` — **검증 상한과 sanitize 절단 상한을 64자로 통일**해 검증 통과 id의 파일명 충돌·타 세션 파일 오제거 경로를 원천 차단했다. 모든 경로 파생은 `git rev-parse --git-common-dir` 기준 — worktree 내부에서 실행해도 본체 .git 기준 레지스트리를 본다. `git worktree prune`·`verify_pin --fresh-checkout`의 `remove --force`도 이 디렉터리를 건드리지 않는다(worktree admin 메타데이터 아님).
+
+```json
+{"version": 1, "gate": "tree-gate", "session_id": "<호출자 id>",
+ "tree": "<작업 트리 절대경로>", "tree_hash": "<sha256 앞 16자>",
+ "scope": "<선택 텍스트|null>", "hostname": "<socket.gethostname()>",
+ "pid": "<전달 시 정수, 아니면 null>",
+ "claimed_utc": "<최초 claim 시각 ISO8601 UTC — 고정>",
+ "updated_utc": "<마지막 갱신 시각 — TTL 판정 기준>"}
+```
+
+응답 JSON — 모든 서브커맨드의 정상 출력(exit 0·1)은 단일 JSON 객체다(exit 2 = stdout 없음):
+
+```json
+{"ok": true, "gate": "tree-gate", "subcommand": "check", "tree": "<abs>",
+ "session_id": "<id|null>", "flags": ["foreign_claim_present"],
+ "foreign_claims": [{"session_id": "...", "scope": "...", "claimed_utc": "...",
+                     "updated_utc": "...", "alive_reason": "pid|ttl",
+                     "pid_check": "alive|dead|unsupported"}],
+ "stale_claims": [], "corrupt": [], "saved_to": null}
+```
+
+`ok` = **게이트 절차 수행 성공** — **exit 1도 `ok: true`다**(경고는 flags·세부 배열로 전달 — 수행 성공과 경고 상태의 분리). 서브커맨드별 채움: claim·check → `foreign_claims` / status → `stale_claims`·`corrupt`(전체 보고는 `claims`) / prune → `stale_claims`(제거 대상 보고) / release → 최소 필드 + `already_released`(멱등 시 true). alive = (같은 hostname ∧ pid 생존) ∨ **updated_utc가 TTL 이내** — TTL 판정 기준은 updated_utc다(heartbeat가 갱신하므로 활성 장기 세션은 TTL을 계속 리셋한다. claimed_utc는 최초 기록 고정·보고용). pid 생존은 `os.kill(pid, 0)`(ProcessLookupError=사망·PermissionError=생존) — 비POSIX·호스트 상이·pid 미전달은 `pid_check: "unsupported"` 투명 표기 후 TTL만 의존한다. 파손 claim 파일은 `corrupt`로 보고하고 판정에서는 alive 보수 취급(판독 불가 = 판단 보류 — prune 대상도 아니다). **알려진 한계**: pid 재사용·컨테이너 pid-namespace에서 같은 pid가 다른 프로세스를 가리켜 alive 오판 가능(보수 방향 수용 — 오판 비용은 확인 1회), **이 게이트의 보장은 참여 세션이 모두 claim했을 때만 성립한다**(계약 밖 기록자는 감지 대상 아님).
+
+**폴백** — 비저장소·bare·common-dir 쓰기 불가 = exit 2 = "이 게이트 없이 기존 프로세스 진행". **데이터 유출 면** — scope·session_id에 시크릿·API 키·민감 경로 기재 금지(레코드가 .git에 평문 남는다). 외부 전송은 없다(로컬 파일만). **SessionStart 훅**(`.claude/hooks/tree_claim_hook.py` + settings 엔트리, timeout 5초)은 이 저장소의 선택 어댑터다 — stdin JSON의 session_id로 `check`를 자동 수행, foreign claim 존재 시 additionalContext 경고(상대 session_id·scope·alive 근거 + "판정 권한은 메인" 안내). 훅은 항상 exit 0(세션 시작 차단 없음)이며 게이트 부재·비저장소·오류 시 무작동·무출력. jev·TYPESAFE_API_KEY 무의존(결정론). 게이트 분기 전수는 임시 git 저장소 fixture로 `python3 scripts/test_tree_gate.py`(T1~T20 — 훅 케이스 포함)에서 결정적으로 검증한다. 사용 시점·보장 성립 요건·state.json `tree_claim` 필드 계약은 SKILL.md의 '트리 소유 게이트(tree_gate)' 절을 따른다.
 
 ## 모델 매핑
 

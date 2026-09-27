@@ -196,6 +196,26 @@ Stagehand 게이트는 브라우저 실행 계층(Stagehand)과 판단 계층(�
 
 서브커맨드 표·종료코드·JSON 스키마·명명·레지스트리 전문은 README '워크트리 수명주기 게이트 (r24)' 절에 위임한다.
 
+## 트리 소유 게이트(tree_gate) — 선택 조율 계층
+
+복수 기록자(병렬 세션·헬퍼)가 같은 저장소·워크트리 풀에서 작업할 때 트리 소유 조율 장치 부재(관측 실패 — 타 세션의 미커밋 변경을 추정만으로 revert한 사건, 2026-09)를 메우는 선택 계층이다. r27 구현. claim 레지스트리(세션id·트리·스코프·시각) + check 경고 + SessionStart 훅 자동 가드로 "서로의 존재를 알 수 없었다"는 조율 부재를 기계 노출로 전환한다.
+
+**사용 시점** — 복수 세션이 같은 저장소를 다룰 가능성이 있는 L/XL 과업 착수 전 claim(기본 꺼짐 — 단일 세션이면 이 게이트와 무관). 워크트리 격리(r24)와 직교다 — r24는 자원 수명주기, r27은 기록자 조율. **효과 고지**: 게이트는 대상 저장소 .git 내부에 레지스트리 디렉터리를 생성한다(비관리·커밋 대상 아님·명명 고정 `effort-router-tree-claims`). **보장 성립 요건**: 이 게이트의 보장은 참여 세션이 모두 claim했을 때만 성립한다. 이 스킬 계약을 모르는 기록자(비로드 세션·외부 도구)는 감지 대상이 아니다 — 알려진 한계로 문서화한다.
+
+**호출·감사 계약**: `python3 <skill-dir>/scripts/tree_gate.py <서브커맨드> [인자] [--save DIR]` — 서브커맨드 5종(claim·release·check·status·prune). jev와 같은 `<skill-dir>/scripts/` 규약이며 **미러 동봉 대상**이다(저장소 국소 의존 없음 — verify_pin·worktree_gate와 동일, Stagehand 게이트의 미동봉과 다르다). `--save DIR`로 결과 JSON을 과업 폴더에 남긴다(jev --save 계약 평행).
+
+**폴백 계약** — 비저장소·bare 저장소·common-dir 쓰기 불가·무효 session-id = exit 2 = "이 게이트 없이 기존 프로세스 진행"(jev 폴백 계약 준용 — 실패는 이유가 붙은 bypass). 하니스 무관(subprocess CLI — stdlib만 사용).
+
+**권한 계약** — 경고만 한다. `foreign_claim_present` 시 읽기전용 전환·신규 worktree 스폰 여부의 판정 권한은 메인 세션에 있다(jev·r24 권한 계약 준용 — 추천만, 판정은 메인). release·prune 호출 주체도 메인 단일이다(r24 create·done 호출 주체 계약 준용).
+
+**데이터 유출 면** — scope·session_id에 시크릿·API 키·민감 경로를 기재하지 않는다(claim 레코드가 .git에 평문 남는다). 외부 전송은 없다(로컬 파일만).
+
+state.json 선택 필드 `tree_claim`: `{"session_id": "<id>", "claimed_utc": "<ISO8601>"}` — 이 과업이 어떤 세션의 트리 claim에 묶여 있었나의 **참조**다. 기재 주체·시점 = **claim 착수 직후 메인 세션**(완료 시 참조가 아님). 위 스키마 블록은 핵심 필드만 게재하며 선택 필드의 진실 원천은 본 절이다 — **향후 신규 선택 필드도 이 방식(블록 무변경 + 신규 절 서술)을 따른다**. claim 실체는 .git 레지스트리(게이트 영역)에 있고 state는 참조만 — 두 계층은 독립이며 state의 tree_claim 유무가 게이트 판정에 관여하지 않는다.
+
+**하니스 어댑터** — 게이트 본체는 하니스 무관 subprocess CLI다. Claude Code SessionStart 훅(`.claude/hooks/tree_claim_hook.py` + `.claude/settings.json` 엔트리)은 **이 저장소의 선택 어댑터**로, 세션 시작 시 check를 자동 수행해 경고를 additionalContext로 띄운다. 결정론적 — jev·TYPESAFE_API_KEY 무의존(키 부재 환경에서도 작동 — 기존 jev 후크와 다른 점). 훅은 경고만 하며 세션 시작을 차단하지 않는다(항상 exit 0 — 게이트 부재·비저장소·오류 시 무작동). 상세 계약은 README '트리 소유 게이트 (r27)' 절.
+
+서브커맨드 표·종료코드·claim 레코드·응답 JSON·명명·레지스트리 전문은 README '트리 소유 게이트 (r27)' 절에 위임한다.
+
 ## 2. 라우팅 테이블
 
 아래 역할만 호출한다. Codex는 `~/.codex/agents/*.toml`, Claude Code는 `~/.claude/agents/*.md`의 동명 역할을 사용한다. 테이블 밖 파일이 있어도 무시한다 — **존재 ≠ 허가**. 감시·운영 역할 `ops-supervisor`는 티어 단계 밖 구성원으로, 워치독 대상 스폰이 존재할 때만 메인 세션이 직접 호출한다(온디맨드 — 상시 배치 아니다. 근거: 결함 포착 실적 0건, r14 자아비판 K5) — 세션 토폴로지는 `platforms/claude.md`.

@@ -716,3 +716,39 @@ L6 DrvFs 지연 기록(양측 실측 — 같은 머신 WSL2): test_worktree_gate
 | 리뷰 HIGH 수선 — legacy 폴백 cwd | 메인 재현 시나리오(ps 제거 PATH 심만 + dirty 메인 + `--verify-cmd '/bin/cat ver.txt' --fresh-checkout`)에서 `python3 scripts/test_verify_exec.py VerifyExecEngineTests.test_t27b_fresh_legacy_fallback_runs_in_fresh_checkout` → 수선 전 exit 1 — `AssertionError: 'dirty\n' != 'committed\n'` RED 재현 / 수선 후 exit 0 — stdout_tail `committed` ∧ fresh.used true ∧ process_group false ∧ 메인 ver.txt dirty 유지 | 기록 완료 |
 | 리뷰 LOW 3건 수선 | `python3 scripts/test_verify_exec.py` → exit 0 — Ran 20 tests, OK(T27b 포함) ∧ `python3 scripts/test_verify_pin.py` → exit 0 — Ran 23 tests, OK. ①fresh_epilogue의 main_toplevel try 밖 평가 → prologue가 repo 루트 반환·epilogue 재평가 제거 ②TimeoutExpired 경로 group_killed 하드코딩 → 그룹 소멸 확인 시만 True(실측 group_dead) ③main() 65줄 → write_stage·execute_verify_window·finish_receipt 분해로 49줄(<50) | 기록 완료 |
 
+
+## r27 트리 소유 게이트 — 병렬 세션 조율 (2026-09-28)
+
+원 요구 — 재발 방지 프로토콜 1번 "트리 소유 claim: 작업 시작 전 세션id·경로·스코프·시각 기록… 살아있는 타 세션 claim 발견 시 → 읽기전용 or 신규 worktree 스폰". 관측 실패(타 머신 병렬 세션 워크트리 간섭 — 기록자 불명 변경을 추정만으로 revert)의 두 층위(조율 장치 부재·근거 없는 추정 행동)를 `scripts/tree_gate.py`(신규 — claim·release·check·status·prune 5서브커맨드)·`scripts/test_tree_gate.py`(신규 T1~T20+T8b)·SKILL·README·AGENTS·SessionStart 훅(`.claude/hooks/tree_claim_hook.py` + settings 엔트리)으로 봉쇄한다. 기존 4 게이트·기존 문서 절 구조 무변경 보존.
+
+계약 요지 (증류):
+
+| 항목 | 계약 |
+|------|------|
+| claim 단위·레지스트리 | (트리, 세션) 조합이 claim 단위. 레지스트리 `$(git rev-parse --git-common-dir)/effort-router-tree-claims/`(워크트리 간 공유·비관리·커밋 대상 아님)·파일명 `<tree-hash16>-<session-sanitized>.json`·session-id 검증과 sanitize 절단 상한 64자 통일(파일명 충돌·타 세션 파일 오제거 경로 원천 차단)·원자 쓰기(temp+fsync+os.replace)·release는 제거 전 레코드 session_id 대조(불일치·파손 거부) |
+| alive·stale 판정 | alive = (같은 hostname ∧ pid 생존) ∨ updated_utc TTL 이내 — 기준은 **updated_utc**(heartbeat가 리셋)·claimed_utc 최초 고정. pid 생존 `os.kill(pid,0)`(ProcessLookupError=사망·PermissionError=생존)·비POSIX·호스트 상이·pid 미전달은 `pid_check: "unsupported"` 표기 후 TTL 의존. 판정은 보수 방향(오판 비용 = 확인 1회)·파손 claim은 corrupt 보고 + alive 보수 취급(prune 대상 제외)·prune은 stale만 제거(stale = TTL 초과 ∧ pid 생존 아님 — alive 불가침) |
+| exit 어휘·플래그 | 0 완료·1 attention(**claim은 기록 수행 후 주의** — jev exit 1 폴백과 정반대)·2 config/env/git 오류(stderr `FAIL tree gate:`·--save 실패만 stdout JSON saved_to null 보존)·3 미사용. 플래그 2종 — `foreign_claim_present`(claim·check)·`stale_claims_present`(status) |
+| stdout 응답 | 단일 JSON 객체(exit 2는 stdout 없음) — `ok` = 절차 수행 성공(**exit 1도 ok: true** — 경고는 flags·세부 배열로 전달)·`alive_reason`(pid·ttl)·`pid_check` 투명 표기 |
+| SessionStart 훅 | stdin JSON session_id → `tree_gate.py check --session <id>` subprocess — foreign claim 시 additionalContext 경고(상대 session_id·scope·alive 근거 + 판정 권한은 메인 안내). **항상 exit 0**(세션 시작 차단 없음)·게이트 부재·비저장소·오류 시 무작동·무출력·jev·TYPESAFE_API_KEY 무의존(결정론) |
+| AGENTS 원장 1줄 | 기록자 불명 변경 revert·커밋 금지 → `scripts/tree_gate.py check`로 소유 claim 확인 먼저(추정 revert 사건의 행동 차단) |
+
+검증 기록 (③구현 실측 — 명령 원문·exit code):
+
+| claims | 명령 원문 | 결과 |
+|---|---|---|
+| C4 RED 선실증 | `python3 scripts/test_tree_gate.py`(tree_gate.py·훅 부재) | exit 1 — Ran 21 tests, FAILED (failures=21) — subprocess CLI 실행 방식으로 수집 단계 통과 후 전량 실패 |
+| C1 2단계 GREEN | Phase 1 직후 `python3 scripts/test_tree_gate.py` / Phase 2 직후 동일 | Phase 1: exit 1 — FAILED (failures=2 — T19·T20만, 훅 미구현 RED 유지) / Phase 2: exit 0 — Ran 21 tests, OK(훅 케이스 포함 전량) |
+| C2 회귀 | `python3 scripts/test_worktree_gate.py` ∧ `test_worktree_gate_hardening.py` ∧ `test_verify_pin.py` ∧ `test_verify_exec.py` ∧ `test_jev_judge.py` ∧ `test_jev_modes.py` ∧ `test_jev_modes_extra.py` ∧ `test_stagehand_gate.py` | 각 exit 0 — OK(기존 4 게이트 테스트 무수정) |
+| C3 scripts 무변경 | `git status --short scripts/` | `?? scripts/test_tree_gate.py`·`?? scripts/tree_gate.py` 2행만 — 기존 스크립트 무변경(커밋 후 `git diff 2fda0aa --name-only -- scripts/`로 동일 입증) |
+| C5 claim | 임시 git 저장소(`mktemp -d /tmp/r27-manual-XXXX`)에서 `python3 scripts/tree_gate.py claim --session sess-A --scope "r27 수동 실측" --save <repo>/docs/task-id/r27-tree-claim/` | exit 0 ∧ `.git/effort-router-tree-claims/<hash16>-sess-A.json` 생성 ∧ 레코드 필드(session_id sess-A·tree·tree_hash 16자·scope·hostname·claimed_utc==updated_utc·pid null) 정합 ∧ 감사 JSON `docs/task-id/r27-tree-claim/tree-gate-*.json` 기록(비커밋) |
+| C6 check | 동일 저장소 `check --session sess-B` | exit 1 ∧ flags `["foreign_claim_present"]` ∧ foreign_claims[0] = session_id sess-A·scope·claimed_utc·alive_reason ttl·pid_check unsupported |
+| C7 release | `release --session sess-A` → `check --session sess-B` | exit 0 ∧ claim 파일 소멸 ∧ 이후 check exit 0(간섭 없음·flags []) |
+| C8 release 멱등 | 재 `release --session sess-A` | exit 0 ∧ `already_released: true` |
+| C9 stale·prune | `claim sess-C` ∧ `claim sess-alive --pid $$` 후 `check --ttl-hours 0.000001` → `status --ttl-hours 0.000001` → `prune --dry-run --ttl-hours 0.000001` → `prune --ttl-hours 0.000001` | check exit 1 — stale sess-C는 미보고(살아있는 sess-alive만 pid 근거 보고) / status exit 1 ∧ `stale_claims_present` ∧ sess-C state stale / prune --dry-run exit 0 ∧ removed 0·파일 2건 잔존 / prune exit 0 ∧ removed 1 ∧ sess-C 소멸 ∧ sess-alive(pid 생존·TTL 초과) 보존 |
+| C10 워크트리 가시성 | `git worktree add ../demo-wt -b wt-x` → demo-wt 내부 `claim --session sess-W` → demo-wt 내부 `check --session sess-B` → 본체 cwd `check --session sess-B --tree <demo-wt 경로>` | claim exit 0 — 레지스트리는 본체 `.git/effort-router-tree-claims/`(common-dir)에 기록 ∧ worktree 내부 check exit 1 ∧ 본체 cwd check도 exit 1(동일 sess-W claim 탐색 — common-dir 공유 실증) |
+| C11 폴백 | 비저장소 cwd에서 `claim --session sess-X` | exit 2 ∧ stderr `FAIL tree gate: git 저장소가 아니다 — fatal: not a git repository …` ∧ stdout 없음 |
+| C14 훅 실측 | `echo '{"session_id": "sess-B"}' \| CLAUDE_PROJECT_DIR=<repo> python3 .claude/hooks/tree_claim_hook.py` / 동일·`CLAUDE_PROJECT_DIR=/nonexistent-r27` / clean 트리 cwd + sess-Z | foreign claim 존재: additionalContext JSON emit(session sess-alive·scope·claimed·alive=pid + "판정 권한은 메인" 안내) ∧ exit 0 / 게이트 부재: 출력 없음 ∧ exit 0 / 간섭 없음: 출력 없음 ∧ exit 0 |
+| C12 문서 정합 | — | **PR2 완료 후 ④리뷰가 판정**(SKILL·README·TESTS·AGENTS r27 절 상호 일치 — 서브커맨드 5종·exit 체계·플래그 2종·레지스트리 경로·state 필드명 `tree_claim`·AGENTS :3 cwd 확장·원장 1줄) |
+| C13 줄수 | `wc -l scripts/tree_gate.py scripts/test_tree_gate.py .claude/hooks/tree_claim_hook.py SKILL.md README.md AGENTS.md TESTS.md` | 485·489·78·466·454·8·754 — 전부 650 경고선 이내(TESTS.md는 800 하드캡 내) |
+| 검증 입력 변경 보고 | test_tree_gate.py는 **신규 검증 입력**이다(T1~T20+T8b 21건 — 게이트 분기 전수). T19·T20(훅 케이스)은 Phase 2(훅 구현)에서 GREEN 전환 — 위 C1 2단계 GREEN 행 | 기록 완료 |
+
