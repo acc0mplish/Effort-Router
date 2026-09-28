@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""r27 트리 소유 게이트 단위테스트 — 임시 git 저장소 fixture로 분기 전수(T1~T20+T8b).
+"""r27 트리 소유 게이트 단위테스트 — 임시 git 저장소 fixture로 분기 전수(T1~T18+T8b).
 
 테스트는 subprocess로 CLI를 실행한다(test_worktree_gate 관습) — import 방식이면
-수집 단계 ImportError로 RED가 성립하지 않는다. RED 단계(tree_gate.py 부재·훅
-부재)에서는 해당 테스트가 실패한다. 훅 케이스 T19·T20은 Phase 2(tree_claim_hook.py)
-착수 전까지 RED다(번들 §7 — 같은 subprocess 구조).
-claims 대응: T1=C5, T3=C6, T5=C7·C8, T6=C7, T7·T10=C9, T13=C10, T11=C11,
-T19·T20=C14, T15=§4.3 64자 패턴, 나머지는 분기 전수 결정론 검증.
+수집 단계 ImportError로 RED가 성립하지 않는다. RED 단계(tree_gate.py 부재)에서는
+해당 테스트가 실패한다. r28에서 훅 케이스(T19·T20·T21~T31b)는
+scripts/test_tree_claim_hook.py로 분할 이전했다(r25 worktree_gate/hardening
+2파일 선례 준용 — 본 파일은 게이트 본체 분기만 담당).
+claims 대응(r27): T1=C5, T3=C6, T5=C7·C8, T6=C7, T7·T10=C9, T13=C10, T11=C11,
+T15=§4.3 64자 패턴, 나머지는 분기 전수 결정론 검증.
 fixture 계약: test_worktree_gate 준용 — /tmp ext4 기본(tmp.mkdtemp, DrvFs chmod
 유도 금지 r25 H1)·clean_env 전역 config 격리·setUp 저장소 내부 가드.
 TREE_GATE_TEST_ROOT env로 fixture 루트 지정 가능(r25 M-g 관례).
@@ -26,7 +27,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 GATE = ROOT / 'scripts/tree_gate.py'
-HOOK = ROOT / '.claude/hooks/tree_claim_hook.py'
 
 # 부모 환경 오염 차단 — fixture git과 게이트·훅 subprocess 모두 적용.
 FIXTURE_ENV_KEYS = ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE',
@@ -70,17 +70,6 @@ def run_gate(cwd, *args, env_extra=None):
         env.update(env_extra)
     return subprocess.run([sys.executable, str(GATE), *args],
                           cwd=str(cwd), capture_output=True, text=True, env=env)
-
-
-def run_hook(repo, session, project_dir=None):
-    """SessionStart 훅 subprocess — stdin JSON 주입·CLAUDE_PROJECT_DIR로 fixture 지정."""
-    env = clean_env()
-    env['CLAUDE_PROJECT_DIR'] = str(project_dir if project_dir is not None else repo)
-    payload = json.dumps({'session_id': session, 'hook_event_name': 'SessionStart',
-                          'source': 'startup'})
-    return subprocess.run([sys.executable, str(HOOK)], input=payload,
-                          capture_output=True, text=True, env=env, cwd=str(repo),
-                          timeout=30)
 
 
 class TreeGateTests(unittest.TestCase):
@@ -140,13 +129,6 @@ class TreeGateTests(unittest.TestCase):
         record = self.read_claim(repo, session)
         self.claim_file(repo, session).write_text(
             json.dumps({**record, 'hostname': hostname}), encoding='utf-8')
-
-    def install_gate(self, repo):
-        """훅 계약 형상 구성 — 훅은 $CLAUDE_PROJECT_DIR/scripts/tree_gate.py를
-        찾는다(§4.9). fixture를 설치된 프로젝트 레이아웃으로 맞춘다."""
-        scripts = Path(repo) / 'scripts'
-        scripts.mkdir(parents=True, exist_ok=True)
-        shutil.copy(GATE, scripts / 'tree_gate.py')
 
     # --- claim (T1·T2·T4·T18) -------------------------------------------------
 
@@ -452,37 +434,6 @@ class TreeGateTests(unittest.TestCase):
         self.assertIn('FAIL tree gate', result.stderr)
         output = json.loads(result.stdout)  # 검사 결과 stdout 보존
         self.assertIsNone(output['saved_to'])
-
-    # --- SessionStart 훅 (T19·T20 — Phase 2까지 RED) -----------------------------
-
-    def test_t19_hook_warns_on_foreign_claim(self):
-        # C14 — foreign claim 존재 시 경고 additionalContext emit ∧ 훅 exit 0
-        self.assertTrue(HOOK.is_file(), '훅 미구현(Phase 2 착수 전 RED 구간)')
-        repo = self.make_repo()
-        self.install_gate(repo)
-        self.assertEqual(run_gate(repo, 'claim', '--session', 's-a',
-                                  '--scope', 'r27 구현').returncode, 0)
-        result = run_hook(repo, 's-b')
-        self.assertEqual(result.returncode, 0, result.stderr)  # 세션 시작 차단 없음
-        payload = json.loads(result.stdout)
-        context = payload['hookSpecificOutput']['additionalContext']
-        self.assertEqual(payload['hookSpecificOutput']['hookEventName'],
-                         'SessionStart')
-        self.assertIn('s-a', context)  # 상대 session_id
-        self.assertIn('r27 구현', context)  # scope
-        self.assertIn('ttl', context)  # alive 근거
-
-    def test_t20_hook_silent_without_conflict_or_gate(self):
-        # C14 — 간섭 없음·게이트 부재 모두 무작동·무경고·exit 0·출력 없음
-        self.assertTrue(HOOK.is_file(), '훅 미구현(Phase 2 착수 전 RED 구간)')
-        repo = self.make_repo()
-        self.install_gate(repo)
-        result = run_hook(repo, 's-b')  # claim 없음 — 간섭 없음
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), '')
-        result = run_hook(repo, 's-b', project_dir='/nonexistent-tree-gate-path')
-        self.assertEqual(result.returncode, 0, result.stderr)  # 게이트 부재 무작동
-        self.assertEqual(result.stdout.strip(), '')
 
 
 if __name__ == '__main__':
