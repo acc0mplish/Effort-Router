@@ -45,6 +45,16 @@
             "statusMessage": "jev guard..."
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/tree_claim_hook.py\" prebash",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "Stop": [

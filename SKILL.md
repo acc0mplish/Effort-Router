@@ -216,6 +216,8 @@ state.json 선택 필드 `tree_claim`: `{"session_id": "<id>", "claimed_utc": "<
 
 서브커맨드 표·종료코드·claim 레코드·응답 JSON·명명·레지스트리 전문은 README '트리 소유 게이트 (r27)' 절에 위임한다.
 
+**격리 가드(r28)** — r27 "알려준다"에 "진행 중 감지·결정론 차단"을 보태는 계층. PreToolUse(Bash) 훅(`tree_claim_hook.py prebash`)이 git 쓰기 서브커맨드마다 check를 재실행해(캐시 TTL 60초) 신규 침입자를 경고하고, foreign alive claim 존재 시에만 전체 스테이징 패턴(`add -A`·`-u`·`.`·`./`·`commit -a`, pathspec 없음)을 deny로 차단한다 — 단독 세션과 pathspec 지정 커밋은 무간섭(오탐 0). **이 차단 가드는 이 저장소의 국소 선택 어댑터다(미러 환경 미작동 — 위 하니스 어댑터 수식어 계승)**. **1세션 1트리 원칙**: 복수 세션이 같은 트리를 다루는 것은 원칙적으로 회피하며(claim 경고 시 읽기전용 전환·격리), **타 claim 존재 시 pathspec 커밋 의무**가 있다 — 전체 스테이징 금지. 경고·deny 모두 격리 명령 원문(`python3 scripts/worktree_gate.py create --task <task-id>` — 호출 주체는 메인)과 유령 탈출 안내를 포함한다: "상대 claim이 유령(세션 종료)으로 보이면 tree_gate.py status 확인 후 레지스트리 파일 수동 삭제 — prune은 alive 불가침". 긴급 회수는 env `TREE_GATE_HOOKS=0`(prebash 전체 오프 — 재시작 불요; 경고만 남기는 분리 스위치는 없다). 알려진 한계 — 파일 수준 소유권·index.lock 재시도는 범위 밖, xargs·find -exec 뒤 git·스크립트·별칭·`$()`/백틱 치환 내부·괄호 그룹 내부 git·`-C` 등 귀속 불확실 세그먼트(deny 한정)·비Bash 쓰기 도구(Edit·Write)·SessionStart 통보~첫 캐시 사이 침입자의 기준선 합류(경고 누락 — deny는 유지)는 미감지, 하니스 밖 직접 터미널 git은 무관. 상세 표는 README '트리 소유 게이트 (r27)' 절의 r28 문단.
+
 ## 2. 라우팅 테이블
 
 아래 역할만 호출한다. Codex는 `~/.codex/agents/*.toml`, Claude Code는 `~/.claude/agents/*.md`의 동명 역할을 사용한다. 테이블 밖 파일이 있어도 무시한다 — **존재 ≠ 허가**. 감시·운영 역할 `ops-supervisor`는 티어 단계 밖 구성원으로, 워치독 대상 스폰이 존재할 때만 메인 세션이 직접 호출한다(온디맨드 — 상시 배치 아니다. 근거: 결함 포착 실적 0건, r14 자아비판 K5) — 세션 토폴로지는 `platforms/claude.md`.

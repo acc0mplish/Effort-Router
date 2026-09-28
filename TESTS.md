@@ -752,3 +752,41 @@ L6 DrvFs 지연 기록(양측 실측 — 같은 머신 WSL2): test_worktree_gate
 | C13 줄수 | `wc -l scripts/tree_gate.py scripts/test_tree_gate.py .claude/hooks/tree_claim_hook.py SKILL.md README.md AGENTS.md TESTS.md` | 485·489·78·466·454·8·754 — 전부 650 경고선 이내(TESTS.md는 800 하드캡 내) |
 | 검증 입력 변경 보고 | test_tree_gate.py는 **신규 검증 입력**이다(T1~T20+T8b 21건 — 게이트 분기 전수). T19·T20(훅 케이스)은 Phase 2(훅 구현)에서 GREEN 전환 — 위 C1 2단계 GREEN 행 | 기록 완료 |
 
+
+## r28 격리 가드 — 재점검 훅·커밋 오염 방어 (2026-09-28)
+
+원 요구 — "같은프로젝트내의 세션이 있을시에는 격리에대한 문제점을 확실이 짚고 넘어가야할꺼같은데". r27 잔존 구멍 3종(경고 1회성·커밋 오염 무차단·격리 액션 미연결)을 `tree_claim_hook.py` `prebash` 서브커맨드(PreToolUse(Bash)) + settings 엔트리 + SKILL·README 등재로 봉쇄. 게이트 본체·기존 4 게이트·기존 문서 절 무변경.
+
+계약 요지 (증류):
+
+| 항목 | 계약 |
+|---|---|
+| 서브커맨드 확장 | argv 무인자·`start` = r27 SessionStart 로직 그대로(경고는 말미 격리 안내 1줄만 추가 — 기존 문구 보존)·`prebash` = 신규. 폴백 계약 동일 — 게이트 부재·비저장소·subprocess 오류·timeout·stdin 파싱 실패·`TREE_GATE_HOOKS=0`(오프 스위치 — prebash 전체, 분리 스위치 없음)은 무작동·무출력·exit 0 |
+| 재점검(레벨 1) | git 쓰기 서브커맨드 23종 감지 시만 동작 — quote 상태 추적 분할(인용 내부 `&&` 위조 세그먼트 봉쇄)·`$()`/백틱/히어독 본문(`<<`·`<<-` 종결자 라인까지) 불투명·괄호 그룹 제외·shlex 실패는 정규식 폴백(레벨 1 한정)·`-C`·`--git-dir`·`--work-tree`·`--namespace`(결합형 `-C../x`·`--git-dir=…` 포함 — 단독형만 인자 소비)는 트리거 유효·deny 제외(귀속 불확실) |
+| 캐시 | `<TMPDIR>/effort-router-tree-gate-hook/<session-sanitized>.json` — TTL 60초(`TREE_GATE_HOOK_CACHE_TTL_S` 폴백·무효값은 기본 60)·returncode 0·1은 모두 유효 판정 기록(foreign=false 포함)·temp+os.replace 원자·파손 자가치유·`corrupt_seen` 추적으로 corrupt 신규 등장 1회 통보 |
+| deny(레벨 2) | foreign_claims 배열 비빈(exit code 아님 — corrupt-only deny 불발행) ∧ shlex 성공 세그먼트 git 명령 위치 ∧ 전체 스테이징(add -A/--all/-u/--update 묶음 분해·pathspec `.`·`./` / commit -a/-all ∧ pathspec 없음 — `--` 이후 전부 pathspec·`-m` 등 값 1 스킵·값 결합 문자(`-ma`의 a)는 플래그 아님). dry-run(`--dry-run`·add -n)은 실행 안 되는 명령으로 deny 제외. 단독 세션·pathspec 병존·부분 스테이징은 허용(오탐 0) |
+| 경고·deny 병합 | 신규 침입자(기준선 차집합 — 첫 캐시는 기록만)·corrupt 신규는 additionalContext 경고, deny 동시 성립 시 deny 단독 emit(2개 JSON 객체 금지)·사유 말미 병합. deny 사유 = pathspec 안내 + 격리 명령 원문(`worktree_gate.py create --task <task-id>`) + 유령 탈출 안내("tree_gate.py status 확인 후 레지스트리 파일 수동 삭제 — prune은 alive 불가침") |
+| skipTest 가드 | 훅 케이스 전부(T19·T20·T21~T35 — `test_tree_claim_hook.py` 분리, 파일 전체 19케이스) — `HOOK.is_file()` 부재(미러 배포 환경) 시 skip: **저장소=실행·미러=skip**. T19·T20은 전치 단정의 가드 전환만(§5 유일 예외 — 단정 축소 아님) |
+| 알려진 한계 | 파일 소유권·index.lock 범위 밖·xargs/find -exec·스크립트·별칭·치환 내부·괄호 그룹 내부 git·`-C` 세그먼트(deny 한정)·비Bash 쓰기 도구(Edit·Write)·기준선 합류(경고 누락 — deny 유지)·하니스 밖 무관. R2 판명 — PreToolUse additionalContext는 공식 지원(v2.1.9 changelog 확인)·deny 스키마 문서 확인 — reason 이관 규칙 불발동 |
+
+검증 기록 (③구현 실측 — 명령 원문·exit code):
+
+| claims | 명령 원문 | 결과 |
+|---|---|---|
+| C4 RED 선실증 | `python3 scripts/test_tree_gate.py`(훅 확장 전 — 분할 전 단일 파일 34케이스 실측) | exit 1 — Ran 34 tests, FAILED (failures=8, errors=4 — T21·T22·T23·T24·T26·T27·T28·T29·T29b·T30·T31·T31b. T25는 단독 무출력이 양 경로 동일해 우연 통과) |
+| C1 저장소 | `python3 scripts/test_tree_gate.py` ∧ `python3 scripts/test_tree_claim_hook.py` | 각 exit 0 — Ran 19 tests, OK(게이트 본체 T1~T18+T8b) ∧ Ran 19 tests, OK(훅 T19·T20·T21~T35 — 분할 파일, T32~T35 갭 수선 포함) |
+| C1 미러 | 스킬 형상 임시 복제(scripts 3파일 — `.claude` 부재) 후 `python3 /tmp/r28-mirror/scripts/test_tree_gate.py` ∧ `python3 /tmp/r28-mirror/scripts/test_tree_claim_hook.py` | 각 exit 0 — Ran 19, OK(19 실행·0 skip) ∧ Ran 19, OK (skipped=19) — 총 **19 실행·19 skip·0 실패** |
+| C2 회귀 | `python3 scripts/test_worktree_gate.py` ∧ `_hardening` ∧ `test_verify_pin.py` ∧ `test_verify_exec.py` ∧ `test_jev_judge.py` ∧ `test_jev_modes.py` ∧ `test_jev_modes_extra.py` ∧ `test_stagehand_gate.py` | 각 exit 0 — 34·10·23·20·27·10·14·15 tests OK(분할 후 재실측) |
+| C5 가드 | 임시 git 저장소 foreign claim 후 prebash — `git add -A`·`git commit -am "x"`·`git add .`·`git add ./`·`git add -u` / `git add src.txt` | 각 exit 0 ∧ deny JSON(pathspec 안내·격리 명령·유령 탈출 안내 포함) / 부분 스테이징 무출력 |
+| C6 단독 | claim 부재 저장소 `git add -A` | 무출력·exit 0 ∧ 캐시 `foreign:false` 생성 |
+| C7 캐시 | TTL 내 재실행 후 epoch 대조 / `TREE_GATE_HOOK_CACHE_TTL_S=1`+sleep 후 epoch 대조 | epoch 불변(same=yes) → 갱신(renewed=yes) 실측 |
+| C8 신규·corrupt | 기준선 후 제2 claim → 만료 재점검 경고(신규 포함) → 재실행 무경고 / corrupt-only → deny 불발행·통보 1회 → 재실행 무통보 | 테스트 T29·T29b + 수동 실측 일치 |
+| C9 오탐 | `echo git add -A`·`echo "git add -A"`·`echo "x && git add -A"`·`git -C ../x add -A`·`ls -la`·`git status`·`git log`·`X=$(git add -A); echo done`·`(cd ../x && git add -A)`·히어독 본문(`cat > s.sh <<'EOF'`+`git add -A`+`EOF`)·`git -C../other add -A`·`git --git-dir=../x add -A`·`git commit -ma`·`git add --dry-run -A`·`git add -n -A`·`git add --dry-run .` | 9종+갭 수선 7반례 전부 무간섭(deny 없음)·exit 0 |
+| C10 폴백·스위치 | `CLAUDE_PROJECT_DIR=/nonexistent-r28-gate` / 비저장소 cwd / `TREE_GATE_HOOKS=0`(foreign 상태) + `git add -A` | 전부 무출력·exit 0 |
+| C11 start 확장 | `git show HEAD:.claude/hooks/tree_claim_hook.py` 훅 vs 확장 훅 — 무인자·`start` 출력 diff | 무간섭 트리 바이트 동등(0바이트) / foreign 트리 기존 문구 유지 + 격리 안내 1줄만 추가(제거줄 0) |
+| C11b 동시 성립 | 기준선 대비 신규 침입자 + `git add -A` | stdout JSON 1개(deny 단독)·reason에 신규 session 병합·additionalContext 없음 |
+| 갭 수선 D1~D4(T32~T35) | ④리뷰 gap — D1 히어독 본문 불투명·D2 결합형 귀속 불확실(startswith 확장)·D3 commit 값 결합 문자 비플래그·D4 dry-run deny 제외. RED: `python3 scripts/test_tree_claim_hook.py` → exit 1 — Ran 19, FAILED (failures=4 — T32·T33·T34·T35) → 수선 후 exit 0 | 수 manual 실측 — foreign 캐시 상태 8반례 전부 permissionDecision=None·exit 0(D2 `-C../other`는 신규 침입자 경고만 — 비차단 재점검 신호) |
+| C3 백색 | `git diff --name-only` | 예상 7파일(수정 6 — 훅·test_tree_gate·settings·SKILL·README·TESTS + 신규 test_tree_claim_hook.py — git diff는 6출력·untracked 별도) |
+| C13 줄수 | `wc -l` 전체 | 훅 558·test_tree_gate 440·test_tree_claim_hook 416·settings 73·SKILL 468·README 463·TESTS 792(800 하드캡 내) — 650 경고선 이내 유지(분할 전 test 702 초과분은 팀 승인 분할로 해소) |
+| 검증 입력 변경 보고 | test_tree_gate.py 확장(신규 13케이스 T21~T31b + T19·T20 skipTest 가드 전환) 후, 팀 승인으로 훅 케이스 15건(T19·T20·T21~T31b)을 `scripts/test_tree_claim_hook.py` 신규 파일로 분할 — 게이트 본체 19건은 원 파일 잔류. C1·C3 화이트리스트 갱신은 메인 소관 | 기록 완료 |
+
