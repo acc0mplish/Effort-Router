@@ -32,11 +32,12 @@ class FixedRoutingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             agents = Path(directory) / 'agents'
             shutil.copytree(ROOT / 'platforms/codex-agents', agents)
-            custom = agents / 'review-pr-high.toml'
-            custom.write_text(custom.read_text() + '\nsandbox_mode = "read-only"\n')
-            original = custom.read_text()
+            # 커스텀 보존·백업 단언은 변경 대상 역할에 붙인다 — review-pr-high 템플릿이
+            # 기대값과 일치한 뒤(커밋 73d3712)로는 변경 대상에서 제외돼 백업이 안 생긴다.
             stale = agents / 'plan-high.toml'
             stale.write_text(stale.read_text().replace('model = "gpt-6-sol"', 'model = "gpt-6-luna"', 1))
+            stale.write_text(stale.read_text() + '\nsandbox_mode = "read-only"\n')
+            original = stale.read_text()
 
             preview = self.run_cli('--agents-dir', str(agents))
             self.assertEqual(preview.returncode, 0, preview.stderr)
@@ -49,12 +50,12 @@ class FixedRoutingTests(unittest.TestCase):
             report = json.loads(result.stdout)
             self.assertTrue(report['restart_required'])
             self.assertTrue(report['backup_dir'])
-            self.assertEqual((Path(report['backup_dir']) / custom.name).read_text(), original)
+            self.assertEqual((Path(report['backup_dir']) / stale.name).read_text(), original)
 
             for name, (model, effort) in EXPECTED.items():
                 data = tomllib.loads((agents / f'{name}.toml').read_text())
                 self.assertEqual((data['model'], data['model_reasoning_effort']), (model, effort))
-            self.assertEqual(tomllib.loads(custom.read_text())['sandbox_mode'], 'read-only')
+            self.assertEqual(tomllib.loads(stale.read_text())['sandbox_mode'], 'read-only')
 
             result = self.run_cli('--agents-dir', str(agents), '--apply')
             self.assertEqual(result.returncode, 0, result.stderr)
