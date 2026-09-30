@@ -15,12 +15,12 @@ EXPECTED = {
     'implement-med': ('gpt-6-luna', 'max'),
     'implement-xhigh': ('gpt-6-luna', 'max'),
     'core-xhigh': ('gpt-6-luna', 'max'),
-    'plan-high': ('gpt-6-sol', 'xhigh'),
-    'plan-xhigh': ('gpt-6-sol', 'xhigh'),
-    'plan-adversary-xhigh': ('gpt-6-sol', 'xhigh'),
-    'review-pr-high': ('gpt-6-sol', 'xhigh'),
-    'review-pr-xhigh': ('gpt-6-sol', 'xhigh'),
-    'security-audit': ('gpt-6-sol', 'xhigh'),
+    'plan-high': ('gpt-6.1-sol', 'xhigh'),
+    'plan-xhigh': ('gpt-6.1-sol', 'xhigh'),
+    'plan-adversary-xhigh': ('gpt-6.1-sol', 'xhigh'),
+    'review-pr-high': ('gpt-6.1-sol', 'xhigh'),
+    'review-pr-xhigh': ('gpt-6.1-sol', 'xhigh'),
+    'security-audit': ('gpt-6.1-sol', 'xhigh'),
 }
 
 
@@ -35,7 +35,7 @@ class FixedRoutingTests(unittest.TestCase):
             # 커스텀 보존·백업 단언은 변경 대상 역할에 붙인다 — review-pr-high 템플릿이
             # 기대값과 일치한 뒤(커밋 73d3712)로는 변경 대상에서 제외돼 백업이 안 생긴다.
             stale = agents / 'plan-high.toml'
-            stale.write_text(stale.read_text().replace('model = "gpt-6-sol"', 'model = "gpt-6-luna"', 1))
+            stale.write_text(stale.read_text().replace('model = "gpt-6.1-sol"', 'model = "gpt-6-luna"', 1))
             stale.write_text(stale.read_text() + '\nsandbox_mode = "read-only"\n')
             original = stale.read_text()
 

@@ -25,7 +25,7 @@ class CodexRoutingTests(unittest.TestCase):
                 'model = "gpt-6-luna"\nmodel_reasoning_effort = "max"\n'
                 '[agents]\nenabled = true\n')
             (home / 'AGENTS.md').write_text(
-                'effort-router GPT-6-Luna GPT-6-Sol max 실패 기반 영구 예방 규칙 '
+                'effort-router GPT-6-Luna GPT-6.1-Sol max 실패 기반 영구 예방 규칙 '
                 '과거 실패 1건 CLAUDE.md .cursorrules')
 
             def verify():
@@ -40,7 +40,7 @@ class CodexRoutingTests(unittest.TestCase):
 
             path = home / 'agents' / 'review-pr-high.toml'
             original = path.read_text()
-            path.write_text(original.replace('model = "gpt-6-sol"', 'model = "gpt-6-luna"', 1))
+            path.write_text(original.replace('model = "gpt-6.1-sol"', 'model = "gpt-6-luna"', 1))
             result = verify()
             self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
             self.assertIn('agent review-pr-high expected', result.stdout)
@@ -48,7 +48,7 @@ class CodexRoutingTests(unittest.TestCase):
             path.write_text(original)
             path = home / 'agents' / 'plan-high.toml'
             original = path.read_text()
-            path.write_text(original.replace('model = "gpt-6-sol"', 'model = "gpt-6-luna"', 1))
+            path.write_text(original.replace('model = "gpt-6.1-sol"', 'model = "gpt-6-luna"', 1))
             update = subprocess.run(
                 [sys.executable, str(ROOT / 'scripts/configure_codex_plan.py'),
                  '--agents-dir', str(home / 'agents'), '--apply'],
