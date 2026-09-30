@@ -1,6 +1,6 @@
 # effort-router
 
-작업의 규모·위험도를 티어(S/M/L/XL)로 판정하고 단계별 모델·에포트를 배정하는 Codex·ChatGPT Skill. 일반 작업은 GPT-6-Luna max, 계획·고난도 추론은 GPT-6.1-Sol xhigh를 사용한다.
+작업의 규모·위험도를 티어(S/M/L/XL)로 판정하고 단계별 모델·에포트를 배정하는 Codex·ChatGPT Skill. 일반 작업은 GPT-6-Luna max, 계획·고난도 추론은 GPT-6.1-Sol high를 사용한다.
 
 ```text
 Decision(티어 판정) → Requirement → Acceptance → Task → Evidence → Learning
@@ -58,8 +58,8 @@ enabled = true
 기존 내용을 보존하고 다음 단편을 추가한다.
 
 ```markdown
-코딩 작업 착수 전 설치된 `effort-router`를 사용한다. 일반 작업은 GPT-6-Luna max, 계획·고난도 추론은 GPT-6.1-Sol xhigh를 사용한다. Terra는 사용하지 않는다. native spawn/fan-out은 사용하지 않는다.
-`configure_codex_plan.py --apply`는 고정 전역 role 매핑만 적용하고, 변경 후 Codex를 재시작한다. 동일 접근 2회 실패 시 GPT-6.1-Sol xhigh로 검토하고 확정된 구현은 GPT-6-Luna max로 진행한다.
+코딩 작업 착수 전 설치된 `effort-router`를 사용한다. 일반 작업은 GPT-6-Luna max, 계획·고난도 추론은 GPT-6.1-Sol high를 사용한다. Terra는 사용하지 않는다. native spawn/fan-out은 사용하지 않는다.
+`configure_codex_plan.py --apply`는 고정 전역 role 매핑만 적용하고, 변경 후 Codex를 재시작한다. 동일 접근 2회 실패 시 GPT-6.1-Sol high로 검토하고 확정된 구현은 GPT-6-Luna max로 진행한다.
 
 ## 실패 기반 영구 예방 규칙
 
@@ -463,13 +463,13 @@ contract_reminder 전문 — 무장 시 게이트가 노출하는 고정 문자�
 
 ## 모델 매핑
 
-일반 작업은 `gpt-6-luna / max`, 계획·고난도 추론은 `gpt-6.1-sol / xhigh`다. Terra는 사용하지 않는다. 이 설치에서는 native spawn/fan-out을 사용하지 않는다.
+일반 작업은 `gpt-6-luna / max`, 계획·고난도 추론은 `gpt-6.1-sol / high`다. Terra는 사용하지 않는다. 이 설치에서는 native spawn/fan-out을 사용하지 않는다.
 
 | 작업 | 모델·effort |
 |---|---|
 | 구현·조사·테스트·검증 | `gpt-6-luna / max` |
-| 계획·명세·아키텍처 | `gpt-6.1-sol / xhigh` |
-| 계획 검토·리뷰·보안 판정 | `gpt-6.1-sol / xhigh` |
+| 계획·명세·아키텍처 | `gpt-6.1-sol / high` |
+| 계획 검토·리뷰·보안 판정 | `gpt-6.1-sol / high` |
 
 `python3 scripts/configure_codex_plan.py --apply`는 고정 role 매핑을 백업과 함께 적용한다. 상세 설정과 검증은 [Codex adapter](platforms/codex.md)를 따른다.
 
