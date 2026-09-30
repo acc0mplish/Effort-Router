@@ -387,6 +387,79 @@ python3 scripts/tree_gate.py prune
 
 deny 출력은 단일 JSON 객체(`permissionDecision: "deny"`)며 사유에 pathspec 안내(`git add <경로>… / git commit -- <경로>…`)·격리 명령 원문·유령 탈출 안내("상대 claim이 유령(세션 종료)으로 보이면 tree_gate.py status 확인 후 레지스트리 파일 수동 삭제 — prune은 alive 불가침")를 담고, 신규 침입자·corrupt와 동시 성립 시 해당 줄을 사유 말미에 병합한다(경고를 별도 emit하지 않는다 — JSON 객체 1개 원칙). dry-run(`--dry-run`·add `-n`)은 실행 안 되는 명령으로 deny 제외하며, commit 값 결합 문자(`-ma`의 `a`)는 플래그로 오인하지 않고 `git -C../x`·`--git-dir=…` 결합형 귀속 불확실 세그먼트도 deny 대상에서 제외한다(재점검 트리거는 유효). **단독 세션(claim 부재)의 `git add -A`는 허용** — 오탐 0. 긴급 회수는 env `TREE_GATE_HOOKS=0`(prebash 전체 오프 — 재시작 불요; 경고만 남기는 분리 스위치는 없으며 settings 블록 제거도 경고를 함께 소멸시킨다). **알려진 한계**: 파일 수준 소유권 판정·index.lock 재시도 범위 밖, xargs·find -exec 뒤 git·스크립트 내부 git·별칭·`$()`/백틱 치환 내부 git·괄호 그룹 내부 git·`-C` 등 트리 귀속 불확실 세그먼트(deny 한정 — 재점검 트리거는 유효)·비Bash 쓰기 도구(Edit·Write — 감지 창은 SessionStart 1회 잔존)·SessionStart 통보~첫 캐시 기록 사이 침입자의 기준선 합류(경고 영구 누락 — deny는 유지)는 미감지이며, 하니스 밖(직접 터미널) git은 무관하다. 훅 케이스 전수는 `python3 scripts/test_tree_claim_hook.py`(T19~T35)에서 검증한다 — 저장소 국소 케이스는 `.claude/hooks` 부재 환경(미러)에서 skipTest로 자동 제외된다.
 
+### 루프 탈출 게이트 (r29)
+
+`scripts/neverstuck_gate.py`는 반복 실패 루프(같은 무브류의 증상 패치 반복 — 이슈 5개 처리가 10개로 증식)의 **결정론 무장 판정 게이트**다. 시도 이력 JSON을 받아 neverstuck 프로토콜(증상 패치 금지·메커니즘 진단 강제 — 원천 NeverStuck Protocol v1) 진입 의무(armed) 여부를 판정하고, 무장 시 `contract_reminder`(③재구현 프롬프트 주입용 고정 계약 요약)를 노출한다. stdlib만 사용하며 jev·API·git·환경·외부 파일(PROTOCOL.md 포함) 무의존 — **미러 동봉 대상**이다. 서브커맨드 없음·훅 없음(무장은 사건 기반 — 동일 무브류 3회 실패·S7 관측 시점에 호출 주체가 직접 실행한다). 사용 시점·배선·무장 시 행동 계약 전문은 SKILL.md '루프 탈출 게이트(neverstuck)' 절을 따른다.
+
+```bash
+# 무장 판정 — 시도 이력 JSON(파일 경로 또는 - = stdin)
+python3 scripts/neverstuck_gate.py --history <이력.json>
+python3 scripts/neverstuck_gate.py --history - < <이력.json>
+
+# 판정 JSON 감사 기록(not-armed도 기록 — 과업 폴더 권장)
+python3 scripts/neverstuck_gate.py --history <이력.json> --save docs/task-id/<task-id>/
+```
+
+입력 스키마 — 최상위 `{"goal"(선택), "preference_domain"(bool 선택), "attempts":[…]}`이며 시도 항목은:
+
+| 필드 | 필수 | 규칙 |
+|---|---|---|
+| `move_class` | 필수 | 문자열 — 무브류 id(1개 밴으로 덮이는 변경류 단위로 정규화 기재). 누락·비문자열은 exit 2 |
+| `outcome` | 필수 | `"worked"` \| `"failed"` — 이형값은 exit 2 |
+| `knob`·`value`·`context` | 선택 | 스칼라(str\|int\|float\|bool). **null은 결손(키 부재와 동등 취급)** — 배열·객체 기재는 exit 2. worked 시도에도 기재 의무(미기록 = s7_evaluable:false 미감지) |
+| `declared_search` | 선택 | bool — 비bool 리터럴(`1`·`"true"`)은 exit 2, null·부재는 결손(false). true는 의도적 탐색 선언(판정 대상 제외) |
+| `preference_domain`(최상위) | 선택 | bool — 취향 도메인 선언(전역 면제). 비bool은 exit 2, **null·부재는 결손(false — 보수 방향)** |
+| `note`·`goal` | 선택 | 자유 기록 — 판정 무관(응답에 원본 보존) |
+
+전체 거부 규칙(부분 판정 없음 — exit 2): 위 필수·스칼라·bool 위반 + **NaN/Infinity 리터럴**(parse_constant 거부 — 유한 스칼라만 값이다) + **비UTF-8 바이트** + **심층 중첩 JSON**(RecursionError 랩) + `attempts` 키 부재·비배열. 빈 배열 `[]`는 유효 not-armed다.
+
+판정 규칙 — 순서 고정(§1.4 의사코드):
+
+| 규칙 | 내용 |
+|---|---|
+| 1단계 면제 | `preference_domain:true` → not-armed(`exemptions` 표기 — 최우선 단락, S7을 평가하지 않는다) |
+| effective | `declared_search:true` 시도는 판정 대상 제외(자동 판정은 면제만 가능 — 단죄 불가). `declared_search_skipped` 수 투명 보고 |
+| S7 하드신호 | effective 중 knob·value·context **완비 worked**를 knob별 그룹핑 — 같은 그룹에 값·맥락이 모두 상이한 쌍 → 즉시 무장(failed 유무 무관) |
+| 값 비교 D1 | 타입 클래스 bool⊥수치(int·float 통합)⊥str⊥기타 — 같은 클래스 안에서만 ==(30 vs 30.0 동일), 클래스가 다르면 항상 상이(True vs 1·30 vs "30" 상이). 값·맥락 비교와 knob 그룹핑 키에 동일 적용 |
+| 3회 게이트 | effective를 move_class별 그룹핑 — failed ≥3인 무브류 존재 → 무장(1~2회 미발동 — Never 원칙). S7 동시 성립 시 s7 우선 보고 |
+| s7_evaluable | 전역 스코프(D3) — 완비 worked 그룹 ≥1이면 true, 0이면 false(판정 불능 투명 표기 — 미감지 방향). trigger=s7_hard_signal ⇒ true(three_attempt 무장과 독립 — 완비 worked 0이면 false 가능) |
+
+| 종료코드 | 의미 |
+|---|---|
+| 0 | not-armed — 정상 진행, 추가 시도 허용 |
+| 1 | **armed** — neverstuck 프로토콜 진입 의무(`ok:true` ∧ `flags:["armed"]`). **jev의 exit 1(폴백=진행)과 정반대** — verify_pin·worktree_gate·tree_gate와 동일 어휘 |
+| 2 | 무효 입력 — 즉시 종료, stderr `FAIL neverstuck gate: <사유>`, stdout 없음. **저장(--save) 실패만 예외**: 결과 stdout JSON(`saved_to: null`) 출력 후 exit 2 |
+| 3 | 미사용 — 결정론 게이트, 판단 계층 상향 경로 없음(번호 재용 않음) |
+
+응답 JSON — 정상 출력(exit 0·1)은 단일 JSON 객체다(exit 2 = stdout 없음, --save 실패 제외):
+
+```json
+{"ok": true, "gate": "neverstuck-gate", "armed": true,
+ "trigger": "s7_hard_signal",
+ "goal": "…", "attempts_total": 7, "attempts_considered": 6,
+ "declared_search_skipped": 1, "preference_domain": false, "exemptions": [],
+ "per_move_class": [{"move_class": "timeout-retune", "failed": 0, "worked": 2},
+                    {"move_class": "prompt-rewording", "failed": 4, "worked": 0}],
+ "armed_on": {"knob": "timeout",
+              "working_values": [{"value": 30, "context": "sess-1"},
+                                 {"value": 90, "context": "sess-2"}]},
+ "s7_evaluable": true,
+ "flags": ["armed"],
+ "contract_reminder": "…아래 전문…",
+ "attempts": [ …입력 attempts 원본 배열 그대로… ],
+ "saved_to": null}
+```
+
+`ok` = **판정 절차 수행 성공** — **exit 1도 `ok: true`다**(tree_gate 계약 평행). **attempts 원본 배열은 무장·미무장 무관 항상 포함**된다 — --save 감사 파일이 세션 경계를 넘는 이력 원본이 되며(과업 재개 시 직전 감사·번들에서 이어 조립), 응답 예의 집계도 정합이다(attempts_considered 6 = per_move_class 합 0+2+4+0). not-armed 형태는 `armed:false`·`trigger:null`·`armed_on:null`·`contract_reminder:null`로 무장 전용 필드만 null 명시된다. `working_values`는 상이쌍 산출 근거가 된 완비 worked 전체(중복 제거·입력순), `per_move_class`는 effective 한정 집계(선언 전용 무브류 미표시)다. trigger=three_attempt_gate면 `armed_on.move_classes:[…]`, s7이면 `armed_on.knob`+`working_values`.
+
+contract_reminder 전문 — 무장 시 게이트가 노출하는 고정 문자열(`<armed_on 대상>` 치환, §1.6):
+
+> neverstuck 무장: <armed_on 대상>은 전부 밴한다(근접 변형 포함 — 맥락별 룩업테이블·과거값 평균·보정항·시작시 자동피팅). 다음 시도 전 의무: (1) 과거 각 시도가 정확히 그렇게 작동한 이유를 전부 설명하는 소급 예측 — 못 하면 기각 (2) Stuck Packet 6필드 작성(GOAL/ATTEMPT LOG/OBSERVATIONS/VARIABLES/CONSTRAINTS/ACCESS INVENTORY) (3) 메커니즘 가설 2–3개(값 아님·서명사실 S-a~S-d를 전부 동시 설명하는 모델만) (4) 판별 실험 정확히 1개 + 판정규칙("결과 X⇒H1") 사전 선언. 수렴 계약: C1(모든 상수 출처 명시) ∧ C2(이력 소급 예측) — 둘 다 아니면 기각, 2차 튜닝 패스 금지. 회피값은 [loop-bait — D 실험 게이트] 태그 없이 제출 금지(삭제는 금지, 사용자 재량). 예산: 보고서 2라운드 상한 후 강제 에스컬레이션(계측 → 서드파티 소스 정돈·grep 문자열 제공 → 통제 프로빙 → 인간 질문 초안).
+
+치환 규칙 — three_attempt_gate: `무브류 <무브류 쉼표 열거>` / s7_hard_signal: `knob <K>의 값 <v1>@<c1>·<v2>@<c2>`(상이쌍 전부 열거 — 값 직렬화는 JSON 규칙: str은 따옴표 포함, 수치는 그대로).
+
+**한계** — move_class 문자열 동일성 기반(근접 변형 미감지 — 이력 기록 시 무브류 정규화 기재로 완화, 자동 유사도 판정은 단죄 위험으로 미도입)·S7은 knob·value·context 기재 의존(완비 그룹 0 = `s7_evaluable:false` 투명 표기 — 미감지 방향)·게이트는 무장 '판정'만(밴 준수·소급 예측 품질·실험 1개 규율은 SKILL 계약 텍스트 영역)·무장 후 진입·밴 해제·에스컬레이션 판정 권한은 메인(해제 시 사유+감사 1건). 분기 전수는 `python3 scripts/test_neverstuck_gate.py`(34케이스)에서 결정적으로 검증한다.
+
 ## 모델 매핑
 
 일반 작업은 `gpt-6-luna / max`, 계획·고난도 추론은 `gpt-6-sol / xhigh`다. Terra는 사용하지 않는다. 이 설치에서는 native spawn/fan-out을 사용하지 않는다.
