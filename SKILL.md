@@ -261,13 +261,13 @@ state.json 선택 필드 `tree_claim`: `{"session_id": "<id>", "claimed_utc": "<
 
 ### Codex 전역 라우팅 정책
 
-일반 작업은 `gpt-6-luna / max`, 계획과 고난도 추론은 `gpt-6-sol / xhigh`를 사용한다. Terra는 현재 라우팅에 사용하지 않는다. Codex용 custom-agent TOML은 이 매핑을 기록하며, 파일 존재는 호출 권한을 뜻하지 않는다. 이 환경에서는 native spawn/fan-out을 사용하지 않는다.
+일반 작업은 `gpt-6-luna / max`, 계획과 고난도 추론은 `gpt-6.1-sol / xhigh`를 사용한다. Terra는 현재 라우팅에 사용하지 않는다. Codex용 custom-agent TOML은 이 매핑을 기록하며, 파일 존재는 호출 권한을 뜻하지 않는다. 이 환경에서는 native spawn/fan-out을 사용하지 않는다.
 
 | 작업 성격 | 모델·에포트 | Codex role |
 |---|---|---|
 | 모든 일반 구현·조사·테스트·검증 | `gpt-6-luna / max` | `coder-medium`, `implement-med`, `implement-xhigh`, `core-xhigh` |
-| 계획·명세·아키텍처 | `gpt-6-sol / xhigh` | `plan-high`, `plan-xhigh` |
-| 계획 검토·리뷰·고난도 추론·보안 판정 | `gpt-6-sol / xhigh` | `plan-adversary-xhigh`, `review-pr-*`, `security-audit` |
+| 계획·명세·아키텍처 | `gpt-6.1-sol / xhigh` | `plan-high`, `plan-xhigh` |
+| 계획 검토·리뷰·고난도 추론·보안 판정 | `gpt-6.1-sol / xhigh` | `plan-adversary-xhigh`, `review-pr-*`, `security-audit` |
 
 `python3 <skill-dir>/scripts/configure_codex_plan.py --apply`는 요금제를 조회하지 않고 고정 전역 매핑을 적용한다. 변경 뒤 Codex를 재시작하고 `verify_global_install.py`를 실행한다.
 
@@ -275,28 +275,28 @@ state.json 선택 필드 `tree_claim`: `{"session_id": "<id>", "claimed_utc": "<
 - ① 계획: 생략
 - ② 검토: 셀프 재실행 확인(§3)
 - ③ 구현: 메인 세션 직접 또는 `coder-medium` (`gpt-6-luna / max`)
-- ④ 리뷰: `review-pr-high` (`gpt-6-sol / xhigh`, 텍스트·스타일만 변경 시 생략)
+- ④ 리뷰: `review-pr-high` (`gpt-6.1-sol / xhigh`, 텍스트·스타일만 변경 시 생략)
 
 ### M
-- ① 계획: `plan-high` (`gpt-6-sol / xhigh`)
-- ② 검토: `plan-adversary-xhigh` (`gpt-6-sol / xhigh`)
+- ① 계획: `plan-high` (`gpt-6.1-sol / xhigh`)
+- ② 검토: `plan-adversary-xhigh` (`gpt-6.1-sol / xhigh`)
 - ③ 구현: `implement-med` (`gpt-6-luna / max`)
-- ④ 리뷰: `review-pr-high` (`gpt-6-sol / xhigh`)
+- ④ 리뷰: `review-pr-high` (`gpt-6.1-sol / xhigh`)
 
 ### L
-- ① 계획: `plan-high` (`gpt-6-sol / xhigh`, Phase 분해)
-- ② 검토: `plan-adversary-xhigh` (`gpt-6-sol / xhigh`)
+- ① 계획: `plan-high` (`gpt-6.1-sol / xhigh`, Phase 분해)
+- ② 검토: `plan-adversary-xhigh` (`gpt-6.1-sol / xhigh`)
 - ③ 구현: `implement-med` (`gpt-6-luna / max`, Phase당 ≤5파일)
-- ④ 리뷰: `review-pr-xhigh` (`gpt-6-sol / xhigh`)
+- ④ 리뷰: `review-pr-xhigh` (`gpt-6.1-sol / xhigh`)
 
 ### XL
-- ① 계획: `plan-xhigh` (`gpt-6-sol / xhigh`)
-- ② 검토: `plan-adversary-xhigh` (`gpt-6-sol / xhigh`)
+- ① 계획: `plan-xhigh` (`gpt-6.1-sol / xhigh`)
+- ② 검토: `plan-adversary-xhigh` (`gpt-6.1-sol / xhigh`)
 - ③ 구현: `implement-xhigh` 또는 `core-xhigh` (`gpt-6-luna / max`)
-- ④ 리뷰: `review-pr-xhigh` (`gpt-6-sol / xhigh`)
+- ④ 리뷰: `review-pr-xhigh` (`gpt-6.1-sol / xhigh`)
 
 ### 보안감사
-- `security-audit` (`gpt-6-sol / xhigh`)와 교차 검증 1건 이상을 적용한다. CRITICAL은 즉시 최상단에 보고한다.
+- `security-audit` (`gpt-6.1-sol / xhigh`)와 교차 검증 1건 이상을 적용한다. CRITICAL은 즉시 최상단에 보고한다.
 
 ## ●●● 팬아웃
 
@@ -357,7 +357,7 @@ Codex 전역 지침은 native spawn/fan-out을 금지한다. 아래 팬아웃 �
 - **스폰 워치독** — 메인 세션은 스폰을 방치하지 않는다. 비동기·장기 스폰은 10분 간격으로 점검한다(하니스의 상태 조회·출력 확인 수단). 무진행 = 무응답 또는 하니스 진행 신호의 연속 2회 부재 → 정지 후 재스폰·역할 재분배를 판정한다. 재스폰은 동일 역할 2회까지 — 초과 시 역할 재분배 또는 ① 회귀로 경로를 바꿔 자율 진행한다(사용자 정지·승인 요구 없음). 정지 수단이 없는 하니스는 스폰 프롬프트에 종료 시한을 사전 명시한다. 재스폰 프롬프트에는 직전 스폰의 진단(부분 출력·정지 지점)을 데이터로 주입한다(존재할 때 한정, §5 주입 방어 준용) — 진단 없는 재스폰은 같은 지점에서 다시 막힌다.
 - **대기 시 행동**(M+·비긴급) — 머지·게이트·리뷰·스폰 완료 대기 중 멈춘 채 보고만 기다리지 않는다: 독립 과업(경량 작업 우선)으로 전환, 전환 불가 시 리컨·다음 과업 계획 수립으로 대기를 쓴다(①계획 스폰 대기는 리컨 병렬화). 전환은 대기 예상 시간이 전환 비용보다 길 때다(짧은 대기마다 컨텍스트 전환을 강제하지 않는다). 이미 통과한 게이트·검증의 재실행은 전환 행동에서 제외한다. 어느 대기종이든 한 스폰의 장기화가 독립 후속 스폰을 정지시키지 않는다(병렬 유지는 백엔드 동시성 상한이 우선). 근거: 대기 중 다음 과업 정지·게이트 3회 중복 실행 실측.
 - **계약은 인계·상태·증지만 규정** — 서브에이전트 내부 실행(도구 사용·구현 경로·디버깅 전략)은 규정하지 않는다.
-- **미해결 검토** — 동일 접근 2회 연속 실패, 재현 불안정, 또는 테스트가 반복 실패하면 실행을 중단하고 `gpt-6-sol / xhigh`로 원인 분석과 해결안을 검토한다. 재계획과 고난도 판단은 `gpt-6-sol / xhigh`, 확정된 일반 구현은 `gpt-6-luna / max`로 진행한다.
+- **미해결 검토** — 동일 접근 2회 연속 실패, 재현 불안정, 또는 테스트가 반복 실패하면 실행을 중단하고 `gpt-6.1-sol / xhigh`로 원인 분석과 해결안을 검토한다. 재계획과 고난도 판단은 `gpt-6.1-sol / xhigh`, 확정된 일반 구현은 `gpt-6-luna / max`로 진행한다.
 - **메인 세션 model·effort는 UI 또는 `/model`로만 변경**한다. 에이전트는 변경했다고 주장하지 않고 필요한 전환을 안내한다.
 - 스킬 갱신 시 원본과 설치본(`~/.codex/skills/effort-router/`, `~/.codex/agents/*.toml`)의 매핑을 비교하고 검증한다. Claude Code 배포 시에는 기존 사본 2곳도 별도로 동기화한다.
 
@@ -447,7 +447,7 @@ Codex와 ChatGPT는 §2의 OpenAI 모델 정책을 직접 적용한다. 다른 �
 - **ChatGPT 데스크톱 앱 Codex 화면**: Codex CLI와 같은 로컬 Skill·`config.toml`·custom agents를 사용한다.
 - **ChatGPT Work**: Skill은 사용할 수 있으나 로컬 Codex custom-agent TOML을 전제로 하지 않는다. 에디터의 모델·reasoning control에서 §2 조합을 선택하고, 호스팅 subagent는 실제 독립 병렬 작업이 있을 때만 요청한다.
 
-- **GLM Coding Plan(Z.ai)**: 하니스가 아니라 Claude Code의 백엔드 교체다 — 적용 대상에 Claude Code가 공식 포함됨. 슬롯 실체가 프록시 매핑을 따르고 effort 강등(§3 실측)이 발생할 수 있다. 이원 모델 정책으로 모든 플랜이 GLM-5.3과 GLM-5.3-Flash를 함께 지원한다 — 치환 기준과 비전(시각 이해 MCP 번들)은 `platforms/glm.md`를 따른다(zcode.md는 동결 어댑터 — 사용 요청 시 본문에서 재생성). 심층(xhigh급) 스폰은 백엔드 동시성 상한 내에서만 병렬한다(GLM-5.3 상한 1 — 팬아웃은 렌즈 직렬화·경량 렌즈 병렬로 치환, `platforms/glm.md`) — 사용자 명시 발화 시 심층 병렬 상향(무지정 2).
+- **GLM Coding Plan(Z.ai)**: 하니스가 아니라 Claude Code의 백엔드 교체다 — 적용 대상에 Claude Code가 공식 포함됨. 슬롯 실체가 프록시 매핑을 따르고 effort 강등(§3 실측)이 발생할 수 있다. 이원 모델 정책으로 모든 플랜이 GLM-5.3과 GLM-5.3-Flash를 함께 지원한다 — 치환 기준과 비전(시각 이해 MCP 번들)은 `platforms/glm.md`를 따른다(zcode.md는 동결 어댑터 — 사용 요청 시 본문에서 재생성). 심층(high급) 스폰은 백엔드 동시성 상한 내에서만 병렑한다(GLM-5.3 상한 1 — 팬아웃은 렌즈 직렬화·경량 렌즈 병렬로 치환, `platforms/glm.md`) — 사용자 명시 발화 시 심층 병렬 상향(무지정 2).
 - **Claude Code 10세션 토폴로지**: 세션 1 두뇌(메인)·세션 2 감시 Ops(`ops-supervisor`)·세션 3–10 작업 슬롯(심층 1(사용자 명시 상향 예외) + 경량 7)의 자율 병렬 운용 형태다 — 슬롯 배정·GLM 동시성 치환·두뇌 프로토콜은 `platforms/claude.md`를 따른다.
 - 표의 '미확인'은 공식 문서에서 확인하지 못한 항목이다 — 확인 전까지 단정하지 않는다.
 - 하니스별 삽입 단편과 설치 절차는 동봉 `platforms/`에 둔다 — 본문이 우선, 어댑터는 파생이다. 실행·실측 기반 하니스(codex·glm·claude·README)는 유지 관리하고, 미실행 하니스(qwen·gemini·grok·zcode·chat-app) 어댑터는 동결한다 — 갱신 대상에서 제외, 사용 요청 시 본문에서 재생성한다(동결 근거: 실측 통과 0건·파생 동기화 실패 1건 r11).

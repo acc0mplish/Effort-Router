@@ -33,14 +33,14 @@ If `[agents]` already exists, update its `enabled` value instead of adding a dup
 | `implement-med` | `gpt-6-luna` | `max` |
 | `implement-xhigh` | `gpt-6-luna` | `max` |
 | `core-xhigh` | `gpt-6-luna` | `max` |
-| `plan-high` | `gpt-6-sol` | `xhigh` |
-| `plan-xhigh` | `gpt-6-sol` | `xhigh` |
-| `plan-adversary-xhigh` | `gpt-6-sol` | `xhigh` |
-| `review-pr-high` | `gpt-6-sol` | `xhigh` |
-| `review-pr-xhigh` | `gpt-6-sol` | `xhigh` |
-| `security-audit` | `gpt-6-sol` | `xhigh` |
+| `plan-high` | `gpt-6.1-sol` | `xhigh` |
+| `plan-xhigh` | `gpt-6.1-sol` | `xhigh` |
+| `plan-adversary-xhigh` | `gpt-6.1-sol` | `xhigh` |
+| `review-pr-high` | `gpt-6.1-sol` | `xhigh` |
+| `review-pr-xhigh` | `gpt-6.1-sol` | `xhigh` |
+| `security-audit` | `gpt-6.1-sol` | `xhigh` |
 
-Use `gpt-6-luna / max` for general work and `gpt-6-sol / xhigh` for planning or high-reasoning work. Terra is not used. Custom-agent files record the mapping; their presence does not authorize a spawn.
+Use `gpt-6-luna / max` for general work and `gpt-6.1-sol / xhigh` for planning or high-reasoning work. Terra is not used. Custom-agent files record the mapping; their presence does not authorize a spawn.
 
 The updater changes only the bare `model` and `model_reasoning_effort` keys in role TOMLs, preserves other content, and backs up changed files:
 
