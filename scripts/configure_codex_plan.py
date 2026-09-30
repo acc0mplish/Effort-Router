@@ -18,12 +18,12 @@ EXPECTED_AGENTS = {
     'implement-med': ('gpt-6-luna', 'max'),
     'implement-xhigh': ('gpt-6-luna', 'max'),
     'core-xhigh': ('gpt-6-luna', 'max'),
-    'plan-high': ('gpt-6.1-sol', 'xhigh'),
-    'plan-xhigh': ('gpt-6.1-sol', 'xhigh'),
-    'plan-adversary-xhigh': ('gpt-6.1-sol', 'xhigh'),
-    'review-pr-high': ('gpt-6.1-sol', 'xhigh'),
-    'review-pr-xhigh': ('gpt-6.1-sol', 'xhigh'),
-    'security-audit': ('gpt-6.1-sol', 'xhigh'),
+    'plan-high': ('gpt-6.1-sol', 'high'),
+    'plan-xhigh': ('gpt-6.1-sol', 'high'),
+    'plan-adversary-xhigh': ('gpt-6.1-sol', 'high'),
+    'review-pr-high': ('gpt-6.1-sol', 'high'),
+    'review-pr-xhigh': ('gpt-6.1-sol', 'high'),
+    'security-audit': ('gpt-6.1-sol', 'high'),
 }
 
 
