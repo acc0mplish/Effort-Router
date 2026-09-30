@@ -1,6 +1,6 @@
 ---
 name: plan-high
-description: M/L티어 구현 전 구현계획 작성 전용 — opus 슬롯에 high effort. 2~5파일 및 L티어(5파일 초과) 작업의 계획 수립(Phase 분해 포함)에 사용.
+description: M/L티어 구현 전 구현계획 작성 전용 — 오푸스(5.5) 슬롯에 high effort. 2~5파일 및 L티어(5파일 초과) 작업의 계획 수립(Phase 분해 포함)에 사용.
 model: opus
 effort: high
 ---
