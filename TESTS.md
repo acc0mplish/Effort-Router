@@ -4,7 +4,7 @@
 
 ## 현재 로컬 Codex 정책
 
-일반 작업은 `gpt-6-luna / max`, 계획·고난도 추론은 `gpt-6-sol / xhigh`다. 아래 라운드별 모델 표기는 당시 upstream 실험 기록이다.
+일반 작업은 `gpt-6-luna / max`, 계획·고난도 추론은 `gpt-6.1-sol / xhigh`다. 아래 라운드별 모델 표기는 당시 upstream 실험 기록이다.
 
 ## 측정 지표
 
@@ -553,3 +553,31 @@ revfactory/codex-harness 비교에서 차용 기준 O(1)·일회성 비용 통�
 게이트·선택 계층 과업(r22~r28)의 원 요구·계약 요지·검증 기록은 `TESTS-GATES.md`(게이트 검증 원장)로 이동했다 — r29 800줄 하드캡 준수를 위한 내용 무변경 순수 이동이다(C16 diff 무차이 입증).
 
 방법론·프로토콜 원장은 본 문서에 잔존한다 — 신규 게이트 과업 절은 TESTS-GATES.md 말미에 추가한다.
+
+## r30 Sol 6.1 전환·Claude effort 평탄화 (2026-09-30)
+
+계획 전문 `docs/task-id/r30-model-5-5/plan.md`(r2)에 따라 Codex 계획·검토 트랙 모델 ID를 `gpt-6.1-sol`로 전환(기존 계약 `gpt-6-sol`·산문 `GPT-6-Sol`에서의 전환)하고, Claude측 에이전트 effort를 평탄화했다 — 검토·계획 6역할은 오푸스(5.5) 슬롯 high로 통일(sonnet 슬롯이던 review-pr-high는 opus로 이동), 코드 역할 5종은 소넷(5.5) 슬롯 low/medium(coder-medium은 하이쿠에서 소넷 슬롯으로 승격, 기존 xhigh effort는 모두 소멸). 일반 작업 측 모델·모든 역할 파일명·frontmatter `name:`·화이트리스트는 무변경이다.
+
+저장소 검증 실측(게이트 R1–R13, 게이트 시점 — P7 기록 작성 이전):
+
+| 게이트 | 명령 | 실측 |
+|--------|------|------|
+| R1 | `python3 scripts/test_plan_routing.py` | exit 0 — Ran 2 tests, OK |
+| R2 | `python3 scripts/test_codex_routing.py` | exit 0 — Ran 1 test, OK(서브프로세스 `custom agents: 10/10` 단언 포함) |
+| R3(1차) | 전역 grep `gpt-6-sol\|GPT-6-Sol`(.git·.venv-stagehand·docs·__pycache__·.claude 제외) | 허용 잔존만 — chat-app.md 3(동결 어댑터)·TESTS-GATES.md 1(r29 역사). exit 0 |
+| R4 | 신규 ID 발생 수(`grep -o \| wc -l`) | SKILL.md 16(360행 2발생 포함)·README 3+3·AGENTS.md 1·TESTS.md 1(L7 정책문 — 비고: P7 기록 후 재실측 시 본 섹션의 전환 인용 1건이 추가되어 계 2)·codex.md 7·sol TOML 6파일 각 1·configure 6·test_plan 7·test_codex 2+1·luna측 TOML 산문 coder-medium 1·implement-med 1·implement-xhigh 2 |
+| R5 | 이중 치환 패턴 grep | 0건 |
+| R6 | frontmatter `name/model/effort` 11역할 출력 | 계획 §1.2 매핑과 전부 일치 |
+| R7 | `grep -l 'effort: xhigh' agents/*.md` | 0건 — Claude측 xhigh 소멸 |
+| R8 | 변경 32파일 luna 문자열 post-image 비교(`git show 145e05d` 대비) | 전 파일 0편차 |
+| R9 | 동결 어댑터 diff | 0행 |
+| R10 | `^[+-]name:` diff | 0줄 — SKILL.md §2 표는 모델 셀만 변경(16줄 쌍) |
+| R11 | `xhigh급`·`medium급 이하` grep | 0건 |
+| R12 | SKILL.md §5 구간(368–433행) diff | 0줄 — 389행 PR 분할 계약 불변 |
+| R13 | description 표기 grep | 구 표기 0건·소넷(5.5) coder-medium 1·core-xhigh 1·implement-med 1·implement-xhigh 2(description+본문 L16)·ops-supervisor 1·오푸스(5.5) 6역할 각 1 |
+
+검증 입력 변경 고지(§7): `scripts/configure_codex_plan.py`(EXPECTED_AGENTS 6항목)·`scripts/verify_global_install.py`(AGENTS.md 마커)·`scripts/test_plan_routing.py`(EXPECTED 6+stale 재현 치환문 1)·`scripts/test_codex_routing.py`(픽스처 1+치환문 2)는 이번 전환의 대상이자 검증 입력이다 — 구 ID 기대치로는 신 ID 설치를 검증할 수 없는 결합 구조. 순환 검증 보완으로 R3 전역 grep·R6·R13 독립 grep·R8 post-image 비교를 교차 증거선으로 병행했다.
+
+R3 최종(P7 이후 상태 — 계획 §6 요구, 동일 명령·제외 목록 재실측): exit 0, 잔존 6행 — TESTS-GATES.md 1(r29 역사)·chat-app.md 3(동결 어댑터)·본 섹션 전환 인용 2(L559·567). 전부 허용 잔존이다.
+
+**S1 스폰 스모크 실패·배포 보류 확정(2026-09-30)**: `codex exec --skip-git-repo-check -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"'` 실행 결과 백엔드 400 — `The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account.` 후보 ID(gpt-sol-6.1·gpt-6.1·gpt-6-sol-6.1) 전부 동일 400으로, 문자열 오류가 아닌 계정·백엔드 게이팅으로 판정한다(계획 §5 W2 — S1 필수 게이트 실패). 사용자 확정(2026-09-30 AskUserQuestion)에 따라: 저장소는 `gpt-6.1-sol` 반영을 유지하고, ~/.codex 배포(config.toml 4곳·agents TOML 10종·AGENTS.md 치환)는 백엔드 지원 확인 시까지 보류한다. Claude측 배포(~/.claude agents·스킬 미러)는 진행 대상이다. 재개 조건: 백엔드의 신 모델 ID 지원 확인 → S1 재통과 → P8의 Codex 부분 실행(사전 스냅샷 `~/.effort-router-backups/20260930T073109Z-r30`을 롤백 지점으로 사용). S1 실패 상태에서 ~/.codex에 신 ID를 배포하면 계획·검토 트랙 스폰이 전부 실패하므로 보류가 정합이다.
