@@ -1,8 +1,8 @@
 ---
 name: security-audit
-description: 보안 감사·출시 검토 전용 — opus 슬롯에 xhigh effort. launch-readiness-audit·보안 리뷰 트랙. 취약점·데이터 노출·권한 문제 전수 점검에 사용.
+description: 보안 감사·출시 검토 전용 — 오푸스(5.5) 슬롯에 high effort. launch-readiness-audit·보안 리뷰 트랙. 취약점·데이터 노출·권한 문제 전수 점검에 사용.
 model: opus
-effort: xhigh
+effort: high
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 ---
 
