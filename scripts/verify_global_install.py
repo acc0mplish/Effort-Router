@@ -15,6 +15,27 @@ def load_toml(path: Path) -> dict:
         return tomllib.load(handle)
 
 
+def find_duplicate_roles(agent_dir: Path) -> tuple[dict[str, list[Path]], list[Path]]:
+    """Layered duplicate detection (RISK-6): a stem is a duplicate failure only
+    when 2+ same-stem TOMLs exist and at least one sits in a dot directory;
+    non-dot subdirectory TOMLs are reported as warnings only."""
+    dot_files: list[Path] = []
+    warning_files: list[Path] = []
+    groups: dict[str, list[Path]] = {}
+    for path in sorted(agent_dir.rglob('*.toml')):
+        relative_parts = path.relative_to(agent_dir).parts[:-1]
+        groups.setdefault(path.stem, []).append(path)
+        if any(part.startswith('.') for part in relative_parts):
+            dot_files.append(path)
+        elif path.parent != agent_dir:
+            warning_files.append(path)
+    duplicates = {
+        stem: paths for stem, paths in groups.items()
+        if len(paths) > 1 and any(path in dot_files for path in paths)
+    }
+    return duplicates, warning_files
+
+
 def main() -> int:
     codex_home = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex')).expanduser()
     failures: list[str] = []
@@ -77,6 +98,14 @@ def main() -> int:
                 f'agent {name} expected {model}/{effort}, got '
                 f'{agent.get("model")}/{agent.get("model_reasoning_effort")}'
             )
+
+    if agent_dir.is_dir():
+        duplicates, warning_files = find_duplicate_roles(agent_dir)
+        for stem, paths in duplicates.items():
+            listed = ', '.join(str(path) for path in paths)
+            failures.append(f'duplicate role {stem}: {len(paths)} files: {listed}')
+        for path in warning_files:
+            print(f'unexpected role file (warning): {path}')
 
     if failures:
         print('FAIL global effort-router installation')
