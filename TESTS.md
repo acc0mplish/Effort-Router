@@ -606,3 +606,33 @@ R3 최종(P7 이후 상태 — 계획 §6 요구, 동일 명령·제외 목록 �
 요구 ② 수정점 6곳: `platforms/glm.md` L16(주 계약 — 모드 전환 재서술·현재 모드 표기 추가)·`platforms/CLAUDE.md` L13·L21·L28·`SKILL.md` L450·L451(§6 불릿 한정). README에는 병렬 상급 정책 서술이 없어 무변경이다.
 
 검증 입력 변경 고지(§7): `scripts/configure_codex_plan.py`(EXPECTED_AGENTS effort 값 6항목)·`scripts/test_plan_routing.py`(EXPECTED effort 값 6항목)는 이번 치환의 대상이자 검증 입력이다 — 구 기대치(effort xhigh)로는 신 설치(high)를 검증할 수 없는 결합 구조. 딕셔너리 키(역할명)는 불변. 순환 검증 보완으로 R3 전역 grep·R6 역할명 독립 grep·R5 post-image 비교를 교차 증거선으로 병행했다. `scripts/test_codex_routing.py`·`scripts/verify_global_install.py`는 무변경(전자 effort 값 참조 0건, 후자는 최상위 model·effort만 참조 — G2에서 기대 재정의).
+
+## r32 에이전트 중복 근본 예방 + 배포 통합 (2026-10-01)
+
+원 요구: "모델및 에포트 강도가 수시로 변경이됨  전역설치 재설치시 에이전트 중복이 지속적으로 발생하는데 대안은 ?" — 원인 진단: 구 `_backup_root`가 백업을 역할 스캔 루트(`~/.codex/agents`) 안의 도트 디렉터리(`.effort-router-backups/<stamp>-XXXX/`)에 누적시켜 Codex 에이전트 스캔·검증기가 사본을 별도 역할로 오인. 근본 해법은 백업 루트의 스캔 루트 밖 이전(층 2-a)과 배포 전 중복 차단(층 2-b·3)의 조합.
+
+변경: `scripts/configure_codex_plan.py`(`_backup_root` → `~/.effort-router-backups/configure/`, `EFFORT_ROUTER_BACKUP_ROOT` 오버라이드·agents 트리 내부 경로 런타임 거부·report 신규 키 `hint`·`stale_backups`), `scripts/verify_global_install.py`(모듈 함수 `find_duplicate_roles` — 도트 디렉터리 stem 중복 failure·비도트 하위 `.toml` 경고 계층 RISK-6), `scripts/deploy_global.py` 신설(사전 검사→스냅샷→역할 배포→config·AGENTS.md 결합형 병합 치환→미러 60파일×2 동기→게이트 G1–G4→JSON 리포트, `--dry-run` 지원), 테스트 3종 신규 + 2종 갱신, README 재설치 절차 deploy_global 공식 경로 전환.
+
+테스트 실측(exit code):
+| 게이트 | 명령 | 결과 |
+|---|---|---|
+| R1 | `python3 scripts/test_plan_routing.py` | exit 0 — Ran 5 tests, OK(신규 3: 백업 루트 스캔 루트 밖·가드 거부·stale 보고) |
+| R2 | `python3 scripts/test_codex_routing.py` | exit 0 — Ran 1 test, OK(custom agents: 10/10 포함) |
+| R3 | `python3 scripts/test_verify_duplicate_detection.py` | exit 0 — Ran 3 tests, OK(도트 중복 failure·비도트 경고·미지 stem 경고) |
+| R4 | `python3 scripts/test_deploy_global.py` | exit 0 — Ran 7 tests, OK(케이스 a–g) |
+| R5 | `for t in scripts/test_*.py; do python3 "$t" || echo "FAIL $t"; done` | FAIL 라인 0건 |
+| R6 | `grep -n "agents_dir / '.effort-router-backups'" scripts/configure_codex_plan.py` | 0건(exit 1) |
+| R7 | `git diff 1fef9d4 -- scripts/verify_global_install.py` | 제거 라인 0건 — 기존 failure 문자열 전부 무변경, configure diff에서 EXPECTED_AGENTS 10항 무변경 |
+| R8 | `wc -l scripts/deploy_global.py` + `ast.parse` | 416줄(≤650)·parse exit 0 |
+| R9 | `grep -n 'deploy_global' README.md` | 재설치 절차 구간 ≥1건·전체 cp는 폴백으로 재서술 |
+
+RED 근거(TDD): P1 — 신규 단언 3종 실패(`KeyError: 'hint'`·`KeyError: 'stale_backups'`·가드 거부 `0 != 1`); P2 — 함수 부재 3케이스 전부 실패(도트 중복 `0 != 1`·경고 라인 부재 2건); P3 — 스크립트 부재 7케이스 전부 실패(returncode 2). 구현 중 발견·수정한 테스트 결함 1건: `- ` 접두 라인 카운트 헬퍼가 PASS 경로의 정보성 3라인(CODEX_HOME·default·agents)을 failure로 계산 — exit 1 경로에서만 `- ` 라인이 failure라는 계약으로 헬퍼 수정(구현 무변경).
+
+운영 규칙(신설):
+1. **백업 루트 관례** — 최상위 루트 `~/.effort-router-backups`(env `EFFORT_ROUTER_BACKUP_ROOT`) 하위에 configure는 `<root>/configure/<stamp>-XXXX/`, deploy는 `<root>/<ts>-deploy/`. `~/.codex/agents` 트리 내부 경로는 configure·deploy 양측에서 런타임 거부된다.
+2. **백업 보존 정책(RISK-7)** — `configure/` 하위 스냅샷이 10개 초과하면 오래된 순 목록을 report `stale_backups`로 보고만 한다. 자동 삭제 금지 — 삭제는 사용자 판단.
+3. **미러 매니페스트 갱신 규칙(W6)** — `MIRROR_MANIFEST`(60파일: 루트 4·agents 12·platforms 9·codex-agents 10·scripts 25)는 상수 리스트다. repo에 배치 파일 추가 시 매니페스트 수동 갱신 필수 — 미갱신분은 G3 검증 밖(드리프트 사각). stagehand 계열 5종 + `setup_stagehand_env.sh`은 미러 배치 밖(존치).
+4. **`changes_total` 드리프트 대용 지표(RISK-8)** — deploy_global 재실행 시 `changes_total == 0`이면 repo↔미러↔라이브 3점 드리프트 부재의 대용 지표다. 0 초과 시 리포트의 `replaced`·`mirror_drift`·G3 `missing`로 불일치 위치를 특정한다.
+5. **잔존 재스캔 계약** — deploy 치환 후 잔존 스캔은 치환 표보다 넓은 대소문자 무시 패턴으로 수행된다. 표 밖 변형형(예: 전부 대문자 결합형) 발견 시 기록 전 중단(exit 1) — 2파일 모두 원문 유지(TECH-2).
+
+검증 입력 변경 고지(§7): `configure_codex_plan.py`(변경은 `_backup_root` 1함수 + report 신규 키 — EXPECTED_AGENTS·render_agent·복원 로직 무변경)·`verify_global_install.py`(순수 신규 검사 추가 — 기존 검사 무변경)·`test_plan_routing.py`·`test_codex_routing.py`(env 주입)은 이번 변경의 대상이자 검증 입력이다. 교차 증거선: R5 전체 스위트(변경 무관 test_jev_*·test_verify_*·test_tree_* 다수)·R6·R7 diff 기반 기존 계약 무변경 단언. `test_verify_duplicate_detection.py`·`test_deploy_global.py`는 신규 — 순환 없음(deploy_global이 configure·verify를 import, 역방향 성립하지 않음).

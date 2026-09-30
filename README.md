@@ -26,7 +26,18 @@ Decision(티어 판정) → Requirement → Acceptance → Task → Evidence →
 
 ## 설치 (Codex + ChatGPT 데스크톱 앱)
 
-### 1. Skill·custom agents 설치
+### 1. Skill·custom agents 설치 — `deploy_global.py` 공식 경로
+
+전역 설치·재설치는 통합 배포 스크립트 1회 실행이 공식 경로다. 사전 검사(신선도·중복 역할·미러 드리프트) → 스냅샷 → 역할 TOML 배포 → `config.toml`·`AGENTS.md` 결합형 치환 → 미러 2곳 동기 → 게이트 G1–G4 → JSON 리포트가 한 파이프라인으로 진행된다.
+
+```bash
+python3 scripts/deploy_global.py --dry-run   # 사전 시뮬레이션 — 라이브·백업 루트 무변경
+python3 scripts/deploy_global.py             # 실배포 — 게이트 전부 PASS면 exit 0
+```
+
+- 백업 스냅샷은 `~/.effort-router-backups/<ts>-deploy/`에 생성된다(환경변수 `EFFORT_ROUTER_BACKUP_ROOT`로 최상위 루트 변경 가능 — 역할 스캔 루트 내부 경로는 거부된다). 배포 후 Codex를 재시작한다.
+- 재실행은 멱등 — `changes_total: 0`이면 repo↔미러↔라이브 3점 드리프트 부재의 대용 지표다.
+- 폴백(스크립트 사용 불가 환경 한정): 수동 cp는 다음과 같이 하되, 백업 루트를 `~/.codex/agents` 안에 만들지 않는다 — 역할 스캔 루트 안의 백업 사본은 중복 역할로 오인된다.
 
 ```bash
 mkdir -p ~/.codex/skills/effort-router
