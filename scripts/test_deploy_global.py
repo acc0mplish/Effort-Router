@@ -7,6 +7,7 @@ import tempfile
 import tomllib
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / 'scripts/deploy_global.py'
@@ -33,6 +34,13 @@ CONFIG_OLD = (
     '[profiles.planning]\n'
     'model = "gpt-6.1-sol"\n'
     'model_reasoning_effort = "xhigh"\n'
+)
+
+CONFIG_ROOT_OVERRIDE = (
+    'model = "gpt-6.1-sol"\n'
+    'model_reasoning_effort = "xhigh"\n'
+    '[agents]\n'
+    'enabled = true\n'
 )
 
 
@@ -116,7 +124,7 @@ class DeployGlobalTests(unittest.TestCase):
             self.assertTrue(all(gate['pass'] for gate in report['gates'].values()),
                             report['gates'])
             self.assertEqual(len(report['roles_copied']), 10)
-            self.assertEqual(report['mirror_synced'], 120)
+            self.assertEqual(report['mirror_synced'], 122)
             self.assertTrue(Path(report['backup_dir']).is_dir())
             # (iv) 최상위 무손상 — 치환은 tail 섹션에만 적용됐다.
             config = tomllib.loads((home / 'config.toml').read_text())
@@ -218,6 +226,89 @@ class DeployGlobalTests(unittest.TestCase):
             result = _run(home, home / 'claude-mirror' / 'effort-router',
                           env_extra={'EFFORT_ROUTER_BACKUP_ROOT': str(home / 'agents' / 'nested')})
             self.assertEqual(result.returncode, 1)
+
+    def test_h_non_utf8_agents_md_reports_json_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            _fixture(home)
+            (home / 'AGENTS.md').write_bytes(b'\xff\xfeinvalid utf-8\n')
+            before = _live_bytes(home)
+            claude_mirror = home / 'claude-mirror' / 'effort-router'
+
+            result = _run(home, claude_mirror)
+
+            self.assertEqual(result.returncode, 1)
+            report = json.loads(result.stdout)   # §2.3 — stdout은 JSON 1문서
+            self.assertIn('error', report)
+            self.assertNotIn('Traceback', result.stderr)
+            self.assertEqual(_live_bytes(home), before)
+            self.assertFalse((home / 'backups').exists())
+
+    def test_i_commit_pair_atomic_under_second_replace_failure(self):
+        sys.path.insert(0, str(ROOT / 'scripts'))
+        import deploy_global
+
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            config = work / 'config.toml'
+            agents = work / 'AGENTS.md'
+            # CRLF 원문 — 복원이 텍스트 왕복이 아니라 copy2 바이트 복사임을 실측(T-1).
+            config.write_bytes(b'old config line1\r\nold config line2\r\n')
+            agents.write_bytes(b'old agents\r\n')
+
+            real_replace = os.replace
+            calls = []
+            def fail_second(src, dst):
+                # 주의: 인덱스 2 주입은 _commit_pair의 교체 순서(config.toml → AGENTS.md)와
+                # 결합 — 페어 구성·순서 변경 시 이 인덱스를 갱신한다(T-3).
+                calls.append(Path(dst).name)
+                if len(calls) == 2:
+                    raise OSError('injected second-replace failure')
+                return real_replace(src, dst)
+
+            with mock.patch('deploy_global.os.replace', side_effect=fail_second):
+                with self.assertRaises(OSError):
+                    deploy_global._commit_pair(
+                        ((config, 'new config'), (agents, 'new agents')), work)
+
+            self.assertEqual(config.read_bytes(), b'old config line1\r\nold config line2\r\n')
+            self.assertEqual(agents.read_bytes(), b'old agents\r\n')
+            self.assertFalse([p for p in work.iterdir() if p.name.startswith('.')])
+
+    def test_j_top_level_override_message_names_region(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            _fixture(home)
+            (home / 'config.toml').write_text(CONFIG_ROOT_OVERRIDE)
+            config_before = (home / 'config.toml').read_bytes()
+            agents_before = (home / 'AGENTS.md').read_bytes()
+            claude_mirror = home / 'claude-mirror' / 'effort-router'
+
+            result = _run(home, claude_mirror)
+
+            self.assertEqual(result.returncode, 1)
+            report = json.loads(result.stdout)
+            self.assertIn('top-level', report['error'])
+            self.assertNotIn('RISK-3', report['error'])   # R-2 — 내부 라벨 미노출
+            self.assertEqual((home / 'config.toml').read_bytes(), config_before)
+            self.assertEqual((home / 'AGENTS.md').read_bytes(), agents_before)
+
+    def test_k_non_utf8_config_reports_json_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            _fixture(home)
+            (home / 'config.toml').write_bytes(b'\xff\xfeinvalid\n[agents]\n')
+            before = _live_bytes(home)
+            claude_mirror = home / 'claude-mirror' / 'effort-router'
+
+            result = _run(home, claude_mirror)
+
+            self.assertEqual(result.returncode, 1)
+            report = json.loads(result.stdout)
+            self.assertIn('error', report)
+            self.assertNotIn('Traceback', result.stderr)
+            self.assertEqual(_live_bytes(home), before)
+            self.assertFalse((home / 'backups').exists())
 
 
 if __name__ == '__main__':

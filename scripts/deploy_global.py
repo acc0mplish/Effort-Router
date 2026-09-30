@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import tomllib
 
 from configure_codex_plan import _atomic_write, expected_agents
@@ -24,7 +25,8 @@ from verify_global_install import find_duplicate_roles
 
 ROOT = Path(__file__).resolve().parents[1]
 
-_ROOT_MIRROR_FILES = ('SKILL.md', 'README.md', 'TESTS.md', 'TESTS-GATES.md')
+_ROOT_MIRROR_FILES = ('SKILL.md', 'README.md', 'TESTS.md', 'TESTS-GATES.md',
+                      'TESTS-ARCHIVE.md')
 _AGENT_MIRROR_FILES = (
     'openai.yaml',
     'coder-medium.md', 'core-xhigh.md', 'implement-med.md', 'implement-xhigh.md',
@@ -137,7 +139,16 @@ def _expected_content(codex_home: Path) -> tuple[str, str, dict, dict]:
 
 def _validate_replacements(config_new: str, agents_new: str) -> None:
     """TECH-2 — both files are validated in memory before either is written."""
-    if _residual_count(config_new) or _residual_count(agents_new):
+    root, tail = _split_root_tail(config_new)
+    root_residual = _residual_count(root)
+    tail_residual = _residual_count(tail) + _residual_count(agents_new)
+    if root_residual and not tail_residual:
+        raise ValueError(
+            'config.toml top-level (user override region) still holds legacy '
+            f'effort literals ({root_residual}); refusing to write. The root '
+            'section is structurally untouched — adjust the top-level override '
+            'manually before re-running.')
+    if root_residual or tail_residual:
         raise ValueError('Unknown legacy pattern residue after replacement; refusing to write.')
     for name, old, _ in VOCAB_SWAP:
         if old in agents_new:
@@ -219,6 +230,66 @@ def _deploy_roles(codex_home: Path) -> list[str]:
         _atomic_write(target, (templates / f'{name}.toml').read_text(encoding='utf-8'))
         copied.append(name)
     return copied
+
+
+def _stage_temp(target: Path, text: str) -> Path:
+    """Write text to a temp file beside target (mode preserved); no replace."""
+    # W2 — mkstemp→fdopen 진입 실패의 fd 누수 창은 사실상 없음(동일 플래그 개방).
+    descriptor, temporary = tempfile.mkstemp(prefix='.' + target.name, dir=target.parent)
+    staged = Path(temporary)
+    try:
+        with os.fdopen(descriptor, 'w', encoding='utf-8') as handle:
+            handle.write(text)
+        if target.exists():
+            shutil.copymode(target, temporary)
+    except BaseException:
+        staged.unlink(missing_ok=True)
+        raise
+    return staged
+
+
+def _backup_temp(target: Path) -> Path:
+    """Byte-exact copy of target beside it (copy2 — content, mode, times)."""
+    descriptor, temporary = tempfile.mkstemp(prefix='.' + target.name, dir=target.parent)
+    os.close(descriptor)
+    backup = Path(temporary)
+    try:
+        shutil.copy2(target, temporary)
+    except BaseException:
+        backup.unlink(missing_ok=True)
+        raise
+    return backup
+
+
+def _commit_pair(pairs: tuple[tuple[Path, str], ...], backup_dir: Path) -> None:
+    """TECH-2b — stage every file first, then replace in order; on failure the
+    already-replaced files are restored from byte-exact staged backups
+    (transactional abort — the OSError is still reported, so this is not the
+    §8-10 auto-rollback of a failed pipeline)."""
+    staged_new: list[tuple[Path, Path]] = []
+    staged_old: dict[Path, Path] = {}
+    replaced = 0
+    try:
+        for target, text in pairs:
+            staged_new.append((target, _stage_temp(target, text)))
+        for target, _ in pairs:
+            staged_old[target] = _backup_temp(target)
+        for index, (target, temporary) in enumerate(staged_new):
+            os.replace(temporary, target)
+            replaced = index + 1
+    except OSError:
+        for target, _ in staged_new[:replaced]:
+            try:
+                os.replace(staged_old[target], target)
+            except OSError:
+                print(f'restore of {target} failed — manual restore point: {backup_dir}',
+                      file=sys.stderr)
+        raise
+    finally:
+        for _, temporary in staged_new:
+            temporary.unlink(missing_ok=True)
+        for temporary in staged_old.values():
+            temporary.unlink(missing_ok=True)
 
 
 def _sync_mirrors(mirrors: dict[str, Path]) -> int:
@@ -360,10 +431,16 @@ def main() -> int:
     }
     report['mirror_drift'] = drift
 
-    config_new, agents_new, config_counts, agents_counts = _expected_content(codex_home)
-    report['replaced'] = {'config.toml': config_counts, 'AGENTS.md': agents_counts}
-    report['changes_total'] = _count_changes(codex_home, mirrors, config_new, agents_new)
-    report['restart_required'] = report['changes_total'] > 0
+    try:
+        config_new, agents_new, config_counts, agents_counts = _expected_content(codex_home)
+        report['replaced'] = {'config.toml': config_counts, 'AGENTS.md': agents_counts}
+        report['changes_total'] = _count_changes(codex_home, mirrors, config_new, agents_new)
+        report['restart_required'] = report['changes_total'] > 0
+    except (OSError, ValueError) as error:
+        report['error'] = str(error)
+        print(json.dumps(report, ensure_ascii=False))
+        print(f'FAIL deploy content stage: {error}', file=sys.stderr)
+        return 1
 
     if args.dry_run:
         report['planned'] = {
@@ -386,8 +463,8 @@ def main() -> int:
         config_pre = tomllib.loads(
             (codex_home / 'config.toml').read_text(encoding='utf-8'))
         _validate_replacements(config_new, agents_new)
-        _atomic_write(codex_home / 'config.toml', config_new)
-        _atomic_write(codex_home / 'AGENTS.md', agents_new)
+        _commit_pair(((codex_home / 'config.toml', config_new),
+                      (codex_home / 'AGENTS.md', agents_new)), snapshot)
         report['mirror_synced'] = _sync_mirrors(mirrors)
     except (OSError, ValueError) as error:
         report['error'] = str(error)
