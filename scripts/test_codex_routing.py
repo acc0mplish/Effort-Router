@@ -52,6 +52,7 @@ class CodexRoutingTests(unittest.TestCase):
             update = subprocess.run(
                 [sys.executable, str(ROOT / 'scripts/configure_codex_plan.py'),
                  '--agents-dir', str(home / 'agents'), '--apply'],
+                env=dict(os.environ, EFFORT_ROUTER_BACKUP_ROOT=str(home / 'backups')),
                 capture_output=True, text=True)
             self.assertEqual(update.returncode, 0, update.stderr)
             self.assertIn('plan-high', update.stdout)

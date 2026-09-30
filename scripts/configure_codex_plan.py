@@ -68,13 +68,16 @@ def configure(agents_dir: Path, apply: bool) -> dict:
         'applied': apply,
         'restart_required': bool(apply and changes),
         'backup_dir': None,
+        'hint': 'run scripts/deploy_global.py for full deployment',
     }
     if not apply or not changes:
         return report
 
     agents_dir.mkdir(parents=True, exist_ok=True)
+    backup_root = _backup_root(agents_dir)
+    report['stale_backups'] = _stale_backups(backup_root)
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-')
-    backup = Path(tempfile.mkdtemp(prefix=stamp, dir=_backup_root(agents_dir)))
+    backup = Path(tempfile.mkdtemp(prefix=stamp, dir=backup_root))
     report['backup_dir'] = str(backup)
     for target, original, _ in changes:
         if original is not None:
@@ -96,9 +99,23 @@ def configure(agents_dir: Path, apply: bool) -> dict:
 
 
 def _backup_root(agents_dir: Path) -> Path:
-    path = agents_dir / '.effort-router-backups'
-    path.mkdir(exist_ok=True)
+    root = Path(os.environ.get(
+        'EFFORT_ROUTER_BACKUP_ROOT', str(Path.home() / '.effort-router-backups')))
+    resolved = root.expanduser().resolve()
+    scan_tree = agents_dir.resolve()
+    if resolved == scan_tree or scan_tree in resolved.parents:
+        raise ValueError(
+            f'Refusing backup root inside the role scan tree: {resolved}')
+    path = resolved / 'configure'
+    path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def _stale_backups(backup_root: Path, keep: int = 10) -> list[str]:
+    snapshots = sorted(path for path in backup_root.iterdir() if path.is_dir())
+    if len(snapshots) <= keep:
+        return []
+    return [str(path) for path in snapshots[:-keep]]
 
 
 def _atomic_write(target: Path, text: str) -> None:
