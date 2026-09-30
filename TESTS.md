@@ -4,7 +4,7 @@
 
 ## 현재 로컬 Codex 정책
 
-일반 작업은 `gpt-6-luna / max`, 계획·고난도 추론은 `gpt-6.1-sol / xhigh`다. 아래 라운드별 모델 표기는 당시 upstream 실험 기록이다.
+일반 작업은 `gpt-6-luna / max`, 계획·고난도 추론은 `gpt-6.1-sol / high`다. 아래 라운드별 모델 표기는 당시 upstream 실험 기록이다.
 
 ## 측정 지표
 
@@ -583,3 +583,26 @@ R3 최종(P7 이후 상태 — 계획 §6 요구, 동일 명령·제외 목록 �
 **S1 스폰 스모크 실패·배포 보류 확정(2026-09-30)**: `codex exec --skip-git-repo-check -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"'` 실행 결과 백엔드 400 — `The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account.` 후보 ID(gpt-sol-6.1·gpt-6.1·gpt-6-sol-6.1) 전부 동일 400으로, 문자열 오류가 아닌 계정·백엔드 게이팅으로 판정한다(계획 §5 W2 — S1 필수 게이트 실패). 사용자 확정(2026-09-30 AskUserQuestion)에 따라: 저장소는 `gpt-6.1-sol` 반영을 유지하고, ~/.codex 배포(config.toml 4곳·agents TOML 10종·AGENTS.md 치환)는 백엔드 지원 확인 시까지 보류한다. Claude측 배포(~/.claude agents·스킬 미러)는 진행 대상이다. 재개 조건: 백엔드의 신 모델 ID 지원 확인 → S1 재통과 → P8의 Codex 부분 실행(사전 스냅샷 `~/.effort-router-backups/20260930T073109Z-r30`을 롤백 지점으로 사용). S1 실패 상태에서 ~/.codex에 신 ID를 배포하면 계획·검토 트랙 스폰이 전부 실패하므로 보류가 정합이다.
 
 **S1 재통과·Codex측 배포 실행(2026-09-30, 사용자 코덱스 업데이트 후)**: 사용자가 코덱스 CLI를 업데이트해 `gpt-6.1-sol`이 정상 노출됨 → S1 재실행 통과(`OK-r30-s1`, 12,620 tokens) → 위 보류의 재개 조건 충족으로 P8 Codex 부분을 실행했다: ~/.codex/agents TOML 10종 cp(원본과 10/10 동일)·config.toml 치환([profiles.planning]·[profiles.deep]·[agents.reviewer] + nux 키)·~/.codex/AGENTS.md 치환·~/.codex/skills/effort-router 미러 동기(번들 전부 동일). G2 구 ID 잔존 0. G5 실측 5 — 기대 4에 사용자 로컬 기본 모델 오버라이드 1건 추가(코덱스 최상위 기본을 `gpt-6.1-sol`/`low`로 직접 설정). G1은 해당 2항(최상위 model·effort가 컨트랙트 기본 luna/max가 아님)만 FAIL이며 설치 구조 검증 나머지는 전부 통과 — 사용자 선택 사항으로 판정, 컨트랙트 위반 아님. nux 테이블의 sed 생성 bare 점선 키(`gpt-6.1-sol = 4`가 `gpt-6→{1-sol}`로 파싱됨)를 TUI 인용 키와 병존 정리했다.
+
+## r31 Sol effort 단일화·심층 병렬 모드 전환 계약 (2026-09-30)
+
+계획 전문 `docs/task-id/r31-sol-high/plan.md`(r2)에 따라 두 요구를 반영했다. 요구 ① — Codex측 계획·검토 트랙 6역할의 effort를 `xhigh`에서 `high`로 단일화(역할명·파일명의 xhigh 접미는 계약 식별자로 존치, 일반 작업 측 참조·사용자 로컬 코덱스 최상위 기본은 무변경). 요구 ② — 심층 스폰 병렬 통로를 per-과업 예외형에서 모드 전환형으로 재서술: 직렬이 기본, 사용자 발화 원문으로 진입하며 과업·라운드 중간에도 언제든 즉시 전환 가능, 진입 후 해제 발화 또는 대화 세션 종료 시까지 유지(세션 경계 자동 지속 아님 — 상태 파일 미신설). 구 per-과업 예외 프레임(재발화 요구형·명시 상향 예외 괄호형)은 전 리포지토리에서 소멸시켰다. Output Contract 팬아웃 라인 표기 의무는 실구성에 현재 모드(직렬/병렬) 표기를 더해 유지했다.
+
+저장소 검증 실측(게이트 R1–R10 1차, P3 기록 작성 이전 시점):
+
+| 게이트 | 명령·방법 | 실측 |
+|--------|------|------|
+| R1 | `python3 scripts/test_plan_routing.py` | exit 0 — Ran 2 tests, OK |
+| R2 | `python3 scripts/test_codex_routing.py` | exit 0 — Ran 1 test, OK(서브프로세스 `custom agents: 10/10` 단언 포함) |
+| R3(1차) | 결합형 5종 grep(`gpt-6.1-sol ?/ ?xhigh` 등) SKILL·README·AGENTS·codex.md·yaml | 0건; sol TOML `model_reasoning_effort = "xhigh"` 0건; 무공백 리터럴 0건. TESTS.md 백틱 결합형은 이 시점 L7 1건(P3 전 상태) |
+| R4 | 신규 발생 수(`grep -o \| wc -l`) | `gpt-6.1-sol / high` SKILL.md 16(360행 2발생 포함)·README 3·AGENTS.md 1·codex.md 산문 1; `GPT-6.1-Sol high` README 3; `GPT-6.1-Sol/high` 구현 트랙 산문 TOML 계 4(coder-medium 1·implement-med 1·XL 구현 TOML 2); sol TOML `model_reasoning_effort = "high"` 6파일 각 1; codex.md 표 셀 `` \| `high` \| `` 6; `('gpt-6.1-sol', 'high')` configure 6·test_plan 6; yaml `Sol 6.1 high` 1 |
+| R5 | 변경 파일의 일반 작업 측 모델 참조 문자열 post-image 비교(`git show 57d78fc` 대비) | 전 파일 0편차; 산문 보유 TOML 3종·코어 TOML의 model·effort 값 라인 diff 0 |
+| R6 | 역할명 xhigh 접미 5종 grep pre/post | 66 == 66; diff `^[+-]name:` 0줄; sol TOML `name =` 라인 0변경 |
+| R7 | SKILL.md diff hunk 매핑 | §5 구간(368–433행)·§1(51–70행)·팬아웃(301–345행) 0줄 — 변경은 264–299·360·450–451뿐 |
+| R8 | 동결 어댑터 diff(chat-app·zcode·gemini·qwen·grok) | 0행 |
+| R9(1차) | '해제 발화' grep | 3파일 각 ≥1(glm 1·CLAUDE 2·SKILL 1); 금지 프레임 5종 각 0건; glm 유지 요소 4패턴(실사용자 메시지 원문·Output Contract 팬아웃 라인·2026-09-22·무진행 연속 2회) 각 1 |
+| R10 | '직렬' 발생 수 pre/post | 14 → 19(감소 없음); glm '기본' 1 == 1; 'Output Contract 팬아웃 라인' glm 1 |
+
+요구 ② 수정점 6곳: `platforms/glm.md` L16(주 계약 — 모드 전환 재서술·현재 모드 표기 추가)·`platforms/CLAUDE.md` L13·L21·L28·`SKILL.md` L450·L451(§6 불릿 한정). README에는 병렬 상급 정책 서술이 없어 무변경이다.
+
+검증 입력 변경 고지(§7): `scripts/configure_codex_plan.py`(EXPECTED_AGENTS effort 값 6항목)·`scripts/test_plan_routing.py`(EXPECTED effort 값 6항목)는 이번 치환의 대상이자 검증 입력이다 — 구 기대치(effort xhigh)로는 신 설치(high)를 검증할 수 없는 결합 구조. 딕셔너리 키(역할명)는 불변. 순환 검증 보완으로 R3 전역 grep·R6 역할명 독립 grep·R5 post-image 비교를 교차 증거선으로 병행했다. `scripts/test_codex_routing.py`·`scripts/verify_global_install.py`는 무변경(전자 effort 값 참조 0건, 후자는 최상위 model·effort만 참조 — G2에서 기대 재정의).
