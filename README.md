@@ -20,8 +20,9 @@ Decision(티어 판정) → Requirement → Acceptance → Task → Evidence →
 | `AGENTS.md` | 저장소 작업의 모델·에포트 정책과 역할 템플릿 오류 예방 규칙 |
 | `agents/` | Claude Code 역할 정의 10종 + ChatGPT 데스크톱 UI 메타데이터 `openai.yaml` |
 | `platforms/` | Codex·ChatGPT 실행 어댑터와 기타 하니스 파생 문서 |
-| `scripts/` | 전역 Codex 역할 라우팅·설치 검증 스크립트 + jev 판단 계층 CLI(jev_judge.py·jev_modes.py — CLI 12종: tier·prune·escalation·memory-gate·stall·done·dup·loop·verify-run·watch·route·guard) + Stagehand 게이트 CLI(stagehand_gate.py 3종) + 검증 핀 게이트 CLI(verify_pin.py + 실행 엔진 verify_exec.py) + 워크트리 수명주기 게이트 CLI(worktree_gate.py 4종: create·done·list·sweep) + 트리 소유 게이트 CLI(tree_gate.py 5종: claim·release·check·status·prune) |
-| `TESTS.md` | 검증 프로토콜·측정 결과·라운드별 개정 이력·재현 절차 |
+| `scripts/` | 전역 Codex 역할 라우팅·설치 검증 스크립트 + jev 판단 계층 CLI(jev_judge.py·jev_modes.py — CLI 12종: tier·prune·escalation·memory-gate·stall·done·dup·loop·verify-run·watch·route·guard) + Stagehand 게이트 CLI(stagehand_gate.py 3종) + 검증 핀 게이트 CLI(verify_pin.py + 실행 엔진 verify_exec.py) + 워크트리 수명주기 게이트 CLI(worktree_gate.py 4종: create·done·list·sweep) + 트리 소유 게이트 CLI(tree_gate.py 5종: claim·release·check·status·prune) + 루프 탈출 게이트 CLI(neverstuck_gate.py — 결정론 무장 판정: 무브류 3회 게이트·S7 하드 시그널·선언탐색·취향 면제) |
+| `TESTS.md` | 검증 프로토콜·측정 결과·라운드별 개정 이력·재현 절차(방법론 원장 — r29 하드캡 분할 이후 게이트 과업 절은 TESTS-GATES.md로 이동) |
+| `TESTS-GATES.md` | 게이트 과업별 검증 원장(r22~r28·r29) — 원 요구·계약 요지·RED/GREEN·회귀 증거 표 |
 
 ## 설치 (Codex + ChatGPT 데스크톱 앱)
 
@@ -533,4 +534,5 @@ FrontierSWE·ProgramBench는 [1]의 평가 벤치마크다(개별 링크는 [1] 
 
 ## Thanks to
 
+- **[NeverStuck](https://github.com/chldbwnstm/NeverStuck)** (chldbwnstm) — r29 루프 탈출 게이트의 프로토콜 원천이다. 핵심 원칙("맥락마다 재조정이 필요한 파라미터는 상수가 아니라, 변동하는 무언가의 미모델링 함수다")·3회 무장 게이트·S7 하드 시그널·노브 밈+소급 예측 강제·loop-bait 태깅·Honesty clause를 증류해 결정론 무장 판정 CLI(`neverstuck_gate.py`)와 SKILL 계약 절로 편입했다. 결정론 재구현 과정에서 발견한 명세 여지 3건(S7 무장 조건·값 동등성 의미론 — [#1](https://github.com/chldbwnstm/NeverStuck/issues/1), 환경별 정상값의 guard 미커버 — [#2](https://github.com/chldbwnstm/NeverStuck/issues/2), PROTOCOL.md 동반 하드 의존 — [#3](https://github.com/chldbwnstm/NeverStuck/issues/3))은 업스트림 이슈로 보고했다.
 - **[TODO Flow](https://github.com/JakeB-5/todo-flow)** (JakeB-5, MIT) — r23~r26 게이트 3종의 설계 참조원이다. 정확-후보 SHA 핀닝(`verify_pin`의 핀 원형), 완료 시 체크아웃 자동 정리·salvage 브랜치 보존 원칙(`worktree_gate`의 수명주기 원형)을 가져왔고, 그들의 검증 게이트를 적대검토하며 발견한 결함들(검증 자기참조·환경 격차·은닉 우회)이 이 저장소의 동일 결함을 r25에서 스스로 수선하는 계기가 됐다. r26에서는 todo-flow의 `verification.py` stop_group(프로세스 그룹 원형)·`engine.py` require_clean(실행창 전후 클린 검사 원형)·`land()` 통합 체크아웃(fresh-checkout 원형)·`cleanup.py` write_json(증분 영수증 원형)을 어휘 이식해 검증 핀 게이트의 결함 4종을 수선했다.
