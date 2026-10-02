@@ -296,7 +296,7 @@ L6 DrvFs 지연 기록(양측 실측 — 같은 머신 WSL2): test_worktree_gate
 | 널 표기 | 3분 전부 0건이면 '없음' 1줄 기재 — 섹션 생략은 ④ gap |
 | 질문 경로 | 미확정 = ①수령 후 ③착수 전 메인이 과업(task-id)당 1회 묶음 확인 질문, 무답분은 가정 전환 후 진행(§1 은닉 변수 질문 규칙 준용) |
 | claims 배제 | 가정·미확정은 claims 배열 미등록(done 조건 보존 — ④는 번들 섹션 대조로 검증) |
-| 전파 | 확증·반증은 메인 번들 표기 갱신 — 기존 트리거 4종 그대로, 실질 변경 수반 반증은 무효화 전파 (b) 발동 |
+| 전파 | 가정·미확정의 확증·반증·해소는 메인 번들 표기 갱신 — 기존 트리거 4종 그대로, 실질 변경 수반 반증은 무효화 전파 (b) 발동(v5) |
 | 부속 편집 2곳 | 얇은 계획 최소 완료 기준 열거에 '근거 수준 분리' 추가·긴급 트랙 소급 ① 재구성 항목에 '근거 수준 3분' 추가 |
 | 적용 제외 | §5 본칙 3개 상속(S티어·긴급 ③선행·탐색적) |
 
@@ -306,7 +306,20 @@ L6 DrvFs 지연 기록(양측 실측 — 같은 머신 WSL2): test_worktree_gate
 |---|---|---|
 | C1 신규 불릿 | `grep -c "근거 수준 분리\*\*: ①계획은 번들에" SKILL.md` | 1건(L392) exit 0 — 문구 v4 전문 번들 대조 일치(`-F` 고정문 일치 + md5 대조) |
 | C2 부속 편집·보존 제약 | `grep -c "근거 수준 분리·인터페이스" SKILL.md` ∧ `grep -c "근거 수준 3분과" SKILL.md` ∧ `git diff -U0 SKILL.md \| grep "^-" \| grep -v "^---" \| wc -l` | 각 1건(L389·L376) exit 0·마이너스 2행 = 명세 치환 원행(소급 ①·얇은 계획)뿐 — 기존 구 삭제·이동 0 |
-| C3 r34 섹션 | `grep -n "^## r34" TESTS-GATES.md` | L287 exit 0 — diff `@@ -283,3 +283,30 @@` append만, r21~r33 무변경 |
+| C3 r34 섹션 | `grep -n "^## r34" TESTS-GATES.md` | L287 exit 0 — diff `@@ -283,3 +283,30 @@` append만, r22~r29 무변경(TESTS-GATES 실재 섹션 — r30~r33은 TESTS.md 소재, r21은 본 파일 부재·산문 언급만) |
 | C4 모델 리터럴 | `grep -c "gpt-6.1-sol / high\|gpt-6-sol\|opus/xhigh" SKILL.md TESTS-GATES.md` | SKILL.md 15·TESTS-GATES.md 1(기록 시점 실측) — 본 표의 명령 원문 인용으로 최종 재실측 2(자기참조 +1 — TESTS.md L146 R4 전례 동일 클래스). R4 본원장은 발생 수(`grep -o \| wc -l`) 단위, 본 기록은 줄 수(`grep -c`) 단위 — 결론 동일. 신규 발생 0 — 번들 가정 1건이 이 실측으로 확증 전환 |
-| 파일 범위 | `git status -s` ∧ `wc -l` | `M SKILL.md`·`M TESTS-GATES.md` 2파일만 — SKILL.md 503→504·TESTS-GATES.md 285→312(본 검증 기록 표 9행 포함 최종) |
+| 파일 범위 | `git status -s` ∧ `wc -l` | `M SKILL.md`·`M TESTS-GATES.md` 2파일만 — SKILL.md 503→504·TESTS-GATES.md 285→312(본 검증 기록 표 8행 포함 최종) |
 | 검증 입력 변경 보고 | 테스트 스크립트·게이트 무접촉 — 본 과업은 계약 문서 grep 게이트만 적용 | 기록 완료 |
+
+### 소급 적대검토·갭 라운드 2 (2026-10-03)
+
+소급 검토 렌즈 2종(산출물·장부 / 프로세스 준수 — plan-adversary-xhigh 직렬 2스폰): 반려·위반 확정. HIGH 5 — A-1 섹션 생략 감지 배선 부재('전달' 무채널 — 주입 계약은 claims·원요구뿐) / C-1 번들 '배포 본수' 미확정 오분류(스크립트=진실원천)·해소 후 미갱신 / F1 ① plan-high 미스폰(메인 직접 수행 — '얇은 계획'은 심층 면제지 스폰 면제 아님, Output Contract 명시-미스폰 = 라우팅 위반) / F2 문서 산출 과제 실행 계약 미적용(외부 원천 대조 0건·grep claims 사용) / F3 spawns 4≠5. MED — A-2 요소 열거 3≠7, A-3 미확정 해소 전이 미규정, B-1 'r21~r33' 허위 범위, B-2 ②·④ 실행 기록 부재, F4 round 근거 불명확, F5 반려 라벨 계약 외 어휘, F6 Contract 직렬 미표기(LOW). 갭 수정: 불릿 v5(배선·해소·열거 3치환)·장부 정정·번들 확증 전환·외부 원천 대조 추가.
+
+| 실행 기록 | 내용 |
+|---|---|
+| ② | 소급 렌즈A·B 2스폰(직렬) — round.adversary 0 유지(최초 ② 실행 카운트 없음 규칙 — 소급 렌즈는 갱신된 번들에 대한 최초 ② 실행) |
+| ④ | 라운드1 ④ 수정요청 3건은 gap 아닌 claims 밖 정정이므로 L427 근거상 과카운트 — round는 통계 기록이므로 소급 차감 없이 사유 기록으로 보존. 라운드2 +1은 렌즈A A-1(C1 gap) 확정 후 재구현 착수의 정규 카운트 → round.review 2 확정. 라운드3 ④ 후 round.review 3(재리뷰 수정요청 = claims 밖 정정 착수 — 과카운트 사유 기록 관례 동일) |
+| spawns | 누적 5(②3+③1+④1) 중 라운드1 종료 시 4로 오기록 — 소급 정정. 소급 검토 2스폰 포함 누적 7, 라운드2 ③·④ 후 9, 라운드3 ③·④ 후 11 |
+| 외부 원천 대조 | 근거 수준 3분의 원천 — Shawnchee/andrej-explains SKILL.md "Separate verified facts, inference, assumptions, and unresolved questions. Cite file paths and symbols, or authoritative sources for external claims." (raw.githubusercontent.com — 본 과업 세션 취득 캐시). 3분 체계는 해당 원문의 4분(verified/inference/assumptions/unresolved)을 effort-router 계약 요소에 맞춰 3분으로 수렴 적용한 것임을 대조 확인 |
+| 프로세스 위반 기록 | F1(① 메인 직접)·F2(문서 산출 실행 계약 미적용)·F4 round 근거 불명확(라운드1 재구현 주체 메인 직접 병기)·F6(Contract 직렬 미표기) — 라운드1 실측 위반. 라운드2부터 ③ implement-med 스폰·④ 재리뷰로 시정. 이력 소급 재실행은 불가 — 기록으로 봉쇄 |
+| 라운드3 | ④ 발견 4건 정정(bundle v4 superseded 주석·F4/F6 통일·round 서술·v5.1 배선 1구) — wc: SKILL.md 504·TESTS-GATES.md 325 |
