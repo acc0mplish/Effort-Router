@@ -323,3 +323,33 @@ L6 DrvFs 지연 기록(양측 실측 — 같은 머신 WSL2): test_worktree_gate
 | 외부 원천 대조 | 근거 수준 3분의 원천 — Shawnchee/andrej-explains SKILL.md "Separate verified facts, inference, assumptions, and unresolved questions. Cite file paths and symbols, or authoritative sources for external claims." (raw.githubusercontent.com — 본 과업 세션 취득 캐시). 3분 체계는 해당 원문의 4분(verified/inference/assumptions/unresolved)을 effort-router 계약 요소에 맞춰 3분으로 수렴 적용한 것임을 대조 확인 |
 | 프로세스 위반 기록 | F1(① 메인 직접)·F2(문서 산출 실행 계약 미적용)·F4 round 근거 불명확(라운드1 재구현 주체 메인 직접 병기)·F6(Contract 직렬 미표기) — 라운드1 실측 위반. 라운드2부터 ③ implement-med 스폰·④ 재리뷰로 시정. 이력 소급 재실행은 불가 — 기록으로 봉쇄 |
 | 라운드3 | ④ 발견 4건 정정(bundle v4 superseded 주석·F4/F6 통일·round 서술·v5.1 배선 1구) — wc: SKILL.md 504·TESTS-GATES.md 325 |
+
+## r35 계약 개정 3건 — phase blocked·cancelled·착수 상한 선언·후속 개선 채널 (2026-10-04)
+
+원 요구: 외부 프롬프트(자율 코딩 에이전트용 시스템 프롬프트, 스몰중력 원본 수정본) 대조 검토에서 도출한 채택 후보 3건 적용("/goal 1,2,3 계획작성해서 적용해"). 채택 기각 1건: 총예산 고정·한도 도달 종료 — round 무상한·경로 전환 철학(§5 예산)과 정면 충돌. 갭 실측 근거: §5 '취소·폐기는 phase 전환'이 enum 미정의 값 암시(worktree_gate.py:85 주석과 불일치)·산재 상한 4곳 착수 시 통합 선언 부재·'범위 밖 기여 분리' 종착점 부재. 본 회차는 r34 근거 수준 분리와 외부 독립 수렴(사실·추론·미검증 3분 ≡ 확정·가정·미확정) — r34 방향 타당성 외부 확인 신호.
+
+계약 요지 (증류):
+
+| 항목 | 계약 |
+|------|------|
+| phase 2값 | state.json phase 열거 6→8(blocked·cancelled) — blocked=안전한 완료 방해 외부 조건 대기(진입 판정 메인·next 유지·해소 관측 시 재개·독립 과업 계속), cancelled=취소·폐기 확정(최종 패치 시에도 next 유지). 두 값은 완료 아님 — 미해결·차단·폐기 보고 |
+| 취소 정리 3단계 | (1) phase=done 패치(게이트 입력 토큰 — done 판정 조건과 무관) → (2) 게이트 done 호출(salvage·제거) → (3) phase=cancelled 최종 패치. (2) exit 2 실패 시 (3) 유보·원인 해소 후 (2) 재실행·정리 실패 잔존은 phase=done 유지+'정리 실패 잔존' 보고 |
+| 재개 가드 | 재개 규칙 — phase=blocked·cancelled면 next 진행 아님(blocked는 해소 관측, cancelled는 사용자 재개 요청 시 신규 판정이 전제) |
+| 실행 상한 라인 | Output Contract 신규 라인 — 동시성·재시도 상한 착수 시 고정 선언(심층 동시 N·재스폰 M회·적용 계층, 없음 가능). 산재 4곳 무수정 통합 선언·round 무상한 유지(총예산 비채택)·하위 워크플로 공유·③④ 스폰 프롬프트 주입·상황 변화 시 재선언·불일치=라우팅 위반 |
+| 상한 우회 금지 | §3 신규 불릿 — 상한은 task-id가 아니라 작업 실체 귀속·재부여·신규 번들 발급으로 초기화 금지. ①회귀·번들 갱신(경로 전환)은 우회 아님 — 카운터는 갱신 후에도 연속 |
+| 후속 개선 섹션 | §5 '범위 밖 기여 분리' 확장 — 번들 '후속 개선' 선택 섹션(① 초기 배치·'없음' 표기·③④ 발견분 보고→메인 병합·writer 원칙 준용·중복 규칙 금지·state 필드 0) |
+
+프로세스: 문서 산출 과제 흐름 준수 — ①얇은 계획(plan-high) → ③초안(plan-high, 명세 영역) → ②팬아웃 3렌즈 직렬(완전성/기술적오류/위험, plan-adversary-xhigh — GLM 심층 동시 1) → 수정 라운드(③초안 스폰 재호출, 반려 근거 주입) → ④리뷰(review-pr-xhigh). jev tier 예판 M 추천(0.65) 기각 — any_risk 양성(output_document 0.91·gate_preset 0.51, 감audits/task-id/r35-contract3/jev/). ② HIGH 2건 이결 확인(취소 3단계 실패 분기 부재 — 기술·위험 렌즈 독립 발견) → 수정 라운드 S1~S7 반영. round 0/0(반려 확정 형식 아닌 수정 라운드). 프로세스 위반 0.
+
+검증 기록 (verify — 메인 재확인, 계약 문서 과업 = §3 대체 확인 수단):
+
+| claims | 명령 원문 | 결과 |
+|---|---|---|
+| C1 phase 8값 | `grep -c 'plan\|adversary\|implement\|review\|verify\|done\|blocked\|cancelled' SKILL.md` | 1건(L414) exit 0 — ④ word-diff로 기존 6값 접두사 byte 일치·말미 삽입만 확인 |
+| C2 기존 문구 보존 | ④ word-diff @@ -421,8·@@ -388,7 | 순수 삽입·appending — 실제 문구 삭제 0(라인 diff - 6행은 전부 치환 원행 라인 표시) |
+| C3 게이트 무수정 | `git diff --name-only fd45770` | SKILL.md 단일 — scripts/·README·platforms 미포함(옵션 b — 게이트 스크립트 계약 require_done_phase 준수) |
+| C4 상한 라인·우회 금지 | `grep -n '실행 상한' SKILL.md` ∧ `grep -c '재스폰은 동일 역할 2회까지\|GLM-5.3 상한 1' SKILL.md` | L358·L470·L479·L481 4곳·산재 상한 grep 2 — 통합 선언만·값 무수정 |
+| C5 비종착 치환 | `grep -c '비종착' SKILL.md` | 0건(S3(b) 치환 잔존 없음 — '완료 아님 표시' 계열) |
+| C6 파일 범위·규모 | `git status --porcelain` ∧ `wc -l SKILL.md TESTS-GATES.md` | M SKILL.md 단일(verify 시점)·SKILL.md 504→509(+5)·650 경계·800 하드캡 내 |
+| 배포 | `python3 scripts/deploy_global.py` 2회 | 1회째 미러 동기·2회째 멱등(changes_total 0) — 아래 verify 기록 |
+| 검증 입력 변경 보고 | 테스트 스크립트·게이트 무접촉 — grep 게이트·스키마 대조만 적용 | 기록 완료 |
