@@ -13,22 +13,52 @@ import sys
 import tempfile
 import tomllib
 
-EXPECTED_AGENTS = {
-    'coder-medium': ('gpt-6-luna', 'max'),
-    'implement-med': ('gpt-6-luna', 'max'),
-    'implement-xhigh': ('gpt-6-luna', 'max'),
-    'core-xhigh': ('gpt-6-luna', 'max'),
-    'plan-high': ('gpt-6.1-sol', 'high'),
-    'plan-xhigh': ('gpt-6.1-sol', 'high'),
-    'plan-adversary-xhigh': ('gpt-6.1-sol', 'high'),
-    'review-pr-high': ('gpt-6.1-sol', 'high'),
-    'review-pr-xhigh': ('gpt-6.1-sol', 'high'),
-    'security-audit': ('gpt-6.1-sol', 'high'),
-}
+DEFAULT_MODEL = 'gpt-6-astra'
+DEFAULT_EFFORT = 'medium'
+DIFFICULT_EFFORT = 'max'
+EXPECTED_AGENTS = {'coder-medium': ('gpt-6-astra', 'medium'), 'implement-med': ('gpt-6-astra', 'medium'), 'implement-xhigh': ('gpt-6-astra', 'max'), 'core-xhigh': ('gpt-6-astra', 'max'), 'plan-high': ('gpt-6-astra', 'medium'), 'plan-xhigh': ('gpt-6-astra', 'max'), 'plan-adversary-xhigh': ('gpt-6-astra', 'max'), 'review-pr-high': ('gpt-6-astra', 'medium'), 'review-pr-xhigh': ('gpt-6-astra', 'max'), 'security-audit': ('gpt-6-astra', 'max')}
+
+
+def routing_policy() -> dict:
+    """Load the user policy; retain fixed defaults for standalone script copies."""
+    path = Path(__file__).resolve().parents[1] / 'local-policy.json'
+    if not path.is_file():
+        return {
+            'default': {'model': DEFAULT_MODEL, 'model_reasoning_effort': DEFAULT_EFFORT},
+            'difficult': {'model': DEFAULT_MODEL, 'model_reasoning_effort': DIFFICULT_EFFORT},
+            'roles': {name: {'model': model, 'model_reasoning_effort': effort}
+                      for name, (model, effort) in EXPECTED_AGENTS.items()},
+        }
+    data = json.loads(path.read_text(encoding='utf-8'))
+    if not isinstance(data, dict) or not isinstance(data.get('roles'), dict):
+        raise ValueError('Invalid local routing policy schema')
+    default, difficult = data.get('default', {}), data.get('difficult', {})
+    if not isinstance(default, dict) or default.get('model') != DEFAULT_MODEL or default.get('model_reasoning_effort') != DEFAULT_EFFORT:
+        raise ValueError('Local default must be gpt-6-astra/medium')
+    if not isinstance(difficult, dict) or difficult.get('model') != DEFAULT_MODEL or difficult.get('model_reasoning_effort') != DIFFICULT_EFFORT:
+        raise ValueError('Local difficult routing must be gpt-6-astra/max')
+    if set(data['roles']) != set(EXPECTED_AGENTS):
+        raise ValueError('Local policy must define exactly the ten managed roles')
+    for name, role in data['roles'].items():
+        if not isinstance(role, dict) or role.get('model') != DEFAULT_MODEL or role.get('model_reasoning_effort') not in (DEFAULT_EFFORT, DIFFICULT_EFFORT):
+            raise ValueError(f'Invalid Astra routing for role {name}')
+    profiles = data.get('profiles', {})
+    if not isinstance(profiles, dict) or any(
+        not isinstance(name, str) or effort not in (DEFAULT_EFFORT, DIFFICULT_EFFORT)
+        for name, effort in profiles.items()
+    ):
+        raise ValueError('Local profiles must map names to medium/max')
+    return data
+
+
+def default_routing() -> tuple[str, str]:
+    default = routing_policy()['default']
+    return default['model'], default['model_reasoning_effort']
 
 
 def expected_agents() -> dict[str, tuple[str, str]]:
-    return dict(EXPECTED_AGENTS)
+    return {name: (role['model'], role['model_reasoning_effort'])
+            for name, role in routing_policy()['roles'].items()}
 
 
 def render_agent(text: str, model: str, effort: str) -> str:
@@ -68,7 +98,7 @@ def configure(agents_dir: Path, apply: bool) -> dict:
         'applied': apply,
         'restart_required': bool(apply and changes),
         'backup_dir': None,
-        'hint': 'run scripts/deploy_global.py for full deployment',
+        'hint': 'follow LOCAL-INSTALL.md; legacy scripts/deploy_global.py is blocked under local policy',
     }
     if not apply or not changes:
         return report

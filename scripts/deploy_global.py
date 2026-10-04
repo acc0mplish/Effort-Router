@@ -403,6 +403,12 @@ def main() -> int:
     parser.add_argument('--claude-mirror', type=Path, default=None,
                         help='Claude-side mirror root (default ~/.claude/skills/effort-router)')
     args = parser.parse_args()
+    if (ROOT / 'local-policy.json').is_file():
+        report = {'dry_run': args.dry_run, 'backup_dir': None,
+                  'error': 'Legacy deployment is blocked by the Astra local policy; follow LOCAL-INSTALL.md and configure_codex_plan.py.'}
+        print(json.dumps(report, ensure_ascii=False))
+        print('FAIL deploy precheck: Astra local policy requires the scoped updater', file=sys.stderr)
+        return 1
 
     codex_home = (args.codex_home or Path(
         os.environ.get('CODEX_HOME', str(Path.home() / '.codex')))).expanduser()

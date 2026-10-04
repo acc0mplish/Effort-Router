@@ -1,62 +1,50 @@
-# effort-router — Codex adapter
+# effort-router — Codex adapter (Astra local policy)
 
-Applies to Codex CLI, the IDE extension, and the Codex view in the ChatGPT desktop app. They share the local Skill, `config.toml`, and custom-agent TOMLs.
+Codex CLI·IDE·앱은 로컬 Skill과 config.toml·역할 설정을 사용한다. [LOCAL-INSTALL.md](../LOCAL-INSTALL.md)와 [local-policy.json](../local-policy.json)이 설치 원본의 모델 예제보다 우선한다.
 
-## Install and update locations
+일반 작업은 `gpt-6-astra / medium`, 고난도 작업은 `gpt-6-astra / max`다. 계획·리뷰라는 단계만으로 max를 선택하지 않는다.
 
-- Skill: `~/.codex/skills/effort-router/`
-- Custom-agent TOMLs: `~/.codex/agents/`
-- Global model defaults: `~/.codex/config.toml`
-- Global instructions: `~/.codex/AGENTS.md`
+## Global defaults
 
-Copy the upstream Skill content into the Skill directory, then apply this Codex adapter's fixed role map. Preserve unrelated files and settings, and keep local Codex routing aligned with the global `AGENTS.md`.
-
-## Global model defaults
-
-Merge these root values above the first TOML table; do not replace the file:
+기존 config.toml을 보존하고 첫 TOML table 위의 root 키만 병합한다.
 
 ```toml
-model = "gpt-6-luna"
-model_reasoning_effort = "max"
+model = "gpt-6-astra"
+model_reasoning_effort = "medium"
 
 [agents]
 enabled = true
 ```
 
-If `[agents]` already exists, update its `enabled` value instead of adding a duplicate table. Preserve profiles, MCP, sandbox, and project settings. `agents.enabled` makes custom-role configuration available; it does not authorize native agent spawning or fan-out.
+이미 존재하는 table을 중복 생성하지 않는다. fast·balanced·planning·unsloth_api는 Astra/medium, deep은 Astra/max다. unsloth_api는 기존 이름을 유지하는 Astra 프로필이며 별도 model_provider override를 사용하지 않는다. provider 정의·인증·서비스 등급·MCP·plugins·권한·컨텍스트 값은 보존한다.
 
-## Fixed Codex role map
+## Role map
+
+역할 이름은 호환성을 위해 유지한다. high/xhigh 접미사는 실제 effort를 의미하지 않는다.
 
 | Role | Model | Effort |
 |---|---|---|
-| `coder-medium` | `gpt-6-luna` | `max` |
-| `implement-med` | `gpt-6-luna` | `max` |
-| `implement-xhigh` | `gpt-6-luna` | `max` |
-| `core-xhigh` | `gpt-6-luna` | `max` |
-| `plan-high` | `gpt-6.1-sol` | `high` |
-| `plan-xhigh` | `gpt-6.1-sol` | `high` |
-| `plan-adversary-xhigh` | `gpt-6.1-sol` | `high` |
-| `review-pr-high` | `gpt-6.1-sol` | `high` |
-| `review-pr-xhigh` | `gpt-6.1-sol` | `high` |
-| `security-audit` | `gpt-6.1-sol` | `high` |
+| `coder-medium` | `gpt-6-astra` | `medium` |
+| `implement-med` | `gpt-6-astra` | `medium` |
+| `implement-xhigh` | `gpt-6-astra` | `max` |
+| `core-xhigh` | `gpt-6-astra` | `max` |
+| `plan-high` | `gpt-6-astra` | `medium` |
+| `plan-xhigh` | `gpt-6-astra` | `max` |
+| `plan-adversary-xhigh` | `gpt-6-astra` | `max` |
+| `review-pr-high` | `gpt-6-astra` | `medium` |
+| `review-pr-xhigh` | `gpt-6-astra` | `max` |
+| `security-audit` | `gpt-6-astra` | `max` |
 
-Use `gpt-6-luna / max` for general work and `gpt-6.1-sol / high` for planning or high-reasoning work. Terra is not used. Custom-agent files record the mapping; their presence does not authorize a spawn.
-
-The updater changes only the bare `model` and `model_reasoning_effort` keys in role TOMLs, preserves other content, and backs up changed files:
+## Safe update and verification
 
 ```bash
 python3 ~/.codex/skills/effort-router/scripts/configure_codex_plan.py
 python3 ~/.codex/skills/effort-router/scripts/configure_codex_plan.py --apply
-```
-
-## Global instructions and verification
-
-Keep the existing `~/.codex/AGENTS.md` content. It must activate effort-router before coding and describe the model/effort rules and failure-ledger policy. In this installation, native spawn/fan-out is disabled by instruction; use a separate `codex exec` process for an explicitly authorized independent helper only.
-
-Verify the local skill, global defaults, instructions, and all ten role TOMLs:
-
-```bash
 python3 ~/.codex/skills/effort-router/scripts/verify_global_install.py
 ```
 
-Success prints `PASS global effort-router installation`. Restart Codex after changing global configuration or role TOMLs so the next session loads the updated values.
+갱신기는 local-policy.json을 읽고 역할 root model·effort만 변경한다. 변경 전 검증·스캔 트리 밖 백업·원자적 쓰기를 유지한다. 검증 성공은 `PASS global effort-router installation`이다. 기존 광범위 deploy_global.py는 로컬 정책 설치에서 차단된다.
+
+일반 보조 작업도 Astra/medium, 고난도는 Astra/max다. native spawn/fan-out은 금지하며 승인된 독립 작업은 별도 codex exec에 모델·effort·-C·sandbox·결과 경로를 명시한다. 최대 동시 작업자는 4개다. 메인이 결과와 검증을 통합한다.
+
+~/.codex와 ~/.agents의 effort-router 설치본을 동기화한다. 앱 재시작 또는 새 세션에서 전역 설정을 로드한다. 진행 중인 세션의 모델을 자동 변경했다고 주장하지 않는다.

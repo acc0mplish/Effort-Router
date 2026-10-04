@@ -1,6 +1,6 @@
 # Repository agent guide
 
-Use `gpt-6-luna / max` for general work and `gpt-6.1-sol / high` for planning or high-reasoning work. Do not route Terra. Do not use native spawn or fan-out; independent helpers require a separate `codex exec` with explicit model, effort, and working directory (implicit cwd inheritance has caused cross-worktree interference).
+Use `gpt-6-astra / medium` for all routine work and `gpt-6-astra / max` for difficult work. Planning or review alone does not make a task difficult. local-policy.json is the routing source of truth. Do not use native spawn or fan-out; independent helpers require a separate `codex exec` with explicit model, effort, and working directory (implicit cwd inheritance has caused cross-worktree interference).
 
 ## Failure-based permanent prevention rules
 

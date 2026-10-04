@@ -7,7 +7,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-from configure_codex_plan import expected_agents
+from configure_codex_plan import default_routing, expected_agents, routing_policy
 
 
 def load_toml(path: Path) -> dict:
@@ -39,6 +39,13 @@ def find_duplicate_roles(agent_dir: Path) -> tuple[dict[str, list[Path]], list[P
 def main() -> int:
     codex_home = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex')).expanduser()
     failures: list[str] = []
+    try:
+        policy = routing_policy()
+        default_model, default_effort = default_routing()
+        roles = expected_agents()
+    except (OSError, ValueError, TypeError) as error:
+        print(f'FAIL local routing policy: {error}')
+        return 1
     skill_dir = codex_home / 'skills' / 'effort-router'
     for relative in ('SKILL.md', 'agents/openai.yaml', 'platforms/codex.md'):
         if not (skill_dir / relative).is_file():
@@ -55,10 +62,17 @@ def main() -> int:
             failures.append(f'invalid {config_path}: {error}')
             config = {}
 
-    if config.get('model') != 'gpt-6-luna':
-        failures.append('config model must be gpt-6-luna')
-    if config.get('model_reasoning_effort') != 'max':
-        failures.append('config model_reasoning_effort must be max')
+    if config.get('model') != default_model:
+        failures.append(f'config model must be {default_model}')
+    if config.get('model_reasoning_effort') != default_effort:
+        failures.append(f'config model_reasoning_effort must be {default_effort}')
+    for name, effort in policy.get('profiles', {}).items():
+        profile = config.get('profiles', {}).get(name)
+        if profile is not None:
+            if profile.get('model') != default_model or profile.get('model_reasoning_effort') != effort:
+                failures.append(f'profile {name} must be {default_model}/{effort}')
+            if profile.get('model_provider', config.get('model_provider', 'openai')) != config.get('model_provider', 'openai'):
+                failures.append(f'profile {name} must use the default Astra provider')
 
     agents_enabled = config.get('agents', {}).get('enabled') is True
     if not agents_enabled:
@@ -71,8 +85,8 @@ def main() -> int:
         text = global_agents.read_text(encoding='utf-8')
         for marker in (
             'effort-router',
-            'GPT-6-Luna',
-            'GPT-6.1-Sol',
+            'GPT-6-Astra',
+            'medium',
             'max',
             '실패 기반 영구 예방 규칙',
             '과거 실패 1건',
@@ -83,7 +97,7 @@ def main() -> int:
                 failures.append(f'AGENTS.md missing marker: {marker}')
 
     agent_dir = codex_home / 'agents'
-    for name, (model, effort) in expected_agents().items():
+    for name, (model, effort) in roles.items():
         path = agent_dir / f'{name}.toml'
         if not path.is_file():
             failures.append(f'missing agent {path}')
@@ -115,8 +129,8 @@ def main() -> int:
 
     print('PASS global effort-router installation')
     print(f'- CODEX_HOME: {codex_home}')
-    print('- default: gpt-6-luna/max')
-    print(f'- custom agents: {len(expected_agents())}/{len(expected_agents())}')
+    print(f'- default: {default_model}/{default_effort}')
+    print(f'- custom agents: {len(roles)}/{len(roles)}')
     return 0
 
 

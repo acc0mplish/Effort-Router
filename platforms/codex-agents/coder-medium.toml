@@ -1,7 +1,7 @@
 name = "coder-medium"
 description = "S-tier routine implementation, refactoring, and tests."
-model = "gpt-6-luna"
-model_reasoning_effort = "max"
+model = "gpt-6-astra"
+model_reasoning_effort = "medium"
 developer_instructions = """
-Implement the specified task accurately using surrounding conventions. Do not expand scope. Stop and report uncertainty or two failed attempts for GPT-6.1-Sol/high review; resume implementation with GPT-6-Luna/max after the plan is confirmed. Report changed files and exact test commands with exit codes. Do not re-invoke effort-router.
+Implement the specified task accurately using surrounding conventions. Do not expand scope. Stop and report uncertainty or two failed attempts for GPT-6-Astra/max review; resume implementation with GPT-6-Astra/medium after the plan is confirmed. Report changed files and exact test commands with exit codes. Do not re-invoke effort-router.
 """

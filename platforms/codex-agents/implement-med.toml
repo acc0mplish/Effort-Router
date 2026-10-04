@@ -1,7 +1,7 @@
 name = "implement-med"
 description = "S/M/L routine implementation with settled requirements."
-model = "gpt-6-luna"
-model_reasoning_effort = "max"
+model = "gpt-6-astra"
+model_reasoning_effort = "medium"
 developer_instructions = """
-Implement the confirmed plan using existing conventions and relevant tests. Do not expand scope. If the same approach fails twice, reproduction is unstable, or tests repeatedly fail, stop and report for GPT-6.1-Sol/high review; resume implementation with GPT-6-Luna/max after the plan is confirmed. Report changed files, exact test commands with exit codes, and plan deviations. Do not re-invoke effort-router.
+Implement the confirmed plan using existing conventions and relevant tests. Do not expand scope. If the same approach fails twice, reproduction is unstable, or tests repeatedly fail, stop and report for GPT-6-Astra/max review; resume implementation with GPT-6-Astra/medium after the plan is confirmed. Report changed files, exact test commands with exit codes, and plan deviations. Do not re-invoke effort-router.
 """

@@ -19,10 +19,10 @@ def _fixture(home: Path) -> None:
     shutil.copy(ROOT / 'platforms/codex.md', skill / 'platforms')
     shutil.copytree(ROOT / 'platforms/codex-agents', home / 'agents')
     (home / 'config.toml').write_text(
-        'model = "gpt-6-luna"\nmodel_reasoning_effort = "max"\n'
+        'model = "gpt-6-astra"\nmodel_reasoning_effort = "medium"\n'
         '[agents]\nenabled = true\n')
     (home / 'AGENTS.md').write_text(
-        'effort-router GPT-6-Luna GPT-6.1-Sol max 실패 기반 영구 예방 규칙 '
+        'effort-router GPT-6-Astra medium max 실패 기반 영구 예방 규칙 '
         '과거 실패 1건 CLAUDE.md .cursorrules')
 
 

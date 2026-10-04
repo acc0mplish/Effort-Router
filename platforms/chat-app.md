@@ -16,11 +16,11 @@ ChatGPT Work에서도 Skill을 사용할 수 있지만, 로컬 Codex custom-agen
 
 | 작업 | 선택 |
 |---|---|
-| 요구가 확정된 일반 실행·변환·반복 작업 | `GPT-6-Luna / Max` |
-| 명세 작성·계획·스펙 검토·문제 분석·해결안 판정·고난도 작업 | `GPT-6-Sol / xhigh` |
-| 동일 접근 2회 실패·보안/고위험 판정·최난도 단발 문제 | `GPT-6-Sol / xhigh` |
+| 요구가 확정된 일반 실행·변환·반복 작업 | `GPT-6-Astra / medium` |
+| 고난도 명세·계획·스펙 검토·문제 분석·해결안 판정 | `GPT-6-Astra / max` |
+| 동일 접근 2회 실패·보안/고위험 판정·최난도 단발 문제 | `GPT-6-Astra / max` |
 
-`Max`는 한 문제를 깊게 푸는 모드다. 이 라우팅에서는 `Ultra`와 native spawn/fan-out을 사용하지 않는다.
+일반 계획·리뷰는 Astra/medium, 고난도 판단만 Astra/max다. 이 라우팅에서는 `Ultra`와 native spawn/fan-out을 사용하지 않는다.
 
 문서 산출 과제(설계·디자인·계획 문서)도 §1 L 고정 승격 대상이다 — Work는 스폰 병렬화가 없어 본문 ●●● 폴백(메인 세션 셀프 3렌즈 순차 검토, 팬아웃 라인 `ON: 셀프 3렌즈 순차` 표기)로 이행한다.
 
@@ -30,9 +30,9 @@ ChatGPT Work Output Contract의 에이전트 줄은 다음처럼 쓴다.
 [Effort Router]
 - 판정 티어: M
 - 작업 단계: 계획
-- 적용 에이전트·모델·에포트: 없음(ChatGPT Work 단일 세션) (gpt-6-sol / xhigh)
+- 적용 에이전트·모델·에포트: 없음(ChatGPT Work 단일 세션) (gpt-6-astra / medium)
 - 팬아웃: OFF
-- 실행 지침 요약: 명세 작성은 Sol, 구현 전 검증 가능한 claims 확정
+- 실행 지침 요약: 일반 명세 작성은 Astra/medium, 구현 전 검증 가능한 claims 확정
 ```
 
 ## 3. ChatGPT Classic(구 일반 Chat)

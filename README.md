@@ -1,6 +1,8 @@
 # effort-router
 
-작업의 규모·위험도를 티어(S/M/L/XL)로 판정하고 단계별 모델·에포트를 배정하는 Codex·ChatGPT Skill. 일반 작업은 GPT-6-Luna max, 계획·고난도 추론은 GPT-6.1-Sol high를 사용한다.
+> Astra 로컬 수정본. local-policy.json과 LOCAL-INSTALL.md 우선. Astra 경로가 확인되지 않은 선택적 외부 LLM 호출은 생략하고 결정론적 게이트는 유지한다.
+
+작업의 규모·위험도를 티어(S/M/L/XL)로 판정하고 단계별 모델·에포트를 배정하는 Codex·ChatGPT Skill. 모든 작업은 GPT-6-Astra, 일반 medium·고난도 max를 사용한다.
 
 ```text
 Decision(티어 판정) → Requirement → Acceptance → Task → Evidence → Learning
@@ -27,35 +29,25 @@ Decision(티어 판정) → Requirement → Acceptance → Task → Evidence →
 
 ## 설치 (Codex + ChatGPT 데스크톱 앱)
 
-### 1. Skill·custom agents 설치 — `deploy_global.py` 공식 경로
+### 1. Astra 로컬 정책의 안전한 갱신
 
-전역 설치·재설치는 통합 배포 스크립트 1회 실행이 공식 경로다. 사전 검사(신선도·중복 역할·미러 드리프트) → 스냅샷 → 역할 TOML 배포 → `config.toml`·`AGENTS.md` 결합형 치환 → 미러 2곳 동기 → 게이트 G1–G4 → JSON 리포트가 한 파이프라인으로 진행된다.
-
-```bash
-python3 scripts/deploy_global.py --dry-run   # 사전 시뮬레이션 — 라이브·백업 루트 무변경
-python3 scripts/deploy_global.py             # 실배포 — 게이트 전부 PASS면 exit 0
-```
-
-- 백업 스냅샷은 `~/.effort-router-backups/<ts>-deploy/`에 생성된다(환경변수 `EFFORT_ROUTER_BACKUP_ROOT`로 최상위 루트 변경 가능 — 역할 스캔 루트 내부 경로는 거부된다). 배포 후 Codex를 재시작한다.
-- 재실행은 멱등 — `changes_total: 0`이면 repo↔미러↔라이브 3점 드리프트 부재의 대용 지표다.
-- 폴백(스크립트 사용 불가 환경 한정): 수동 cp는 다음과 같이 하되, 백업 루트를 `~/.codex/agents` 안에 만들지 않는다 — 역할 스캔 루트 안의 백업 사본은 중복 역할로 오인된다.
+[LOCAL-INSTALL.md](LOCAL-INSTALL.md)와 [local-policy.json](local-policy.json)을 따른다. 기존 deploy_global.py는 광범위 전역 치환·역할 전체 덮어쓰기가 있어 이 설치에서 차단된다. 역할 갱신은 정책을 읽는 제한적 updater를 사용한다.
 
 ```bash
-mkdir -p ~/.codex/skills/effort-router
-cp -R SKILL.md TESTS.md README.md agents platforms scripts ~/.codex/skills/effort-router/
-
-mkdir -p ~/.codex/agents
-cp platforms/codex-agents/*.toml ~/.codex/agents/
-python3 scripts/configure_codex_plan.py --apply
+python3 ~/.codex/skills/effort-router/scripts/configure_codex_plan.py
+python3 ~/.codex/skills/effort-router/scripts/configure_codex_plan.py --apply
+python3 ~/.codex/skills/effort-router/scripts/verify_global_install.py
 ```
+
+~/.codex와 ~/.agents 설치본의 로컬 정책·Codex 문서·템플릿·갱신기·검증기를 함께 동기화한다. 백업은 ~/.effort-router-backups에 저장하며 역할 스캔 트리 안에 만들지 않는다. 재설치 시 기존 전역 파일과 사용자 역할 지침을 보존한다.
 
 ### 2. `~/.codex/config.toml` 전역 설정
 
 기존 파일을 통째로 교체하지 말고 다음 값을 병합한다. `model`과 `model_reasoning_effort`는 첫 TOML table보다 위의 root 영역에 둔다.
 
 ```toml
-model = "gpt-6-luna"
-model_reasoning_effort = "max"
+model = "gpt-6-astra"
+model_reasoning_effort = "medium"
 
 [agents]
 enabled = true
@@ -70,8 +62,8 @@ enabled = true
 기존 내용을 보존하고 다음 단편을 추가한다.
 
 ```markdown
-코딩 작업 착수 전 설치된 `effort-router`를 사용한다. 일반 작업은 GPT-6-Luna max, 계획·고난도 추론은 GPT-6.1-Sol high를 사용한다. Terra는 사용하지 않는다. native spawn/fan-out은 사용하지 않는다.
-`configure_codex_plan.py --apply`는 고정 전역 role 매핑만 적용하고, 변경 후 Codex를 재시작한다. 동일 접근 2회 실패 시 GPT-6.1-Sol high로 검토하고 확정된 구현은 GPT-6-Luna max로 진행한다.
+코딩 작업 착수 전 설치된 `effort-router`를 사용한다. 모든 작업은 GPT-6-Astra, 일반 medium·고난도 max를 사용한다. native spawn/fan-out은 사용하지 않는다.
+`configure_codex_plan.py --apply`는 고정 전역 role 매핑만 적용하고, 변경 후 Codex를 재시작한다. 동일 접근 2회 실패 시 GPT-6-Astra max로 검토하고 확정된 일반 구현은 GPT-6-Astra medium으로 진행한다.
 
 ## 실패 기반 영구 예방 규칙
 
@@ -475,13 +467,13 @@ contract_reminder 전문 — 무장 시 게이트가 노출하는 고정 문자�
 
 ## 모델 매핑
 
-일반 작업은 `gpt-6-luna / max`, 계획·고난도 추론은 `gpt-6.1-sol / high`다. Terra는 사용하지 않는다. 이 설치에서는 native spawn/fan-out을 사용하지 않는다.
+모든 작업은 `gpt-6-astra`, 일반 `medium`·고난도 `max`다. 계획·리뷰 단계만으로 max를 배정하지 않는다. 이 설치에서는 native spawn/fan-out을 사용하지 않는다.
 
 | 작업 | 모델·effort |
 |---|---|
-| 구현·조사·테스트·검증 | `gpt-6-luna / max` |
-| 계획·명세·아키텍처 | `gpt-6.1-sol / high` |
-| 계획 검토·리뷰·보안 판정 | `gpt-6.1-sol / high` |
+| 일반 구현·조사·테스트·검증·계획·리뷰 | `gpt-6-astra / medium` |
+| 고난도 계획·명세·아키텍처·핵심 구현 | `gpt-6-astra / max` |
+| 고난도 검토·리뷰·보안 판정 | `gpt-6-astra / max` |
 
 `python3 scripts/configure_codex_plan.py --apply`는 고정 role 매핑을 백업과 함께 적용한다. 상세 설정과 검증은 [Codex adapter](platforms/codex.md)를 따른다.
 

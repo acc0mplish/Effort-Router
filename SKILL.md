@@ -5,6 +5,8 @@ description: Use when a Codex or ChatGPT task needs model and reasoning effort s
 
 # Effort Router
 
+> 로컬 정책: 모든 작업 Astra, 일반 medium·고난도 max. [LOCAL-INSTALL.md](LOCAL-INSTALL.md)와 [local-policy.json](local-policy.json)이 설치 원본 예제보다 우선한다. Astra 백엔드가 확인되지 않은 선택적 외부 LLM(jev·Stagehand LLM 등)은 호출하지 않는다. 결정론적 게이트는 유지한다.
+
 작업의 규모·위험도를 티어로 판정하고, 단계별(계획/검토/구현/리뷰/검증) 모델·에포트를 배정하는 스킬이다. Codex와 ChatGPT를 1급 대상으로 삼고 판정을 출력한 뒤 작업을 수행한다.
 
 ```text
@@ -27,7 +29,7 @@ Codex 또는 ChatGPT 데스크톱 앱에 이 Skill을 설치·업데이트해 �
 
 1. Skill을 `~/.codex/skills/effort-router/`에 설치
 2. custom-agent TOML을 `~/.codex/agents/`에 설치
-3. `~/.codex/config.toml`에 기본 `gpt-6-luna / max`와 custom-agent 활성 설정을 **병합**
+3. `~/.codex/config.toml`에 기본 `gpt-6-astra / medium`와 custom-agent 활성 설정을 **병합**
 4. `~/.codex/AGENTS.md`에 전역 발동·승격 규칙과 실패 원장 규칙을 **병합**
 5. Codex/ChatGPT 앱 재시작 후 설치 검증 실행
 
@@ -261,42 +263,45 @@ state.json 선택 필드 `tree_claim`: `{"session_id": "<id>", "claimed_utc": "<
 
 ### Codex 전역 라우팅 정책
 
-일반 작업은 `gpt-6-luna / max`, 계획과 고난도 추론은 `gpt-6.1-sol / high`를 사용한다. Terra는 현재 라우팅에 사용하지 않는다. Codex용 custom-agent TOML은 이 매핑을 기록하며, 파일 존재는 호출 권한을 뜻하지 않는다. 이 환경에서는 native spawn/fan-out을 사용하지 않는다.
+모든 작업은 `gpt-6-astra`다. 일반 작업은 `medium`, 고난도 작업은 `max`다. 최신 사용자 지시가 이전 모델 매핑과 max 금지를 대체한다. [local-policy.json](local-policy.json)을 갱신기·검증기의 단일 원천으로 사용한다. native spawn/fan-out은 금지하며 승인된 멀티 작업은 모델을 고정한 codex exec로 실행한다.
 
-| 작업 성격 | 모델·에포트 | Codex role |
+| 작업 성격 | 모델·effort | Codex role |
 |---|---|---|
-| 모든 일반 구현·조사·테스트·검증 | `gpt-6-luna / max` | `coder-medium`, `implement-med`, `implement-xhigh`, `core-xhigh` |
-| 계획·명세·아키텍처 | `gpt-6.1-sol / high` | `plan-high`, `plan-xhigh` |
-| 계획 검토·리뷰·고난도 추론·보안 판정 | `gpt-6.1-sol / high` | `plan-adversary-xhigh`, `review-pr-*`, `security-audit` |
+| 일반 조사·구현·테스트·검증 | `gpt-6-astra / medium` | `coder-medium`, `implement-med` |
+| 일반 계획·명세·리뷰 | `gpt-6-astra / medium` | `plan-high`, `review-pr-high` |
+| 고난도 계획·아키텍처·적대 검토·리뷰·보안 판단 | `gpt-6-astra / max` | `plan-xhigh`, `plan-adversary-xhigh`, `review-pr-xhigh`, `security-audit` |
+| 고난도 구현·핵심 경로 | `gpt-6-astra / max` | `implement-xhigh`, `core-xhigh` |
 
-`python3 <skill-dir>/scripts/configure_codex_plan.py --apply`는 요금제를 조회하지 않고 고정 전역 매핑을 적용한다. 변경 뒤 Codex를 재시작하고 `verify_global_install.py`를 실행한다.
+파일 수나 계획·리뷰 단계만으로 max를 고르지 않는다. 큰 불확실성·깊은 원인 분석·고위험 핵심 판단·같은 접근 2회 실패가 고난도 기준이다. 고난도 과제에서도 방향이 확정된 일반 구현·독립 기계적 작업은 medium으로 복귀한다.
+
+`configure_codex_plan.py --apply`는 local-policy.json의 역할 매핑만 안전하게 적용한다. 전역 기본값은 Astra/medium이며 deep 프로필은 Astra/max다. 자세한 설치·갱신은 [LOCAL-INSTALL.md](LOCAL-INSTALL.md)를 따른다. 기존 deploy_global.py는 이 로컬 정책에서 차단된다.
 
 ### S
-- ① 계획: 생략
-- ② 검토: 셀프 재실행 확인(§3)
-- ③ 구현: 메인 세션 직접 또는 `coder-medium` (`gpt-6-luna / max`)
-- ④ 리뷰: `review-pr-high` (`gpt-6.1-sol / high`, 텍스트·스타일만 변경 시 생략)
+- ① 계획: 생략 가능
+- ② 검토: 메인 확인
+- ③ 구현: 메인 또는 `coder-medium` (Astra/medium)
+- ④ 리뷰: `review-pr-high` (Astra/medium, 필요한 경우)
 
 ### M
-- ① 계획: `plan-high` (`gpt-6.1-sol / high`)
-- ② 검토: `plan-adversary-xhigh` (`gpt-6.1-sol / high`)
-- ③ 구현: `implement-med` (`gpt-6-luna / max`)
-- ④ 리뷰: `review-pr-high` (`gpt-6.1-sol / high`)
+- ① 계획: `plan-high` (Astra/medium)
+- ② 검토: 독립 검토가 필요한 일반 과제는 `review-pr-high` (Astra/medium); 고난도 적대 검토만 `plan-adversary-xhigh` (Astra/max)
+- ③ 구현: `implement-med` (Astra/medium)
+- ④ 리뷰: `review-pr-high` (Astra/medium)
 
 ### L
-- ① 계획: `plan-high` (`gpt-6.1-sol / high`, Phase 분해)
-- ② 검토: `plan-adversary-xhigh` (`gpt-6.1-sol / high`)
-- ③ 구현: `implement-med` (`gpt-6-luna / max`, Phase당 ≤5파일)
-- ④ 리뷰: `review-pr-xhigh` (`gpt-6.1-sol / high`)
+- ① 고난도 계획: `plan-xhigh` (Astra/max, 필요 시 Phase 분해)
+- ② 고난도 검토: `plan-adversary-xhigh` (Astra/max)
+- ③ 구현: 확정된 일반 구현 `implement-med` (Astra/medium), 고난도 구현 `implement-xhigh` 또는 `core-xhigh` (Astra/max)
+- ④ 고난도 리뷰: `review-pr-xhigh` (Astra/max)
 
 ### XL
-- ① 계획: `plan-xhigh` (`gpt-6.1-sol / high`)
-- ② 검토: `plan-adversary-xhigh` (`gpt-6.1-sol / high`)
-- ③ 구현: `implement-xhigh` 또는 `core-xhigh` (`gpt-6-luna / max`)
-- ④ 리뷰: `review-pr-xhigh` (`gpt-6.1-sol / high`)
+- ① 계획: `plan-xhigh` (Astra/max)
+- ② 검토: `plan-adversary-xhigh` (Astra/max)
+- ③ 고난도 구현: `implement-xhigh` 또는 `core-xhigh` (Astra/max); 분리된 일반 작업은 medium
+- ④ 리뷰: `review-pr-xhigh` (Astra/max)
 
 ### 보안감사
-- `security-audit` (`gpt-6.1-sol / high`)와 교차 검증 1건 이상을 적용한다. CRITICAL은 즉시 최상단에 보고한다.
+- `security-audit` (Astra/max)와 교차 검증 1건 이상. CRITICAL은 즉시 보고한다.
 
 ## ●●● 팬아웃
 
@@ -358,7 +363,7 @@ Codex 전역 지침은 native spawn/fan-out을 금지한다. 아래 팬아웃 �
 - **상한 우회 금지** — 실행 상한(Output Contract 착수 선언)은 task-id가 아니라 작업 실체에 귀속한다 — 같은 작업의 task-id 재부여·신규 번들 발급으로 상한을 초기화하지 않는다. ①회귀·번들 갱신(경로 전환)은 우회가 아니다 — 재스폰·재작성 카운터는 갱신 후에도 이어진다.
 - **대기 시 행동**(M+·비긴급) — 머지·게이트·리뷰·스폰 완료 대기 중 멈춘 채 보고만 기다리지 않는다: 독립 과업(경량 작업 우선)으로 전환, 전환 불가 시 리컨·다음 과업 계획 수립으로 대기를 쓴다(①계획 스폰 대기는 리컨 병렬화). 전환은 대기 예상 시간이 전환 비용보다 길 때다(짧은 대기마다 컨텍스트 전환을 강제하지 않는다). 이미 통과한 게이트·검증의 재실행은 전환 행동에서 제외한다. 어느 대기종이든 한 스폰의 장기화가 독립 후속 스폰을 정지시키지 않는다(병렬 유지는 백엔드 동시성 상한이 우선). 근거: 대기 중 다음 과업 정지·게이트 3회 중복 실행 실측.
 - **계약은 인계·상태·증지만 규정** — 서브에이전트 내부 실행(도구 사용·구현 경로·디버깅 전략)은 규정하지 않는다.
-- **미해결 검토** — 동일 접근 2회 연속 실패, 재현 불안정, 또는 테스트가 반복 실패하면 실행을 중단하고 `gpt-6.1-sol / high`로 원인 분석과 해결안을 검토한다. 재계획과 고난도 판단은 `gpt-6.1-sol / high`, 확정된 일반 구현은 `gpt-6-luna / max`로 진행한다.
+- **미해결 검토** — 동일 접근 2회 연속 실패, 재현 불안정, 또는 테스트가 반복 실패하면 `gpt-6-astra / max`로 원인 분석과 해결안을 검토한다. 고난도 판단은 Astra/max, 확정된 일반 구현은 Astra/medium으로 진행한다.
 - **메인 세션 model·effort는 UI 또는 `/model`로만 변경**한다. 에이전트는 변경했다고 주장하지 않고 필요한 전환을 안내한다.
 - 스킬 갱신 시 원본과 설치본(`~/.codex/skills/effort-router/`, `~/.codex/agents/*.toml`)의 매핑을 비교하고 검증한다. Claude Code 배포 시에는 기존 사본 2곳도 별도로 동기화한다.
 

@@ -1,0 +1,74 @@
+{
+  "source_commit": "89d5a4b5f7a38f98a465281611e32ea94ce2c934",
+  "source_url": "https://github.com/acc0mplish/Effort-Router",
+  "updated_at": "2026-10-04T17:09:43.735594+00:00",
+  "routing_policy": "Latest user request: Astra for all work; medium normally, max for difficult work. Supersedes the former max prohibition.",
+  "default": {
+    "model": "gpt-6-astra",
+    "model_reasoning_effort": "medium"
+  },
+  "difficult": {
+    "model": "gpt-6-astra",
+    "model_reasoning_effort": "max"
+  },
+  "difficult_triggers": [
+    "High-uncertainty architecture or core changes",
+    "Deep debugging or the same approach failing twice",
+    "Security or high-risk judgment"
+  ],
+  "execution": {
+    "native_spawn_allowed": false,
+    "helper_backend": "codex exec",
+    "explicit_model_effort_cwd_required": true,
+    "max_concurrent_helpers": 4
+  },
+  "profiles": {
+    "fast": "medium",
+    "balanced": "medium",
+    "planning": "medium",
+    "deep": "max",
+    "unsloth_api": "medium"
+  },
+  "roles": {
+    "coder-medium": {
+      "model": "gpt-6-astra",
+      "model_reasoning_effort": "medium"
+    },
+    "implement-med": {
+      "model": "gpt-6-astra",
+      "model_reasoning_effort": "medium"
+    },
+    "implement-xhigh": {
+      "model": "gpt-6-astra",
+      "model_reasoning_effort": "max"
+    },
+    "core-xhigh": {
+      "model": "gpt-6-astra",
+      "model_reasoning_effort": "max"
+    },
+    "plan-high": {
+      "model": "gpt-6-astra",
+      "model_reasoning_effort": "medium"
+    },
+    "plan-xhigh": {
+      "model": "gpt-6-astra",
+      "model_reasoning_effort": "max"
+    },
+    "plan-adversary-xhigh": {
+      "model": "gpt-6-astra",
+      "model_reasoning_effort": "max"
+    },
+    "review-pr-high": {
+      "model": "gpt-6-astra",
+      "model_reasoning_effort": "medium"
+    },
+    "review-pr-xhigh": {
+      "model": "gpt-6-astra",
+      "model_reasoning_effort": "max"
+    },
+    "security-audit": {
+      "model": "gpt-6-astra",
+      "model_reasoning_effort": "max"
+    }
+  }
+}

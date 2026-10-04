@@ -11,18 +11,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / 'scripts/configure_codex_plan.py'
-EXPECTED = {
-    'coder-medium': ('gpt-6-luna', 'max'),
-    'implement-med': ('gpt-6-luna', 'max'),
-    'implement-xhigh': ('gpt-6-luna', 'max'),
-    'core-xhigh': ('gpt-6-luna', 'max'),
-    'plan-high': ('gpt-6.1-sol', 'high'),
-    'plan-xhigh': ('gpt-6.1-sol', 'high'),
-    'plan-adversary-xhigh': ('gpt-6.1-sol', 'high'),
-    'review-pr-high': ('gpt-6.1-sol', 'high'),
-    'review-pr-xhigh': ('gpt-6.1-sol', 'high'),
-    'security-audit': ('gpt-6.1-sol', 'high'),
-}
+EXPECTED = {'coder-medium': ('gpt-6-astra', 'medium'), 'implement-med': ('gpt-6-astra', 'medium'), 'implement-xhigh': ('gpt-6-astra', 'max'), 'core-xhigh': ('gpt-6-astra', 'max'), 'plan-high': ('gpt-6-astra', 'medium'), 'plan-xhigh': ('gpt-6-astra', 'max'), 'plan-adversary-xhigh': ('gpt-6-astra', 'max'), 'review-pr-high': ('gpt-6-astra', 'medium'), 'review-pr-xhigh': ('gpt-6-astra', 'max'), 'security-audit': ('gpt-6-astra', 'max')}
 
 
 class FixedRoutingTests(unittest.TestCase):
@@ -33,7 +22,7 @@ class FixedRoutingTests(unittest.TestCase):
     @staticmethod
     def _stale_plan_high(agents):
         stale = agents / 'plan-high.toml'
-        stale.write_text(stale.read_text().replace('model = "gpt-6.1-sol"', 'model = "gpt-6-luna"', 1))
+        stale.write_text(stale.read_text().replace('model = "gpt-6-astra"', 'model = "stale-model"', 1))
         return stale.read_text()
 
     def test_apply_preserves_custom_settings_and_is_idempotent(self):
@@ -53,7 +42,7 @@ class FixedRoutingTests(unittest.TestCase):
             self.assertEqual(preview.returncode, 0, preview.stderr)
             preview_report = json.loads(preview.stdout)
             self.assertIn('plan-high', preview_report['changed_roles'])
-            self.assertIn('gpt-6-luna', stale.read_text())
+            self.assertIn('stale-model', stale.read_text())
 
             result = self.run_cli('--agents-dir', str(agents), '--apply', env_extra=backup_env)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -87,7 +76,7 @@ class FixedRoutingTests(unittest.TestCase):
             # LOW-9 안내 키 — 기존 키 불변·추가만.
             self.assertIn('scripts/deploy_global.py', report['hint'])
             # (1) 백업이 임시 백업 루트 하위에 생성된다.
-            self.assertTrue(Path(report['backup_dir']).is_relative_to(backup_root))
+            self.assertTrue(Path(report['backup_dir']).resolve().is_relative_to(backup_root.resolve()))
             # (2) 역할 스캔 루트(agents 트리)에 도트 백업 디렉터리가 생기지 않는다.
             self.assertFalse((agents / '.effort-router-backups').exists())
             # (3) 백업 사본 내용이 원본과 일치한다.
@@ -139,6 +128,51 @@ class FixedRoutingTests(unittest.TestCase):
             result = self.run_cli('--agents-dir', str(agents), '--apply')
             self.assertEqual(result.returncode, 1)
             self.assertEqual(before, {p.name: p.read_bytes() for p in agents.glob('*.toml')})
+
+    def test_json_policy_controls_effort_and_missing_policy_uses_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            skill = home / 'skill'
+            (skill / 'scripts').mkdir(parents=True)
+            shutil.copy(SCRIPT, skill / 'scripts')
+            agents = home / 'agents'
+            shutil.copytree(ROOT / 'platforms/codex-agents', agents)
+            policy = json.loads((ROOT / 'local-policy.json').read_text())
+            policy['roles']['coder-medium']['model_reasoning_effort'] = 'max'
+            path = skill / 'local-policy.json'
+            path.write_text(json.dumps(policy))
+            command = [sys.executable, str(skill / 'scripts' / SCRIPT.name), '--agents-dir', str(agents)]
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)['changed_roles'], ['coder-medium'])
+            path.unlink()
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)['changed_roles'], [])
+
+    def test_invalid_profile_policy_prevents_all_writes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            skill = home / 'skill'
+            (skill / 'scripts').mkdir(parents=True)
+            shutil.copy(SCRIPT, skill / 'scripts')
+            agents = home / 'agents'
+            shutil.copytree(ROOT / 'platforms/codex-agents', agents)
+            originals = {p.name: p.read_bytes() for p in agents.glob('*.toml')}
+            policy = json.loads((ROOT / 'local-policy.json').read_text())
+            for profiles in (None, [], {'fast': 'ultra'}):
+                with self.subTest(profiles=profiles):
+                    policy['profiles'] = profiles
+                    (skill / 'local-policy.json').write_text(json.dumps(policy))
+                    result = subprocess.run(
+                        [sys.executable, str(skill / 'scripts' / SCRIPT.name), '--agents-dir', str(agents), '--apply'],
+                        env=dict(os.environ, EFFORT_ROUTER_BACKUP_ROOT=str(home / 'backups')),
+                        capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn('Local profiles must map names to medium/max', result.stderr)
+                    self.assertNotIn('Traceback', result.stderr)
+                    self.assertEqual(originals, {p.name: p.read_bytes() for p in agents.glob('*.toml')})
+                    self.assertFalse((home / 'backups').exists())
 
 
 if __name__ == '__main__':
