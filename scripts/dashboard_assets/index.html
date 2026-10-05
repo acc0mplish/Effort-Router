@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<!-- r36 과업 상태 대시보드 셸 — 시맨틱 테이블·필터 바·요약 칩.
+     오프라인 동작 계약: 외부 스킴 참조 0, 자산은 동일 origin 고정 라우트뿐이다. -->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>effort-router 과업 대시보드</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-head">
+    <h1>effort-router 과업 대시보드</h1>
+    <div class="controls">
+      <span id="last-updated" class="muted">마지막 갱신 –</span>
+      <label for="refresh-interval">갱신 주기</label>
+      <select id="refresh-interval">
+        <option value="5000">5초</option>
+        <option value="15000">15초</option>
+        <option value="60000">60초</option>
+        <option value="0">끄기</option>
+      </select>
+      <button id="refresh-now" type="button">지금 갱신</button>
+    </div>
+  </div>
+  <section id="summary-chips" class="chips" aria-label="phase별 요약"></section>
+</header>
+
+<section class="filters" aria-label="필터">
+  <label>phase
+    <select id="filter-phase">
+      <option value="">전체</option>
+    </select>
+  </label>
+  <label>tier
+    <select id="filter-tier">
+      <option value="">전체</option>
+    </select>
+  </label>
+  <label>task
+    <input id="filter-task" type="search" placeholder="task-id 부분 일치">
+  </label>
+</section>
+
+<main>
+  <table id="task-table">
+    <thead>
+      <tr>
+        <th scope="col"><button type="button" class="sort" data-key="task">task</button></th>
+        <th scope="col"><button type="button" class="sort" data-key="tier">tier</button></th>
+        <th scope="col"><button type="button" class="sort" data-key="phase">phase</button></th>
+        <th scope="col" title="adversary / review">round</th>
+        <th scope="col"><button type="button" class="sort" data-key="spawns">spawns</button></th>
+        <th scope="col" title="verified / pending / gap">claims</th>
+        <th scope="col">next</th>
+        <th scope="col">bundle</th>
+      </tr>
+    </thead>
+    <tbody id="task-rows"></tbody>
+  </table>
+  <p id="empty-message" class="muted" hidden>표시할 과업이 없다.</p>
+</main>
+
+<footer class="muted">
+  읽기 전용 — 서버는 state.json을 쓰지 않는다. 데이터: docs/task-id/*/state.json (요청 시점 재스캔)
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

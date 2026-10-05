@@ -305,6 +305,48 @@ class DashboardServerTests(unittest.TestCase):
         stderr = proc.stderr.read()
         self.assertGreater(len(stderr.strip()), 0, 'stderr 사유 메시지 부재')
 
+    # --- P2: 프론트엔드 -----------------------------------------------------
+
+    def test_t13_static_assets_served(self):
+        """T13 — 정적 3종 200 ∧ Content-Type 계약 ∧ / 본문 DOCTYPE·타이틀 마커."""
+        contract = {
+            '/': ('text/html; charset=utf-8', ['<!DOCTYPE html>', '<title>']),
+            '/app.js': ('text/javascript; charset=utf-8', []),
+            '/style.css': ('text/css; charset=utf-8', []),
+        }
+        for path, (ctype, markers) in contract.items():
+            status, headers, body = http_request(self.base_url, path)
+            self.assertEqual(status, 200, f'{path} → {status}')
+            self.assertEqual(headers.get('Content-Type'), ctype, f'{path} Content-Type')
+            for marker in markers:
+                self.assertIn(marker, body, f'{path} 마커 {marker!r} 부재')
+
+    def test_t14_no_external_scheme(self):
+        """T14 — 자산 3파일 전수 https?:// 매치 0(오프라인·CDN 금지 계약)."""
+        pattern = re.compile(r'https?://')
+        for name in ('index.html', 'app.js', 'style.css'):
+            path = ASSETS / name
+            self.assertTrue(path.is_file(), f'자산 부재: {path}')
+            matches = pattern.findall(path.read_text(encoding='utf-8'))
+            self.assertEqual(matches, [], f'{name}에 외부 스킴 {len(matches)}건')
+
+    def test_t15_frontend_wiring(self):
+        """T15 — 프론트 배선 정적 단정: (a) app.js id 참조 ⊆ index.html id 집합
+        (b) fetch('/api/tasks' 리터럴 (c) 갱신 주기 옵션 5000/15000/60000/0 ∧ 기본 5000."""
+        html = (ASSETS / 'index.html').read_text(encoding='utf-8')
+        js = (ASSETS / 'app.js').read_text(encoding='utf-8')
+        ids_html = set(re.findall(r'id="([A-Za-z][\w-]*)"', html))
+        ids_js = set(re.findall(r"getElementById\('([\w-]+)'\)", js))
+        ids_js |= set(re.findall(r"querySelector(?:All)?\('#([\w-]+)'\)", js))
+        self.assertTrue(ids_js, 'app.js에서 DOM id 참조를 추출하지 못했다')
+        self.assertFalse(ids_js - ids_html,
+                         f'app.js가 참조하는 미정의 id: {sorted(ids_js - ids_html)}')
+        self.assertIn("fetch('/api/tasks'", js, '동일 origin API 배선 리터럴 부재')
+        options = set(re.findall(r'<option value="([\w-]+)"', html))
+        self.assertTrue({'5000', '15000', '60000', '0'} <= options,
+                        f'갱신 주기 옵션 부족: {sorted(options)}')
+        self.assertIn('5000', js, 'app.js 기본 갱신 주기 5000 리터럴 부재')
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,0 +1,221 @@
+/* r36 대시보드 스타일 — 배지·상태 색상·최소 레이아웃.
+   외부 폰트·CDN 참조 0(오프라인 계약) — 시스템 폰트 스택만 사용한다. */
+
+:root {
+  --bg: #14161a;
+  --panel: #1d2026;
+  --border: #2c313a;
+  --text: #e6e8eb;
+  --muted: #8b929e;
+  --accent: #5b9dd9;
+  --ok: #58b368;
+  --warn: #d9a05b;
+  --bad: #d95b6a;
+  --radius: 6px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'D2Coding', 'Noto Sans KR', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.muted { color: var(--muted); }
+
+/* 상단 바 ---------------------------------------------------------------- */
+
+.topbar {
+  padding: 16px 20px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.topbar-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: 0.02em;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+select, button, input {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  font: inherit;
+}
+
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.chip-total { border-color: var(--accent); }
+
+.chip-count { font-weight: 700; }
+
+/* 필터 바 ---------------------------------------------------------------- */
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.filters label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+/* 테이블 ----------------------------------------------------------------- */
+
+main { padding: 0 20px 20px; }
+
+#task-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+}
+
+#task-table th, #task-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+#task-table thead th {
+  color: var(--muted);
+  font-weight: 400;
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+
+button.sort {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--muted);
+}
+
+button.sort-active { color: var(--accent); font-weight: 700; }
+
+tr.task-row { cursor: pointer; }
+tr.task-row:hover { background: var(--panel); }
+
+.cell-num, .cell-round { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* 배지 ------------------------------------------------------------------- */
+
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+}
+
+.badge-tier-S { color: var(--muted); }
+.badge-tier-M { color: var(--accent); border-color: var(--accent); }
+.badge-tier-L { color: var(--warn); border-color: var(--warn); }
+.badge-tier-XL { color: var(--bad); border-color: var(--bad); }
+
+.phase-plan { color: var(--muted); }
+.phase-adversary { color: var(--warn); }
+.phase-review { color: var(--accent); }
+.phase-implement { color: #b08bd9; }
+.phase-verify { color: #5bc8d9; }
+.phase-done { color: var(--ok); }
+.phase-blocked, .phase-cancelled { color: var(--bad); }
+
+.claims-cell { white-space: nowrap; }
+
+.claim-count { margin-right: 8px; font-size: 12px; }
+.claim-verified { color: var(--ok); }
+.claim-pending { color: var(--warn); }
+.claim-gap { color: var(--bad); }
+.claim-other { color: var(--muted); }
+
+.bundle-ok { color: var(--ok); }
+.bundle-missing { color: var(--muted); }
+
+/* 확장 상세 --------------------------------------------------------------- */
+
+.detail-row td { background: var(--panel); }
+
+.detail-box { padding: 8px 4px; }
+
+.claim-list {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.claim-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.claim-text { word-break: break-word; }
+
+.claim-evidence {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.bundle-path code {
+  color: var(--accent);
+  word-break: break-all;
+}
+
+.parse-error { color: var(--bad); font-size: 12px; }
+
+footer {
+  padding: 10px 20px 20px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
