@@ -479,7 +479,7 @@ contract_reminder 전문 — 무장 시 게이트가 노출하는 고정 문자�
 todo-flow(JakeB-5/todo-flow, MIT) 대시보드 스타일의 국소 재구현 — 코드 이식 없음.
 
 ```bash
-python3 scripts/dashboard_server.py            # 기동 → http://127.0.0.1:8765
+python3 scripts/dashboard_server.py            # 기동 → http://127.0.0.1:5777
 python3 scripts/dashboard_server.py --port 0   # OS 할당 포트 — stdout READY 라인에서 확인
 ```
 

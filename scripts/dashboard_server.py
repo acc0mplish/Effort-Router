@@ -12,7 +12,7 @@ state.json`을 요청 시점마다 재스캔해 /api/tasks로 노출하며, 어�
 않는다(민감 경로 반사 금지).
 
 사용:
-    python3 scripts/dashboard_server.py [--port 8765] [--bind 127.0.0.1] [--root 저장소루트]
+    python3 scripts/dashboard_server.py [--port 5777] [--bind 127.0.0.1] [--root 저장소루트]
 
 stdout 계약: 기동 성공 시 정확히 1행 `READY http://<bind>:<port>`(flush) —
 이후 요청 로그는 stderr 전용이다.
@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-DEFAULT_PORT = 8765
+DEFAULT_PORT = 5777
 DEFAULT_BIND = '127.0.0.1'
 SAFE_BINDS = ('127.0.0.1', 'localhost')
 EXIT_OK = 0
@@ -100,10 +100,10 @@ def claim_details(claims: list) -> list:
     return details
 
 
-def empty_task(task: str, bundle, parse_error) -> dict:
-    """8키 스키마 기본값 — malformed 격리 항목에도 동일 형태를 유지한다."""
+def empty_task(folder: str, bundle, parse_error) -> dict:
+    """스키마 기본값 — malformed 격리 항목에도 동일 형태를 유지한다."""
     return {
-        'task': task, 'tier': None, 'phase': None,
+        'task': folder, 'folder': folder, 'tier': None, 'phase': None,
         'round': {'adversary': 0, 'review': 0}, 'spawns': 0,
         'claims_total': 0, 'claims': {'verified': 0, 'pending': 0, 'gap': 0, 'other': 0},
         'claim_details': [], 'bundle': bundle, 'bundle_exists': False,
@@ -115,13 +115,24 @@ def truncate(text: str) -> str:
     return text if len(text) <= PARSE_ERROR_MAX else text[:PARSE_ERROR_MAX]
 
 
+def sanitize_parse_error(exc: Exception, state: Path, root: Path) -> str:
+    """parse_error 서명화 — 절대경로 유출 차단(④리뷰 LOW): 예외 타입명 + 경로 문자열을
+    파일명·루트 마커로 치환한 뒤 절단. 응답에 호스트 파일시스템 경로를 노출하지 않는다."""
+    message = str(exc).replace(str(state), state.name).replace(str(root), '.')
+    return truncate(f'{type(exc).__name__}: {message}')
+
+
 def load_task(entry: Path, root: Path) -> dict:
-    """state.json 1건을 8키 표시 항목으로 변환 — 파싱 실패는 parse_error로 격리."""
+    """state.json 1건을 표시 항목으로 변환 — 파싱 실패는 parse_error로 격리.
+
+    folder 키 = 과업 폴더명(④리뷰 LOW: 동명 task 엣지에서 행 식별 키로 사용 —
+    task 값은 state.json 기재값이라 중복 가능, 폴더명은 폴더별 유일).
+    """
     state = entry / 'state.json'
     try:
         raw = json.loads(state.read_text(encoding='utf-8'))
     except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
-        return empty_task(entry.name, None, truncate(str(exc)))
+        return empty_task(entry.name, None, sanitize_parse_error(exc, state, root))
     if not isinstance(raw, dict):
         return empty_task(entry.name, None, 'state.json 루트가 객체가 아니다')
     bundle = raw.get('bundle')
@@ -129,6 +140,7 @@ def load_task(entry: Path, root: Path) -> dict:
     bundle_exists = isinstance(bundle, str) and bool(bundle) and (root / bundle).is_file()
     return {
         'task': raw.get('task') if isinstance(raw.get('task'), str) else entry.name,
+        'folder': entry.name,
         'tier': raw.get('tier'),
         'phase': raw.get('phase'),
         'round': normalize_round(raw.get('round')),
@@ -180,17 +192,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
         else:
             self.send_not_found()
 
-    def do_POST(self) -> None:
-        self.send_405()
-
-    def do_PUT(self) -> None:
-        self.send_405()
-
-    def do_DELETE(self) -> None:
-        self.send_405()
-
-    def do_HEAD(self) -> None:
-        self.send_405()
+    def __getattr__(self, name):
+        """미구현 do_* 전부 공통 위임(④리뷰 HIGH) — BaseHTTPRequestHandler 기본은
+        501 + stdlib 영어 HTML 에러 페이지라 라우트 계약('그 외 전 메서드 405 ·
+        text/plain 고정 단문') 위반이다. OPTIONS·PATCH·TRACE·CONNECT 등 나열
+        누락 없이 전 비-GET을 405로 통일한다."""
+        if name.startswith('do_'):
+            return self.send_405
+        raise AttributeError(name)
 
     def send_static(self, route: str) -> None:
         """고정 매핑 파일 서빙 — 디스크 부재 시 404. 경로 해석 분기는 존재하지 않는다."""

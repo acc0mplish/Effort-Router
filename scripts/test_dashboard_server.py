@@ -208,6 +208,7 @@ class DashboardServerTests(unittest.TestCase):
         """T2 — /api/tasks fixture 파싱 전수: 필드별 값 일치."""
         payload = get_json(self.base_url)
         task = find_task(payload, 'alpha-done')
+        self.assertEqual(task['folder'], 'alpha-done')
         self.assertEqual(task['tier'], 'M')
         self.assertEqual(task['phase'], 'done')
         self.assertEqual(task['round'], {'adversary': 2, 'review': 1})
@@ -235,6 +236,8 @@ class DashboardServerTests(unittest.TestCase):
         gamma = find_task(payload, 'gamma-malformed')
         self.assertIsInstance(gamma['parse_error'], str)
         self.assertGreater(len(gamma['parse_error']), 0)
+        self.assertNotIn(str(FIXTURE_ROOT), gamma['parse_error'],
+                         'parse_error에 절대경로 유출')
         alpha = find_task(payload, 'alpha-done')
         self.assertIsNone(alpha['parse_error'])
         self.assertEqual(alpha['phase'], 'done')
@@ -270,10 +273,15 @@ class DashboardServerTests(unittest.TestCase):
             self.assertNotIn('argparse', body, f'{path} 응답에 서버 소스 유출')
 
     def test_t08_non_get_rejected(self):
-        """T8 — 비-GET(POST·PUT) → 405."""
-        for method in ('POST', 'PUT'):
-            status, _, _ = http_request(self.base_url, '/api/tasks', method=method)
+        """T8 — 전 비-GET(POST·PUT·DELETE·HEAD·OPTIONS·PATCH·TRACE·CONNECT) → 405
+        ∧ 본문에 stdlib HTML 에러 페이지 미포함(고정 text/plain 단문 계약)."""
+        methods = ('POST', 'PUT', 'DELETE', 'HEAD', 'OPTIONS', 'PATCH',
+                   'TRACE', 'CONNECT')
+        for method in methods:
+            status, _, body = http_request(self.base_url, '/api/tasks', method=method)
             self.assertEqual(status, 405, f'{method} /api/tasks → {status}')
+            self.assertNotIn('<!DOCTYPE', body,
+                             f'{method} 응답이 stdlib HTML 에러 페이지다')
 
     def test_t09_unknown_paths_404(self):
         """T9 — 미지정 경로(/foo·/api/unknown) → 404."""
@@ -289,11 +297,11 @@ class DashboardServerTests(unittest.TestCase):
         self.assertEqual(tree_snapshot(FIXTURE_ROOT), _SHARED['snap0'])
 
     def test_t11_help_defaults(self):
-        """T11 — --help exit 0 ∧ 기본값 8765·127.0.0.1 표시."""
+        """T11 — --help exit 0 ∧ 기본값 5777·127.0.0.1 표시."""
         completed = subprocess.run([sys.executable, str(SERVER), '--help'],
                                    capture_output=True, text=True, timeout=EXIT_TIMEOUT_SEC)
         self.assertEqual(completed.returncode, 0)
-        self.assertIn('8765', completed.stdout)
+        self.assertIn('5777', completed.stdout)
         self.assertIn('127.0.0.1', completed.stdout)
 
     def test_t12_port_conflict_exit_2(self):

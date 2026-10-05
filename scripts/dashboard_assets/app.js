@@ -5,7 +5,6 @@
 // 변형하지 않는다. 상태 컨테이너의 필드 교체만 허용한다.
 
 const DEFAULT_REFRESH_MS = 5000;
-const REFRESH_OPTIONS_MS = [5000, 15000, 60000, 0];
 const PHASES = ['plan', 'adversary', 'review', 'implement', 'verify', 'done',
   'blocked', 'cancelled'];
 const TIERS = ['S', 'M', 'L', 'XL'];
@@ -156,8 +155,11 @@ function detailRow(task, colCount) {
 }
 
 function taskRow(task, colCount) {
-  const isOpen = state.expanded.includes(task.task);
+  // 행 식별 키 = folder(④리뷰 LOW) — task 값은 state.json 기재값이라 폴더 간
+  // 중복 가능. folder는 폴더별 유일이라 동명 task 엣지에서도 확장이 정확하다.
+  const isOpen = state.expanded.includes(task.folder);
   const row = el('tr', `task-row phase-${task.phase || 'none'}`);
+  row.dataset.folder = task.folder;
   row.tabIndex = 0;
   row.setAttribute('role', 'button');
   row.setAttribute('aria-expanded', String(isOpen));
@@ -285,7 +287,7 @@ function setupControls() {
   rows.addEventListener('click', (event) => {
     const target = event.target.closest('tr.task-row');
     if (!target) { return; }
-    state.expanded = toggleExpanded(state.expanded, target.firstChild.textContent);
+    state.expanded = toggleExpanded(state.expanded, target.dataset.folder);
     render();
   });
   rows.addEventListener('keydown', (event) => {
@@ -293,7 +295,7 @@ function setupControls() {
     const target = event.target.closest('tr.task-row');
     if (!target) { return; }
     event.preventDefault();
-    state.expanded = toggleExpanded(state.expanded, target.firstChild.textContent);
+    state.expanded = toggleExpanded(state.expanded, target.dataset.folder);
     render();
   });
 
