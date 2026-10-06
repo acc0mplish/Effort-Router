@@ -134,7 +134,11 @@
 }
 .row-check:checked { background: var(--primary); border-color: var(--primary); }
 .row-check:checked::before { content: "✓"; color: #FFFFFF; font-size: 11px; line-height: 1; }
-.cell-track { cursor: pointer; min-width: 260px; }
+.cell-track { cursor: pointer; min-width: 260px; max-width: 480px; }
+/* 트랙 제목·부제 ellipsis — 길이 무관 단일 행(사용자 요구 2026-10-06) */
+.track-name, .track-sub {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
 .track-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .track-name { font-size: var(--fs-row-title); font-weight: 600; }
 .cell-track:hover .track-name { color: var(--nav-active-text); text-decoration: underline; }
@@ -147,7 +151,11 @@
   display: inline-block; border-radius: 5px; padding: 1px 7px; font-size: 11px;
   margin: 1px 4px 1px 0; background: var(--bg-card);
   border: 1px solid var(--border-row); color: var(--text-muted);
+  white-space: nowrap; /* 아이콘 칩 단일 행 고정 — 리사이즈 무관 */
 }
+/* 상태 배지 아이콘형 — 글리프만 표시·툴팁에 명칭 */
+.badge.badge-icon { padding: 2px 6px; }
+.cell-state, .cell-claims { white-space: nowrap; }
 .claim-chip.claim-verified { background: var(--badge-green-bg); color: var(--badge-green-text); border-color: transparent; }
 .claim-chip.claim-pending { background: var(--badge-blue-bg); color: var(--badge-blue-text); border-color: transparent; }
 .claim-chip.claim-gap {
@@ -264,3 +272,6 @@
 }
 /* r37 ④ 후속 수선 — 최근 갱신 열 2줄 wrap 방지(원본 단일 행 계약) */
 .cell-mtime { white-space: nowrap; }
+/* 협폭 리사이즈 — 표 가로 스크롤 허용(열 클리핑 방지, 사용자 요구 2026-10-06) */
+#view-list { overflow-x: auto; }
+.task-table { min-width: 720px; }

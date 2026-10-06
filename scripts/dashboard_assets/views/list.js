@@ -52,9 +52,10 @@ function priorityCell(tier) {
 function stateCell(phase) {
   const cell = el('td', 'cell-state');
   const badge = phaseBadge(phase);
-  const span = el('span', `badge ${badge.kind}`);
+  // 아이콘(글리프)만 표시·전체 명칭은 툴팁 — 리사이즈 시 1줄 유지(사용자 요구 2026-10-06)
+  const span = el('span', `badge badge-icon ${badge.kind}`);
+  span.title = `현재 상태: ${badge.label}`;
   span.appendChild(el('span', 'badge-glyph', badge.glyph));
-  span.appendChild(document.createTextNode(badge.label));
   cell.appendChild(span);
   return cell;
 }
@@ -62,16 +63,21 @@ function stateCell(phase) {
 function claimsCell(task) {
   const cell = el('td', 'cell-claims');
   const buckets = [
-    ['verified', task.claims.verified],
-    ['pending', task.claims.pending],
-    ['gap', task.claims.gap],
+    ['verified', '✓', task.claims.verified],
+    ['pending', '●', task.claims.pending],
+    ['gap', '◇', task.claims.gap],
+    ['other', '✕', task.claims.other],
   ];
-  buckets.forEach(([name, count]) => {
-    cell.appendChild(el('span',
-      `claim-chip claim-${name}`, `${name} ${count}`));
+  // 글리프+개수 아이콘 칩·단일 행 — 0개 버킷은 생략(툴팁에 전체 명칭)
+  buckets.filter(([, , count]) => count > 0).forEach(([name, glyph, count]) => {
+    const chip = el('span', `claim-chip claim-${name}`, `${glyph}${count}`);
+    chip.title = `선택 판단: ${name} ${count}`;
+    cell.appendChild(chip);
   });
-  if (task.claims.other > 0) {
-    cell.appendChild(el('span', 'claim-chip', `other ${task.claims.other}`));
+  if (cell.childElementCount === 0) {
+    const none = el('span', 'claim-chip', '–');
+    none.title = '선택 판단: claims 없음';
+    cell.appendChild(none);
   }
   return cell;
 }
