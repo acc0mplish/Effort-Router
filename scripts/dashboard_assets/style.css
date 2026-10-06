@@ -123,6 +123,7 @@
 .task-table th {
   text-align: left; font-size: var(--fs-chip); font-weight: 600;
   color: var(--text-muted); padding: 8px 12px; border-bottom: 1px solid var(--border-strong);
+  white-space: nowrap; /* 헤더 세로 글자 누적 방지 — 원본 가로 1행 */
 }
 .task-table td { padding: 13px 12px; border-bottom: 1px solid var(--border-row); vertical-align: top; }
 .task-row:hover { background: var(--bg-hover); }

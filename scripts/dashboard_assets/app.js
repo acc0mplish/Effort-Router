@@ -18,6 +18,10 @@ import { renderDetail } from '/views/detail.js';
 const DEFAULT_REFRESH_MS = 5000;
 const BOOT_RETRY_MS = 5000;
 const ACTIVE_PHASES = ['implement', 'review', 'verify'];
+// 탑바 시계 — 원본 형식(09. 24. 오후 07:14, 초 없음)
+const TOPBAR_TIME = new Intl.DateTimeFormat('ko-KR', {
+  month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h12',
+});
 // 통계 행 — 전체 · 진행 중(implement/review/verify) · 판단 대기(plan/adversary/
 // blocked) · 완료(done). 나머지 phase는 통계에서 제외(목록에는 표시).
 const ACTIVE_SET = new Set(ACTIVE_PHASES);
@@ -151,7 +155,7 @@ function renderShell() {
   document.getElementById('conn-text').textContent =
     state.connected ? '연결됨' : '연결 안 됨';
   document.getElementById('last-updated').textContent = state.lastSuccessAt
-    ? state.lastSuccessAt.toLocaleTimeString('ko-KR') : '–';
+    ? TOPBAR_TIME.format(state.lastSuccessAt) : '–';
 }
 
 function showView(name) {
