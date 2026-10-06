@@ -6,6 +6,18 @@
 Decision(티어 판정) → Requirement → Acceptance → Task → Evidence → Learning
 ```
 
+## 대시보드
+
+터미널 없이 브라우저에서 과업 상태를 본다.
+
+```bash
+python3 scripts/dashboard_server.py   # → http://localhost:5777
+```
+
+![대시보드](docs/assets/dashboard.png)
+
+3뷰(과업 목록 · 실행 현황 · 과업 상세) — [상세 계약](#html-대시보드-r37)
+
 ## 왜 필요한가
 
 - 단일 모델·단일 에포트로 모든 과업을 처리하면 단순 수정에 과투자, 대형 변경에 과소검증이 된다
