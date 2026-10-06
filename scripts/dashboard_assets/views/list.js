@@ -124,11 +124,7 @@ function buildRow(task, selected, actions) {
 }
 
 function buildShell(actions) {
-  const head = el('div', 'view-head');
-  const headLeft = el('div');
-  headLeft.appendChild(el('h1', 'view-title', '과업 목록'));
-  head.appendChild(headLeft);
-  head.appendChild(el('p', 'view-aside', 'state.json 기준 · 읽기 전용'));
+  // 페이지 타이틀 제거(2026-10-06 사용자 요구) — 탑바 브레드크럼이 위치를 이미 표시한다.
 
   const stats = el('div', 'stats-row');
 
@@ -239,7 +235,7 @@ function buildShell(actions) {
   actionBar.appendChild(clear);
   actionBar.appendChild(copy);
 
-  return { head, stats, controls, section, table, empty, actionBar,
+  return { stats, controls, section, table, empty, actionBar,
     search, phaseSelect, tierSelect, sortSelect, sortDir };
 }
 
@@ -264,7 +260,7 @@ export function renderList(container, vm, actions) {
   let shell = container.__listShell;
   if (!shell) {
     shell = buildShell(actions);
-    container.replaceChildren(shell.head, shell.stats, shell.controls,
+    container.replaceChildren(shell.stats, shell.controls,
       shell.section, shell.table, shell.empty, shell.actionBar);
     container.__listShell = shell;
   }

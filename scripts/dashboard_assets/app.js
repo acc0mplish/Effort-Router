@@ -31,7 +31,7 @@ const DECISION_SET = new Set(['plan', 'adversary', 'blocked']);
 const state = {
   tasks: [],
   filters: { phase: '', tier: '', query: '' },
-  sort: { key: 'task', dir: 'asc' },
+  sort: { key: 'mtime', dir: 'desc' }, // 기본 정렬 = 최근 갱신 최신 상단 (사용자 요구 2026-10-06)
   selected: [],
   expandedDecisions: [],
   docOpen: true,
