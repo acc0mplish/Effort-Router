@@ -1,37 +1,59 @@
 'use strict';
-// r36 대시보드 프론트엔드 — vanilla JS. 외부 의존·외부 fetch·localStorage 0
-// (오프라인 동작 계약). 네트워크 호출은 동일 origin fetch('/api/tasks') 유일.
-// 불변 패턴: 파생 데이터(필터·정렬 결과)는 전부 새 배열 — 원본 payload를
-// 변형하지 않는다. 상태 컨테이너의 필드 교체만 허용한다.
+// r37 대시보드 앱 코어 — 부트·해시 라우터·상태·fetch·폴링·셸 바인딩.
+// 네트워크 호출은 동일 origin fetch('/api/tasks')·fetch('/api/bundle/') 유일
+// (외부 의존·외부 fetch·localStorage 0). 뷰 모듈은 순수 렌더 — 상태·이벤트·
+// fetch는 이 파일 단일 소유. 불변 패턴: 파생 데이터는 새 배열, 필드 교체만 허용.
+//
+// 부팅 순서 계약(M2·L3): 초기 fetch('/api/tasks') 종료(성공 기준) 후 최초 라우팅
+// 확정 — 그 전 hashchange는 pending으로 두고 확정 시점에 재평가한다(빈 tasks로
+// 폴더 검증해 전부 치환하는 경합 방지). 초기 fetch 실패 시 오류 표시 후 재시도
+// (성공까지 라우팅 보류 — 빈 화면 정지 아님).
+// 폴링(기본 5초)은 라우트 무관 지속 — 단 상세(뷰3)는 폴링이 문서 DOM을
+// 재구성하지 않는다(문서는 진입 시 1회 /api/bundle 페치 — 스크롤·아코디언 보존).
+
+import { renderList } from '/views/list.js';
+import { renderActivity } from '/views/activity.js';
+import { renderDetail } from '/views/detail.js';
 
 const DEFAULT_REFRESH_MS = 5000;
+const BOOT_RETRY_MS = 5000;
 const PHASES = ['plan', 'adversary', 'review', 'implement', 'verify', 'done',
   'blocked', 'cancelled'];
 const TIERS = ['S', 'M', 'L', 'XL'];
-const SORT_KEYS = ['task', 'tier', 'phase', 'spawns'];
+const ACTIVE_PHASES = ['implement', 'review', 'verify'];
+// 통계 행 — 전체 · 진행 중(implement/review/verify) · 판단 대기(plan/adversary/
+// blocked) · 완료(done). 나머지 phase는 통계에서 제외(목록에는 표시).
+const ACTIVE_SET = new Set(ACTIVE_PHASES);
+const DECISION_SET = new Set(['plan', 'adversary', 'blocked']);
 
-// 애플리케이션 상태 — 필드 교체만 하고 중첩 객체는 새로 만들어 대입한다
+// 애플리케이션 상태 — 필드 교체만, 중첩 갱신은 새 객체 대입.
 const state = {
   tasks: [],
   filters: { phase: '', tier: '', query: '' },
   sort: { key: 'task', dir: 'asc' },
-  expanded: [],
+  selected: [],
+  expandedDecisions: [],
+  docOpen: true,
   intervalMs: DEFAULT_REFRESH_MS,
   timer: null,
+  connected: false,
+  lastSuccessAt: null,
+  route: { view: 'list', folder: null },
+  bundleDoc: null,
 };
 
-// --- 순수 함수: 파생 데이터 -------------------------------------------------
+let booted = false;
+
+// --- 순수 함수: 파생 데이터(전부 새 배열) -----------------------------------
 
 function matchesFilters(task, filters) {
   const phaseOk = filters.phase === '' || task.phase === filters.phase;
   const tierOk = filters.tier === '' || task.tier === filters.tier;
   const queryOk = filters.query === ''
-    || String(task.task || '').includes(filters.query);
+    || String(task.task || '').includes(filters.query)
+    || String(task.folder || '').includes(filters.query)
+    || String(task.excerpt || '').includes(filters.query);
   return phaseOk && tierOk && queryOk;
-}
-
-function filterTasks(tasks, filters) {
-  return tasks.filter((task) => matchesFilters(task, filters));
 }
 
 function compareTasks(a, b, key) {
@@ -44,177 +66,169 @@ function compareTasks(a, b, key) {
   return String(va).localeCompare(String(vb), 'ko');
 }
 
-function sortTasks(tasks, sort) {
-  const sign = sort.dir === 'desc' ? -1 : 1;
-  return tasks.slice().sort((a, b) => sign * compareTasks(a, b, sort.key));
-}
-
 function visibleTasks() {
-  return sortTasks(filterTasks(state.tasks, state.filters), state.sort);
+  const filtered = state.tasks.filter((task) => matchesFilters(task, state.filters));
+  const sign = state.sort.dir === 'desc' ? -1 : 1;
+  return filtered.slice().sort((a, b) => sign * compareTasks(a, b, state.sort.key));
 }
 
-function countByPhase(tasks) {
-  const counts = {};
-  PHASES.forEach((phase) => { counts[phase] = 0; });
-  tasks.forEach((task) => {
-    const phase = task.phase;
-    if (Object.prototype.hasOwnProperty.call(counts, phase)) {
-      counts[phase] += 1;
-    } else {
-      counts.other = (counts.other || 0) + 1;
+function computeStats() {
+  const total = state.tasks.length;
+  let active = 0;
+  let decision = 0;
+  let done = 0;
+  state.tasks.forEach((task) => {
+    if (ACTIVE_SET.has(task.phase)) { active += 1; }
+    if (DECISION_SET.has(task.phase)) { decision += 1; }
+    if (task.phase === 'done') { done += 1; }
+  });
+  return [
+    { label: '전체', value: total },
+    { label: '진행 중', value: active },
+    { label: '판단 대기', value: decision },
+    { label: '완료', value: done },
+  ];
+}
+
+// --- 해시 라우터 -------------------------------------------------------------
+
+function parseHash() {
+  const hash = window.location.hash;
+  if (hash.startsWith('#/task/')) {
+    try {
+      return { view: 'detail', folder: decodeURIComponent(hash.slice(7)) };
+    } catch {
+      return { view: 'list', folder: null };
+    }
+  }
+  if (hash === '#/activity') {
+    return { view: 'activity', folder: null };
+  }
+  return { view: 'list', folder: null };
+}
+
+// 뷰1·뷰2 행 클릭 진입 액션 — 뷰3의 유일한 정상 진입 경로(직접 URL 제외).
+function navigate(folder) {
+  window.location.hash = '#/task/' + encodeURIComponent(folder);
+}
+
+function applyRoute() {
+  let route = parseHash();
+  if (route.view === 'detail'
+    && !state.tasks.some((task) => task.folder === route.folder)) {
+    window.location.hash = '#/list';
+    return; // hashchange가 재평가한다
+  }
+  state.route = route;
+  if (route.view === 'detail') {
+    loadBundle(route.folder);
+    return; // loadBundle → renderDetailView
+  }
+  renderPoll();
+}
+
+// --- 렌더 -------------------------------------------------------------------
+
+function renderShell() {
+  document.getElementById('nav-count-list').textContent = String(state.tasks.length);
+  const activeCount = state.tasks.filter((task) => ACTIVE_SET.has(task.phase)).length;
+  document.getElementById('nav-count-activity').textContent = String(activeCount);
+
+  const route = state.route;
+  const navList = document.getElementById('nav-list');
+  const navActivity = document.getElementById('nav-activity');
+  navList.classList.toggle('active', route.view === 'list');
+  navActivity.classList.toggle('active', route.view === 'activity');
+
+  const crumb = document.getElementById('breadcrumb-current');
+  if (route.view === 'detail') {
+    crumb.textContent = '과업 상세';
+  } else if (route.view === 'activity') {
+    crumb.textContent = '실행 현황';
+  } else {
+    crumb.textContent = '과업 목록';
+  }
+
+  const conn = document.getElementById('conn-status');
+  conn.classList.toggle('bad', !state.connected);
+  document.getElementById('conn-text').textContent =
+    state.connected ? '연결됨' : '연결 안 됨';
+  document.getElementById('last-updated').textContent = state.lastSuccessAt
+    ? state.lastSuccessAt.toLocaleTimeString('ko-KR') : '–';
+}
+
+function showView(name) {
+  ['view-list', 'view-activity', 'view-detail'].forEach((id) => {
+    document.getElementById(id).hidden = id !== name;
+  });
+}
+
+function renderPoll() {
+  renderShell();
+  document.getElementById('boot-error').hidden = true;
+  if (state.route.view === 'activity') {
+    showView('view-activity');
+    const container = document.getElementById('view-activity');
+    renderActivity(container, {
+      active: state.tasks.filter((task) => ACTIVE_SET.has(task.phase)),
+      cards: activityCards(),
+      expanded: state.expandedDecisions,
+    }, actions);
+  } else {
+    showView('view-list');
+    renderList(document.getElementById('view-list'), {
+      rows: visibleTasks(),
+      stats: computeStats(),
+      total: state.tasks.length,
+      filters: state.filters,
+      sort: state.sort,
+      selected: state.selected,
+    }, actions);
+  }
+}
+
+function activityCards() {
+  const cards = [];
+  const gaps = [];
+  state.tasks.forEach((task) => {
+    if (task.phase === 'blocked') {
+      cards.push({
+        key: `blocked:${task.folder}`,
+        task,
+        reason: task.next === null || task.next === undefined
+          ? 'blocked — next 미기재' : `blocked — next: ${task.next}`,
+        claims: Array.isArray(task.claim_details) ? task.claim_details : [],
+      });
+      return;
+    }
+    const gapClaims = (Array.isArray(task.claim_details) ? task.claim_details : [])
+      .filter((claim) => claim.status === 'gap');
+    if (gapClaims.length > 0) {
+      gaps.push({
+        key: `gap:${task.folder}`,
+        task,
+        reason: `gap claims ${gapClaims.length}건 — 판단 필요`,
+        claims: gapClaims,
+      });
     }
   });
-  return counts;
+  return cards.concat(gaps);
 }
 
-function toggleExpanded(expanded, taskName) {
-  if (expanded.includes(taskName)) {
-    return expanded.filter((name) => name !== taskName);
-  }
-  return expanded.concat([taskName]);
+function renderDetailView() {
+  renderShell();
+  showView('view-detail');
+  const task = state.tasks.find((item) => item.folder === state.route.folder);
+  const container = document.getElementById('view-detail');
+  renderDetail(container, {
+    folder: state.route.folder,
+    task,
+    bundleDoc: state.bundleDoc,
+    docOpen: state.docOpen,
+  }, actions);
 }
 
-// --- 렌더 ------------------------------------------------------------------
-
-function el(tag, className, text) {
-  const node = document.createElement(tag);
-  if (className) { node.className = className; }
-  if (text !== undefined && text !== null) { node.textContent = String(text); }
-  return node;
-}
-
-function badge(value, kind) {
-  const safe = value === null || value === undefined || value === ''
-    ? 'none' : String(value);
-  return el('span', `badge badge-${kind}-${CSS.escape(safe) || 'none'}`, safe);
-}
-
-function renderSummary(tasks) {
-  const host = document.getElementById('summary-chips');
-  const counts = countByPhase(tasks);
-  const total = el('span', 'chip chip-total');
-  total.appendChild(el('strong', null, String(tasks.length)));
-  total.appendChild(document.createTextNode(' 과업'));
-  const chips = [total];
-  PHASES.forEach((phase) => {
-    const chip = el('span', `chip chip-${phase}`);
-    chip.appendChild(el('span', `chip-phase phase-${phase}`, phase));
-    chip.appendChild(el('span', 'chip-count', String(counts[phase])));
-    chips.push(chip);
-  });
-  host.replaceChildren(...chips);
-}
-
-function claimSummaryCell(task) {
-  const cell = el('td', 'claims-cell');
-  const buckets = [
-    ['verified', task.claims.verified],
-    ['pending', task.claims.pending],
-    ['gap', task.claims.gap],
-    ['other', task.claims.other],
-  ];
-  buckets.forEach(([name, count]) => {
-    cell.appendChild(el('span', `claim-count claim-${name}`,
-      `${name} ${count}`));
-  });
-  cell.appendChild(el('span', 'muted', `/${task.claims_total}`));
-  return cell;
-}
-
-function detailRow(task, colCount) {
-  const row = el('tr', 'detail-row');
-  const cell = el('td', null, null);
-  cell.colSpan = colCount;
-  const box = el('div', 'detail-box');
-  if (Array.isArray(task.claim_details) && task.claim_details.length > 0) {
-    const list = el('ul', 'claim-list');
-    task.claim_details.forEach((detail) => {
-      const item = el('li', 'claim-item');
-      item.appendChild(el('span', 'claim-text', detail.claim));
-      item.appendChild(badge(detail.status, 'claim'));
-      item.appendChild(el('span', 'claim-evidence', detail.evidence || ''));
-      list.appendChild(item);
-    });
-    box.appendChild(list);
-  } else {
-    box.appendChild(el('p', 'muted', 'claims 상세가 없다.'));
-  }
-  const bundleLine = el('p', 'bundle-path');
-  bundleLine.appendChild(el('span', 'muted', 'bundle: '));
-  bundleLine.appendChild(el('code', null,
-    task.bundle ? String(task.bundle) : '(없음)'));
-  if (task.parse_error) {
-    const errLine = el('p', 'parse-error');
-    errLine.textContent = `parse_error: ${task.parse_error}`;
-    box.appendChild(errLine);
-  }
-  box.appendChild(bundleLine);
-  cell.appendChild(box);
-  row.appendChild(cell);
-  return row;
-}
-
-function taskRow(task, colCount) {
-  // 행 식별 키 = folder(④리뷰 LOW) — task 값은 state.json 기재값이라 폴더 간
-  // 중복 가능. folder는 폴더별 유일이라 동명 task 엣지에서도 확장이 정확하다.
-  const isOpen = state.expanded.includes(task.folder);
-  const row = el('tr', `task-row phase-${task.phase || 'none'}`);
-  row.dataset.folder = task.folder;
-  row.tabIndex = 0;
-  row.setAttribute('role', 'button');
-  row.setAttribute('aria-expanded', String(isOpen));
-  row.appendChild(el('td', 'cell-task', task.task));
-  row.appendChild(el('td')).appendChild(badge(task.tier, 'tier'));
-  row.appendChild(el('td')).appendChild(badge(task.phase, 'phase'));
-  row.appendChild(el('td', 'cell-round',
-    `${task.round.adversary}/${task.round.review}`));
-  row.appendChild(el('td', 'cell-num', task.spawns));
-  row.appendChild(claimSummaryCell(task));
-  row.appendChild(el('td', 'cell-next', task.next === null ? '–' : task.next));
-  const bundleCell = el('td', 'cell-bundle');
-  bundleCell.appendChild(el('span',
-    task.bundle_exists ? 'bundle-ok' : 'bundle-missing',
-    task.bundle_exists ? '있음' : '없음'));
-  row.appendChild(bundleCell);
-  if (isOpen) {
-    const fragment = document.createDocumentFragment();
-    fragment.appendChild(row);
-    fragment.appendChild(detailRow(task, colCount));
-    return fragment;
-  }
-  return row;
-}
-
-function renderRows(tasks) {
-  const body = document.getElementById('task-rows');
-  const colCount = document.getElementById('task-table')
-    .querySelector('thead tr').children.length;
-  const fragment = document.createDocumentFragment();
-  tasks.forEach((task) => { fragment.appendChild(taskRow(task, colCount)); });
-  body.replaceChildren(fragment);
-  document.getElementById('empty-message').hidden = tasks.length > 0;
-}
-
-function renderSortMarkers() {
-  document.querySelectorAll('button.sort').forEach((button) => {
-    const active = button.dataset.key === state.sort.key;
-    button.classList.toggle('sort-active', active);
-    button.textContent = active
-      ? `${button.dataset.key}${state.sort.dir === 'asc' ? ' ▲' : ' ▼'}`
-      : button.dataset.key;
-  });
-}
-
-function render() {
-  const tasks = visibleTasks();
-  renderSummary(state.tasks);
-  renderRows(tasks);
-  renderSortMarkers();
-  document.getElementById('last-updated').textContent =
-    `마지막 갱신 ${new Date().toLocaleTimeString('ko-KR')}`;
-}
-
-// --- 데이터·갱신 ------------------------------------------------------------
+// --- 데이터 ------------------------------------------------------------------
 
 async function fetchTasks() {
   try {
@@ -222,12 +236,95 @@ async function fetchTasks() {
     if (!response.ok) { throw new Error(`api 상태 ${response.status}`); }
     const payload = await response.json();
     state.tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
-    render();
+    state.connected = true;
+    state.lastSuccessAt = new Date();
   } catch (error) {
-    document.getElementById('last-updated').textContent =
-      `갱신 실패 (${error.message})`;
+    state.connected = false;
+    printBootError(`상태 갱신 실패 (${error.message}) — 재시도 중`);
   }
 }
+
+function printBootError(message) {
+  const node = document.getElementById('boot-error');
+  node.textContent = message;
+  node.hidden = false;
+}
+
+async function loadBundle(folder) {
+  state.bundleDoc = null;
+  renderDetailView();
+  try {
+    const response = await fetch('/api/bundle/' + encodeURIComponent(folder));
+    if (!response.ok) { throw new Error(`api 상태 ${response.status}`); }
+    const payload = await response.json();
+    if (state.route.view !== 'detail' || state.route.folder !== folder) {
+      return; // 진입 후 라우트 변경 — 폐기
+    }
+    state.bundleDoc = { folder, markdown: payload.markdown, ok: true };
+  } catch {
+    if (state.route.view !== 'detail' || state.route.folder !== folder) {
+      return;
+    }
+    state.bundleDoc = { folder, markdown: null, ok: false };
+  }
+  renderDetailView();
+}
+
+// --- 액션 (뷰 → 앱 코어) ------------------------------------------------------
+
+const actions = {
+  navigate,
+  toggleSelect(folder) {
+    state.selected = state.selected.includes(folder)
+      ? state.selected.filter((name) => name !== folder)
+      : state.selected.concat([folder]);
+    renderPoll();
+  },
+  clearSelection() {
+    state.selected = [];
+    renderPoll();
+  },
+  copyIds(button) {
+    const text = state.selected.join('\n');
+    const original = button.textContent;
+    const finish = (message) => {
+      button.textContent = message;
+      setTimeout(() => { button.textContent = original; }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text)
+        .then(() => finish('복사됨'))
+        .catch(() => finish('복사 실패'));
+    } else {
+      finish('복사 실패');
+    }
+  },
+  setFilter(patch) {
+    state.filters = { ...state.filters, ...patch };
+    renderPoll();
+  },
+  setSort(patch) {
+    state.sort = { ...state.sort, ...patch };
+    renderPoll();
+  },
+  toggleSortDir() {
+    state.sort = { ...state.sort,
+      dir: state.sort.dir === 'asc' ? 'desc' : 'asc' };
+    renderPoll();
+  },
+  toggleDecision(key) {
+    state.expandedDecisions = state.expandedDecisions.includes(key)
+      ? state.expandedDecisions.filter((name) => name !== key)
+      : state.expandedDecisions.concat([key]);
+    renderPoll();
+  },
+  toggleDoc() {
+    state.docOpen = !state.docOpen;
+    renderDetailView();
+  },
+};
+
+// --- 폴링·부트 ---------------------------------------------------------------
 
 function stopTimer() {
   if (state.timer !== null) {
@@ -240,76 +337,54 @@ function applyInterval(ms) {
   stopTimer();
   state.intervalMs = ms;
   if (ms > 0) {
-    state.timer = setInterval(fetchTasks, ms);
+    state.timer = setInterval(() => {
+      fetchTasks().then(() => {
+        if (state.route.view !== 'detail') {
+          renderPoll(); // 상세 뷰는 문서 DOM 보존 — 셸 카운트만 시간 경과 표시
+        } else {
+          renderShell();
+        }
+      });
+    }, ms);
   }
 }
 
-// --- 배선 ------------------------------------------------------------------
-
-function fillSelect(select, values) {
-  const options = values.map((value) => {
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = value;
-    return option;
-  });
-  select.replaceChildren(select.options[0], ...options);
+async function boot() {
+  await fetchTasks();
+  if (!state.connected) {
+    setTimeout(boot, BOOT_RETRY_MS); // 성공까지 라우팅 보류 — 오류 표시 중
+    return;
+  }
+  booted = true;
+  applyRoute();
 }
 
 function setupControls() {
-  fillSelect(document.getElementById('filter-phase'), PHASES);
-  fillSelect(document.getElementById('filter-tier'), TIERS);
-
-  document.getElementById('filter-phase').addEventListener('change', (event) => {
-    state.filters = { ...state.filters, phase: event.target.value };
-    render();
-  });
-  document.getElementById('filter-tier').addEventListener('change', (event) => {
-    state.filters = { ...state.filters, tier: event.target.value };
-    render();
-  });
-  document.getElementById('filter-task').addEventListener('input', (event) => {
-    state.filters = { ...state.filters, query: event.target.value.trim() };
-    render();
-  });
-
-  document.querySelectorAll('button.sort').forEach((button) => {
-    button.addEventListener('click', () => {
-      const key = button.dataset.key;
-      const dir = state.sort.key === key && state.sort.dir === 'asc'
-        ? 'desc' : 'asc';
-      state.sort = { key, dir };
-      render();
+  document.getElementById('refresh-now').addEventListener('click', () => {
+    fetchTasks().then(() => {
+      // 수동 전체 갱신 — 현 뷰 강제 재렌더 포함
+      if (state.route.view === 'detail') {
+        loadBundle(state.route.folder);
+      } else {
+        renderPoll();
+      }
     });
   });
-
-  const rows = document.getElementById('task-rows');
-  rows.addEventListener('click', (event) => {
-    const target = event.target.closest('tr.task-row');
-    if (!target) { return; }
-    state.expanded = toggleExpanded(state.expanded, target.dataset.folder);
-    render();
-  });
-  rows.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter' && event.key !== ' ') { return; }
-    const target = event.target.closest('tr.task-row');
-    if (!target) { return; }
-    event.preventDefault();
-    state.expanded = toggleExpanded(state.expanded, target.dataset.folder);
-    render();
-  });
-
-  document.getElementById('refresh-now').addEventListener('click', fetchTasks);
-  document.getElementById('refresh-interval').addEventListener('change', (event) => {
+  const interval = document.getElementById('refresh-interval');
+  interval.value = String(DEFAULT_REFRESH_MS);
+  interval.addEventListener('change', (event) => {
     applyInterval(Number(event.target.value));
+  });
+  window.addEventListener('hashchange', () => {
+    if (!booted) { return; } // 부팅 확정 시점에 applyRoute가 재평가한다
+    applyRoute();
   });
 }
 
 function init() {
   setupControls();
-  document.getElementById('refresh-interval').value = String(DEFAULT_REFRESH_MS);
   applyInterval(DEFAULT_REFRESH_MS);
-  fetchTasks();
+  boot();
 }
 
-document.addEventListener('DOMContentLoaded', init);
+init();

@@ -1,0 +1,183 @@
+/*
+ * r37 디자인 토큰 — 원본 todo-flow 대시보드 팔레트(visual-target §팔레트).
+ * hex는 번들 §CSS 변수 기준(A-1 스크린샷 재확인 2026-10-06 — 실측 추정치와
+ * 지각 오차 범위 일치, 값 유지). 모든 색은 이 파일의 변수로만 참조한다.
+ */
+
+:root {
+  /* 배경 */
+  --bg-page: #FBFBF9;          /* 페이지 — 웜 화이트 */
+  --bg-sidebar: #F6F6F1;       /* 사이드바 */
+  --bg-card: #FFFFFF;          /* 카드·문서 뷰어 · 입력 */
+  --bg-hover: #F3F3ED;         /* 행·항목 호버 */
+
+  /* 보더 */
+  --border-strong: #E8E8E2;    /* 셸 구분선 */
+  --border-row: #EFEFE9;       /* 테이블 행 */
+  --border-card: #E5E5DE;      /* 카드·입력·문서 뷰어 */
+  --border-md-table: #D9D9D2;  /* 마크다운 표 셀 */
+
+  /* 프라이머리 (로고·버튼·체크박스) */
+  --primary: #1F5B44;
+  --primary-hover: #184A37;
+  --nav-active-bg: #E3EAE2;
+  --nav-active-text: #1C4A38;
+
+  /* 텍스트 */
+  --text-body: #1C2B24;
+  --text-muted: #6B7280;
+  --text-disabled: #9CA3AF;
+
+  /* 배지 — phase (선행 글리프 ✓/●/◇/✕) */
+  --badge-green-bg: #DEEBDE;
+  --badge-green-text: #256B4D;
+  --badge-blue-bg: #DFE5F3;
+  --badge-blue-text: #4C5FA3;
+  --badge-cream-bg: #F5EBCB;
+  --badge-cream-text: #8A6A25;
+  --badge-gray-bg: #F1F1EC;
+  --badge-gray-text: #9CA3AF;
+
+  /* 디시전(크림) 카드 — 뷰2 레일 */
+  --decision-bg: #FBF6E6;
+  --decision-border: #E8D9AC;
+
+  /* 우선순위·모노 ID */
+  --priority-high: #B14A32;    /* tier L/XL */
+  --link-id: #2C5D55;          /* 모노 ID·링크 */
+
+  /* 배너 (샘플 안내 상당) */
+  --banner-bg: #FAF2DA;
+  --banner-border: #E2C063;
+  --banner-text: #8A6C20;
+
+  /* 하단 액션 바 (뷰1 선택) */
+  --action-bar-bg: #E7EFE6;
+
+  /* 연결 상태 점 */
+  --conn-ok: #2F7D4F;
+  --conn-fail: #B14A32;
+
+  /* 타이포 스케일 */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR",
+    "Malgun Gothic", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "D2Coding",
+    "Noto Sans Mono KR", monospace;
+  --fs-h1: 34px;
+  --fs-h2: 20px;
+  --fs-row-title: 15px;
+  --fs-body: 14px;
+  --fs-sub: 13px;
+  --fs-chip: 12px;
+}
+
+/* 리셋 */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  min-height: 100%;
+  background: var(--bg-page);
+  color: var(--text-body);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--link-id);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+code,
+pre,
+kbd {
+  font-family: var(--font-mono);
+}
+
+/* 타이포 공통 */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+  font-weight: 800;
+}
+
+/* 배지 기초 — 라운드 사각 + 선행 글리프, wrap 허용(nowrap 금지) */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: var(--fs-chip);
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.badge-green {
+  background: var(--badge-green-bg);
+  color: var(--badge-green-text);
+}
+
+.badge-blue {
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
+}
+
+.badge-cream {
+  background: var(--badge-cream-bg);
+  color: var(--badge-cream-text);
+}
+
+.badge-gray {
+  background: var(--badge-gray-bg);
+  color: var(--badge-gray-text);
+}
+
+/* 모노 ID — 13px 틸그린 자간 넓음 */
+.mono-id {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sub);
+  color: var(--link-id);
+  letter-spacing: 0.08em;
+}
+
+/* 탭룰러 숫자 (통계·타임스탬프) */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--text-muted);
+}

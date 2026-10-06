@@ -1,71 +1,83 @@
 <!DOCTYPE html>
-<!-- r36 과업 상태 대시보드 셸 — 시맨틱 테이블·필터 바·요약 칩.
-     오프라인 동작 계약: 외부 스킴 참조 0, 자산은 동일 origin 고정 라우트뿐이다. -->
+<!-- r37 과업 상태 대시보드 셸 — 사이드바·탑바·배너 + 뷰 컨테이너 3종.
+     오프라인 동작 계약: 외부 스킴 참조 0, 자산은 동일 origin 고정 라우트뿐.
+     뷰 DOM은 views/ 모듈이 컨테이너에 렌더한다 — 정적 마크업은 셸뿐이다. -->
 <html lang="ko">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>effort-router 과업 대시보드</title>
+<link rel="stylesheet" href="/tokens.css">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<header class="topbar">
-  <div class="topbar-head">
-    <h1>effort-router 과업 대시보드</h1>
-    <div class="controls">
-      <span id="last-updated" class="muted">마지막 갱신 –</span>
-      <label for="refresh-interval">갱신 주기</label>
+<div id="app">
+
+  <aside id="sidebar">
+    <div class="brand-block">
+      <p class="brand">
+        <span class="brand-mark" aria-hidden="true">▦</span>
+        <span class="brand-name">EFFORT/ROUTER</span>
+      </p>
+      <p class="brand-sub">읽기 전용 상태 뷰</p>
+      <div class="workspace">
+        <p class="workspace-name">acc0mplish / Effort-Router</p>
+        <p class="workspace-label">로컬 프로젝트</p>
+      </div>
+    </div>
+
+    <nav id="side-nav" aria-label="뷰 전환">
+      <a id="nav-list" class="nav-item" href="#/">
+        <span class="nav-label">TODO</span>
+        <span id="nav-count-list" class="nav-count tnum">0</span>
+      </a>
+      <a id="nav-activity" class="nav-item" href="#/activity">
+        <span class="nav-label"><span aria-hidden="true">◎</span> 실행 현황</span>
+        <span id="nav-count-activity" class="nav-count tnum">0</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <label class="footer-label" for="refresh-interval">갱신 주기</label>
       <select id="refresh-interval">
         <option value="5000">5초</option>
         <option value="15000">15초</option>
         <option value="60000">60초</option>
         <option value="0">끄기</option>
       </select>
-      <button id="refresh-now" type="button">지금 갱신</button>
+      <p class="footer-note">서버는 state.json을 쓰지 않는다.</p>
     </div>
+  </aside>
+
+  <div id="main-col">
+    <header id="topbar">
+      <p id="breadcrumb">
+        <span class="crumb-root">프로젝트</span>
+        <span aria-hidden="true"> / </span>
+        <strong id="breadcrumb-current">과업 목록</strong>
+      </p>
+      <div class="topbar-status">
+        <span id="conn-status" class="conn">
+          <span id="conn-dot" class="conn-dot" aria-hidden="true">●</span>
+          <span id="conn-text">연결됨</span>
+        </span>
+        <span id="last-updated" class="muted tnum">–</span>
+        <button id="refresh-now" type="button" title="지금 갱신"
+                aria-label="지금 갱신">⟳</button>
+      </div>
+    </header>
+
+    <p id="banner">과업 상태 대시보드 · state.json 읽기 전용 뷰</p>
+
+    <main id="content">
+      <p id="boot-error" hidden></p>
+      <section id="view-list" hidden aria-label="과업 목록"></section>
+      <section id="view-activity" hidden aria-label="실행 현황"></section>
+      <section id="view-detail" hidden aria-label="과업 상세"></section>
+    </main>
   </div>
-  <section id="summary-chips" class="chips" aria-label="phase별 요약"></section>
-</header>
 
-<section class="filters" aria-label="필터">
-  <label>phase
-    <select id="filter-phase">
-      <option value="">전체</option>
-    </select>
-  </label>
-  <label>tier
-    <select id="filter-tier">
-      <option value="">전체</option>
-    </select>
-  </label>
-  <label>task
-    <input id="filter-task" type="search" placeholder="task-id 부분 일치">
-  </label>
-</section>
-
-<main>
-  <table id="task-table">
-    <thead>
-      <tr>
-        <th scope="col"><button type="button" class="sort" data-key="task">task</button></th>
-        <th scope="col"><button type="button" class="sort" data-key="tier">tier</button></th>
-        <th scope="col"><button type="button" class="sort" data-key="phase">phase</button></th>
-        <th scope="col" title="adversary / review">round</th>
-        <th scope="col"><button type="button" class="sort" data-key="spawns">spawns</button></th>
-        <th scope="col" title="verified / pending / gap">claims</th>
-        <th scope="col">next</th>
-        <th scope="col">bundle</th>
-      </tr>
-    </thead>
-    <tbody id="task-rows"></tbody>
-  </table>
-  <p id="empty-message" class="muted" hidden>표시할 과업이 없다.</p>
-</main>
-
-<footer class="muted">
-  읽기 전용 — 서버는 state.json을 쓰지 않는다. 데이터: docs/task-id/*/state.json (요청 시점 재스캔)
-</footer>
-
-<script src="/app.js"></script>
+</div>
+<script type="module" src="/app.js"></script>
 </body>
 </html>

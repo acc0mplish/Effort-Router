@@ -431,30 +431,99 @@ class DashboardServerTests(unittest.TestCase):
                 self.assertIn(marker, body, f'{path} 마커 {marker!r} 부재')
 
     def test_t14_no_external_scheme(self):
-        """T14 — 자산 3파일 전수 https?:// 매치 0(오프라인·CDN 금지 계약)."""
+        """T14 — dashboard_assets 전체 파일(glob 순회) https?:// 매치 0
+        (오프라인·CDN 금지 계약 — r37 갱신: 파일 집합 3종 → 시점 존재 전체)."""
         pattern = re.compile(r'https?://')
-        for name in ('index.html', 'app.js', 'style.css'):
-            path = ASSETS / name
-            self.assertTrue(path.is_file(), f'자산 부재: {path}')
+        assets = sorted(path for path in ASSETS.rglob('*') if path.is_file())
+        self.assertGreaterEqual(len(assets), 8,
+                                f'자산 파일 과소 — 분할 구조 훼손: {len(assets)}건')
+        for path in assets:
             matches = pattern.findall(path.read_text(encoding='utf-8'))
-            self.assertEqual(matches, [], f'{name}에 외부 스킴 {len(matches)}건')
+            self.assertEqual(matches, [], f'{path.name}에 외부 스킴 {len(matches)}건')
 
     def test_t15_frontend_wiring(self):
-        """T15 — 프론트 배선 정적 단정: (a) app.js id 참조 ⊆ index.html id 집합
+        """T15 — 프론트 배선 정적 단정(r37 갱신 — 검증 입력 변경: app.js 단일 →
+        프론트 JS 모듈 전체): (a) 전 JS id 참조 ⊆ index.html id 집합
         (b) fetch('/api/tasks' 리터럴 (c) 갱신 주기 옵션 5000/15000/60000/0 ∧ 기본 5000."""
         html = (ASSETS / 'index.html').read_text(encoding='utf-8')
-        js = (ASSETS / 'app.js').read_text(encoding='utf-8')
+        js_paths = [ASSETS / 'app.js', ASSETS / 'markdown.js',
+                    ASSETS / 'views/list.js', ASSETS / 'views/activity.js',
+                    ASSETS / 'views/detail.js']
+        for path in js_paths:
+            self.assertTrue(path.is_file(), f'프론트 모듈 부재: {path}')
+        js = '\n'.join(path.read_text(encoding='utf-8') for path in js_paths)
         ids_html = set(re.findall(r'id="([A-Za-z][\w-]*)"', html))
         ids_js = set(re.findall(r"getElementById\('([\w-]+)'\)", js))
         ids_js |= set(re.findall(r"querySelector(?:All)?\('#([\w-]+)'\)", js))
-        self.assertTrue(ids_js, 'app.js에서 DOM id 참조를 추출하지 못했다')
+        self.assertTrue(ids_js, '프론트 JS에서 DOM id 참조를 추출하지 못했다')
         self.assertFalse(ids_js - ids_html,
-                         f'app.js가 참조하는 미정의 id: {sorted(ids_js - ids_html)}')
+                         f'JS가 참조하는 미정의 id: {sorted(ids_js - ids_html)}')
         self.assertIn("fetch('/api/tasks'", js, '동일 origin API 배선 리터럴 부재')
         options = set(re.findall(r'<option value="([\w-]+)"', html))
         self.assertTrue({'5000', '15000', '60000', '0'} <= options,
                         f'갱신 주기 옵션 부족: {sorted(options)}')
-        self.assertIn('5000', js, 'app.js 기본 갱신 주기 5000 리터럴 부재')
+        self.assertIn('5000', js, '기본 갱신 주기 5000 리터럴 부재')
+
+    # --- r37 프론트엔드(C6~C10) ----------------------------------------------
+
+    def test_t20_new_static_routes(self):
+        """T20 — r37 신규 정적 5종 200 ∧ Content-Type 계약(C6)."""
+        contract = {
+            '/tokens.css': 'text/css; charset=utf-8',
+            '/markdown.js': 'text/javascript; charset=utf-8',
+            '/views/list.js': 'text/javascript; charset=utf-8',
+            '/views/activity.js': 'text/javascript; charset=utf-8',
+            '/views/detail.js': 'text/javascript; charset=utf-8',
+        }
+        for path, ctype in contract.items():
+            status, headers, _ = http_request(self.base_url, path)
+            self.assertEqual(status, 200, f'{path} → {status}')
+            self.assertEqual(headers.get('Content-Type'), ctype,
+                             f'{path} Content-Type')
+
+    def test_t21_tokens_palette(self):
+        """T21 — tokens.css에 C7 hex 11종 전부 존재."""
+        text = (ASSETS / 'tokens.css').read_text(encoding='utf-8')
+        hex_values = ('#FBFBF9', '#F6F6F1', '#1F5B44', '#E3EAE2', '#DEEBDE',
+                      '#DFE5F3', '#F5EBCB', '#FBF6E6', '#B14A32', '#FAF2DA',
+                      '#E7EFE6')
+        for hex_value in hex_values:
+            self.assertIn(hex_value, text, f'팔레트 hex 부재: {hex_value}')
+
+    def test_t22_shell_dom_markers(self):
+        """T22 — index.html 셸 DOM 마커(id sidebar·topbar·banner·view-list·
+        view-activity·view-detail) ∧ 워드마크 "EFFORT/ROUTER"(C8)."""
+        html = (ASSETS / 'index.html').read_text(encoding='utf-8')
+        for marker in ('id="sidebar"', 'id="topbar"', 'id="banner"',
+                       'id="view-list"', 'id="view-activity"', 'id="view-detail"'):
+            self.assertIn(marker, html, f'DOM 마커 부재: {marker}')
+        self.assertIn('EFFORT/ROUTER', html, '워드마크 부재')
+
+    def test_t23_hash_routing_wiring(self):
+        """T23 — 해시 라우팅 배선 정적 단정(C9 + 메인 판정 보강): app.js에
+        fetch('/api/tasks')·fetch('/api/bundle/') 리터럴·hashchange 리스너·
+        '#/task/' 접두사 리터럴 ∧ views/list.js·views/activity.js에 행 클릭
+        navigate 배선 리터럴."""
+        app = (ASSETS / 'app.js').read_text(encoding='utf-8')
+        self.assertIn("fetch('/api/tasks'", app, '/api/tasks 페치 리터럴 부재')
+        self.assertIn("fetch('/api/bundle/", app, '/api/bundle 페치 리터럴 부재')
+        self.assertIn('hashchange', app, 'hashchange 리스너 부재')
+        self.assertIn('#/task/', app, '#/task/ 접두사 리터럴 부재')
+        for view in ('views/list.js', 'views/activity.js'):
+            text = (ASSETS / view).read_text(encoding='utf-8')
+            self.assertIn('navigate', text, f'{view} navigate 배선 리터럴 부재')
+
+    def test_t24_markdown_renderer_contract(self):
+        """T24 — markdown.js 정적 단정(C10): renderMarkdown export·헤딩/표/
+        코드펜스 처리 경로 ∧ 표 이스케이프 파이프 placeholder 처리(H3) ∧
+        textContent 주입·innerHTML 부재(M1)."""
+        text = (ASSETS / 'markdown.js').read_text(encoding='utf-8')
+        self.assertIn('export function renderMarkdown', text, 'renderMarkdown export 부재')
+        self.assertIn('PIPE_PLACEHOLDER', text, '이스케이프 파이프 placeholder 부재')
+        self.assertNotIn('innerHTML', text, 'innerHTML 사용 — textContent 일원화 위반')
+        self.assertIn('textContent', text, 'textContent 주입 경로 부재')
+        for marker in ('```', 'renderTable', 'renderFence'):
+            self.assertIn(marker, text, f'마크다운 처리 경로 부재: {marker!r}')
 
 
 if __name__ == '__main__':
