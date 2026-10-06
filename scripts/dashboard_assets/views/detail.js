@@ -23,9 +23,13 @@ function subBadge(label, value, kind) {
 
 function buildSubRow(task) {
   const sub = el('div', 'detail-sub');
-  sub.appendChild(subBadge('tier',
-    task.tier === null || task.tier === undefined ? '–' : String(task.tier),
-    task.tier === 'L' || task.tier === 'XL' ? 'cream' : 'gray'));
+  // tier 색 계약(번들 §시각 매핑): L/XL=벽돌레드 · M=블루그레이 · S/None=회색 —
+  // 뷰1 priority 패턴과 동일 클래스를 재사용한다.
+  const tier = task.tier === null || task.tier === undefined ? null : String(task.tier);
+  sub.appendChild(el('span',
+    `priority ${tier === 'L' || tier === 'XL' ? 'priority-high'
+      : tier === 'M' ? 'priority-mid' : 'priority-low'}`,
+    `tier: ${tier === null ? '–' : tier}`));
   const phase = task.phase === null || task.phase === undefined
     ? null : String(task.phase);
   if (phase === null) {
@@ -113,6 +117,15 @@ export function renderDetail(container, vm, actions) {
   const back = el('a', 'back-link', '← 리스트');
   back.href = '#/list';
   wrap.appendChild(back);
+
+  // 폴더 소실 가드(④리뷰 LOW) — 뷰3 체류 중 과업 폴더가 사라진 경우
+  // vm.task가 undefined다(TypeError 대신) 안내 렌더로 분기한다.
+  if (!vm.task) {
+    wrap.appendChild(el('p', 'detail-id mono-id', vm.folder));
+    wrap.appendChild(el('p', 'empty-state', '과업을 찾을 수 없다 — 폴더가 사라졌다'));
+    container.replaceChildren(wrap);
+    return;
+  }
 
   wrap.appendChild(el('p', 'detail-id mono-id', vm.folder));
   wrap.appendChild(el('h1', 'detail-title', vm.task.task));

@@ -17,9 +17,6 @@ import { renderDetail } from '/views/detail.js';
 
 const DEFAULT_REFRESH_MS = 5000;
 const BOOT_RETRY_MS = 5000;
-const PHASES = ['plan', 'adversary', 'review', 'implement', 'verify', 'done',
-  'blocked', 'cancelled'];
-const TIERS = ['S', 'M', 'L', 'XL'];
 const ACTIVE_PHASES = ['implement', 'review', 'verify'];
 // 통계 행 — 전체 · 진행 중(implement/review/verify) · 판단 대기(plan/adversary/
 // blocked) · 완료(done). 나머지 phase는 통계에서 제외(목록에는 표시).
@@ -165,7 +162,6 @@ function showView(name) {
 
 function renderPoll() {
   renderShell();
-  document.getElementById('boot-error').hidden = true;
   if (state.route.view === 'activity') {
     showView('view-activity');
     const container = document.getElementById('view-activity');
@@ -238,6 +234,8 @@ async function fetchTasks() {
     state.tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
     state.connected = true;
     state.lastSuccessAt = new Date();
+    // 성공 시점에 오류 문구를 닫는다(④리뷰 LOW) — 뷰3 체류 중에도 잔존하지 않다.
+    document.getElementById('boot-error').hidden = true;
   } catch (error) {
     state.connected = false;
     printBootError(`상태 갱신 실패 (${error.message}) — 재시도 중`);

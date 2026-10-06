@@ -139,6 +139,20 @@ function buildShell(actions) {
   searchBox.appendChild(el('kbd', null, '/'));
   controls.appendChild(searchBox);
 
+  // '/' 키다운 = 검색창 포커스(번들 L6 — 로컬 동작). 입력 필드에서의 '/'는
+  // 검색어로 통과시킨다.
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== '/' || event.defaultPrevented) { return; }
+    const target = event.target;
+    if (target instanceof HTMLElement
+      && (target.tagName === 'INPUT' || target.tagName === 'SELECT'
+        || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+      return;
+    }
+    event.preventDefault();
+    search.focus();
+  });
+
   const phaseSelect = el('select');
   phaseSelect.setAttribute('aria-label', 'phase 필터');
   const phaseAll = el('option', null, 'phase: 전체');
