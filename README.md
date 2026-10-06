@@ -500,6 +500,7 @@ python3 scripts/dashboard_server.py --port 0   # OS 할당 포트 — stdout REA
 - 읽기 전용: 서버는 state.json·번들을 포함해 어떤 파일도 쓰지 않는다(GET 전용 — state.json writer는 메인 세션 단일). 상호작용(체크박스·아코디언·정렬·필터·검색·클립보드 복사)은 전부 브라우저 로컬 상태다
 - 보안: 기본 `127.0.0.1` 바인딩(로컬 전용). 정적 자원은 고정 매핑 테이블뿐이고 `/api/bundle`은 `unquote` 후 `/`·`\`·`..`·NUL 차단 + state.json 보유 폴더 한정이라 트래버설은 구조적으로 불가. 마크다운 렌더러는 textContent 주입 일원화 + http:/https: 스킴 외 링크 강등
 - 파손 방어: malformed state.json은 `parse_error`로 격리 표시 — 서버·타 과업 표시 무영향
+- 표시 범위: `state.json`을 남기는 전 과업 — S티어(완료 시 최소 기록만 생성, r38 계약)도 포함. S 레코드는 발췌 없음(번들 부재 → 폴백 문구)·claims 칩 `–`·완료 카운트 합산
 - 종료: Ctrl+C(SIGINT/SIGTERM → exit 0). 포트 점유 등 config 오류는 stderr 사유 + exit 2
 - `--port 0`은 테스트 용도 — `scripts/test_dashboard_server.py`(T1~T25)가 READY 라인 파싱 계약으로 사용한다. `--root`로 탐색 루트 교체 가능(테스트 격리)
 
