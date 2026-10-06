@@ -473,10 +473,12 @@ contract_reminder 전문 — 무장 시 게이트가 노출하는 고정 문자�
 
 **한계** — move_class 문자열 동일성 기반(근접 변형 미감지 — 이력 기록 시 무브류 정규화 기재로 완화, 자동 유사도 판정은 단죄 위험으로 미도입)·S7은 knob·value·context 기재 의존(완비 그룹 0 = `s7_evaluable:false` 투명 표기 — 미감지 방향)·게이트는 무장 '판정'만(밴 준수·소급 예측 품질·실험 1개 규율은 SKILL 계약 텍스트 영역)·무장 후 진입·밴 해제·에스컬레이션 판정 권한은 메인(해제 시 사유+감사 1건). 분기 전수는 `python3 scripts/test_neverstuck_gate.py`(34케이스)에서 결정적으로 검증한다.
 
-### HTML 대시보드 (r36)
+### HTML 대시보드 (r37)
 
 터미널 없이 브라우저에서 과업 상태를 보는 읽기 전용 로컬 대시보드다.
-todo-flow(JakeB-5/todo-flow, MIT) 대시보드 스타일의 국소 재구현 — 코드 이식 없음.
+r36의 단일 테이블 UI를 todo-flow(JakeB-5/todo-flow, MIT) 대시보드 원본 충실도로
+재구성했다(스타일 국소 재구현 — 코드 이식 없음): 웜 화이트 팔레트 ·
+사이드바+탑바+배너 공통 셸 · 해시 라우팅 3뷰.
 
 ```bash
 python3 scripts/dashboard_server.py            # 기동 → http://127.0.0.1:5777
@@ -486,14 +488,20 @@ python3 scripts/dashboard_server.py --port 0   # OS 할당 포트 — stdout REA
 | 라우트 | 응답 |
 |---|---|
 | `/` | 대시보드 HTML |
-| `/api/tasks` | 과업 상태 JSON — `docs/task-id/*/state.json` 전수 스캔 |
-| `/app.js` · `/style.css` | 정적 자원 (고정 매핑 — 이 외 경로는 전부 404) |
+| `/api/tasks` | 과업 상태 JSON — `docs/task-id/*/state.json` 전수 스캔 + `excerpt`(원 요구 발췌)·`mtime` 확장 |
+| `/api/bundle/<folder>` | 과업 번들 원문 JSON(`{"folder", "markdown"}`) — state.json 보유 폴더 한정, 4단계 경로 검증 |
+| `/app.js` · `/style.css` · `/tokens.css` · `/markdown.js` · `/views/*.js` | 정적 자원 (고정 매핑 — 이 외 경로는 전부 404) |
 
-- 읽기 전용: 서버는 state.json·번들을 포함해 어떤 파일도 쓰지 않는다(GET 전용 — state.json writer는 메인 세션 단일). state.json은 요청 시점마다 재스캔(캐시 없음) — 메인 세션이 갱신한 최신 상태가 폴링에 반영된다
-- 보안: 기본 `127.0.0.1` 바인딩(로컬 전용). `--bind 0.0.0.0` 등은 stderr 경고 1행 후 진행(차단 아님 — 읽기 전용·기록 0·고정 라우트). 라우트가 고정 매핑 테이블뿐이라 경로 트래버설은 구조적으로 불가
+뷰는 해시 라우팅으로 전환한다 — `#/`(과업 목록, 기본)·`#/activity`(실행 현황)·
+`#/task/<folder>`(과업 상세 — 목록·현황 행 클릭으로 진입, bundle.md 마크다운
+렌더링). 폴링(기본 5초, 사이드바 푸터에서 주기 변경)은 라우트 무관 지속되며
+상세 뷰의 문서 DOM은 재구성하지 않는다.
+
+- 읽기 전용: 서버는 state.json·번들을 포함해 어떤 파일도 쓰지 않는다(GET 전용 — state.json writer는 메인 세션 단일). 상호작용(체크박스·아코디언·정렬·필터·검색·클립보드 복사)은 전부 브라우저 로컬 상태다
+- 보안: 기본 `127.0.0.1` 바인딩(로컬 전용). 정적 자원은 고정 매핑 테이블뿐이고 `/api/bundle`은 `unquote` 후 `/`·`\`·`..`·NUL 차단 + state.json 보유 폴더 한정이라 트래버설은 구조적으로 불가. 마크다운 렌더러는 textContent 주입 일원화 + http:/https: 스킴 외 링크 강등
 - 파손 방어: malformed state.json은 `parse_error`로 격리 표시 — 서버·타 과업 표시 무영향
 - 종료: Ctrl+C(SIGINT/SIGTERM → exit 0). 포트 점유 등 config 오류는 stderr 사유 + exit 2
-- `--port 0`은 테스트 용도 — `scripts/test_dashboard_server.py`(T1~T15)가 READY 라인 파싱 계약으로 사용한다. `--root`로 탐색 루트 교체 가능(테스트 격리)
+- `--port 0`은 테스트 용도 — `scripts/test_dashboard_server.py`(T1~T25)가 READY 라인 파싱 계약으로 사용한다. `--root`로 탐색 루트 교체 가능(테스트 격리)
 
 ## 모델 매핑
 
