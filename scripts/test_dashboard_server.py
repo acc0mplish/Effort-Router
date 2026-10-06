@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""r36 HTML 대시보드 서버 단위테스트 — 임시 fixture 루트로 계약 전수(T1~T15).
+"""r37 HTML 대시보드 서버 단위테스트 — 임시 fixture 루트로 계약 전수(T1~T25).
 
 테스트는 subprocess로 CLI를 실행한다(test_verify_pin.py 관습) — import 방식이면
-수집 단계 ImportError로 RED가 성립하지 않는다. RED 단계(dashboard_server.py·
-dashboard_assets 부재)에서는 해당 케이스가 실패한다.
+수집 단계 ImportError로 RED가 성립하지 않는다. RED 단계(미구현 기능)에서는
+해당 케이스가 실패한다.
 fixture는 --root(tempfile)로 주입한다 — 실 docs/task-id 의존 0(재현성).
 
-claims 대응: T1~T12 = P1 서버·API·보안 계약(번들 §5 Phase 1 표),
-T13~T15 = P2 프론트엔드 계약(자산 서빙·외부 스킴 부재·배선 정적 단정),
+claims 대응: T1~T12 = 서버·API·보안 계약(r36 승계),
+T13~T15·T20~T24 = 프론트엔드 계약(자산 서빙·외부 스킴·배선·팔레트·DOM·마크다운),
+T16~T19·T25 = r37 서버 확장 계약(/api/bundle·excerpt·mtime·읽기 전용),
 C1 = 본 파일 전체 exit 0.
+
+T6 갱신(번들 §P1): fixture 3종 → 5종 확장에 따라 count 3 → 5 — 검증 입력 변경.
 """
 from __future__ import annotations
 
@@ -33,7 +36,8 @@ READY_TIMEOUT_SEC = 10.0
 EXIT_TIMEOUT_SEC = 10.0
 HTTP_TIMEOUT_SEC = 10.0
 
-# fixture 상태 데이터 — done(claims 4상태 전수)·plan(빈 claims)·malformed 3종 + state.json 없는 폴더
+# fixture 상태 데이터 — done(claims 4상태 전수)·plan(빈 claims)·malformed +
+# r37 확장: delta(폴백 발췌)·epsilon(발췌원 전무) + state.json 없는 폴더
 ALPHA_STATE = {
     'task': 'alpha-done', 'tier': 'M', 'phase': 'done',
     'round': {'adversary': 2, 'review': 1}, 'spawns': 14,
@@ -51,7 +55,34 @@ BETA_STATE = {
     'claims': [],
     'bundle': 'docs/task-id/beta-plan/bundle.md', 'next': 'adversary',
 }
+DELTA_STATE = {
+    'task': 'delta-fallback', 'tier': 'L', 'phase': 'implement',
+    'round': {'adversary': 1, 'review': 0}, 'spawns': 3,
+    'claims': [],
+    'bundle': 'docs/task-id/delta-fallback/bundle.md', 'next': 'review',
+}
+EPSILON_STATE = {
+    'task': 'epsilon-bare', 'tier': 'S', 'phase': 'verify',
+    'round': {'adversary': 0, 'review': 1}, 'spawns': 1,
+    'claims': [],
+    'bundle': 'docs/task-id/epsilon-bare/bundle.md', 'next': None,
+}
 MALFORMED_TEXT = '{ 이것은 json이 아니다'
+
+# fixture 번들 — H2-c: alpha는 '원 요구' 헤딩 + blockquote 2행(규칙1 발췌),
+# delta는 헤딩 부재 + blockquote 1행(규칙2 폴백), epsilon은 둘 다 부재(규칙3 null)
+ALPHA_BUNDLE = (
+    '# alpha 번들\n'
+    '\n'
+    '## 1. 원 요구 원문 (전문 수록)\n'
+    '\n'
+    '> alpha 원 요구 마커 FIRST-LINE\n'
+    '> 인용 둘째 행\n'
+    '\n'
+    '본문 문단\n'
+)
+DELTA_BUNDLE = '# delta 문서\n\n인트로 문단\n\n> delta 폴백 발췌 마커\n'
+EPSILON_BUNDLE = '# epsilon 문서\n\nblockquote 없는 본문\n'
 
 _FIXTURE_TMP = tempfile.TemporaryDirectory()
 FIXTURE_ROOT = Path(_FIXTURE_TMP.name)
@@ -64,11 +95,15 @@ def write_text(path: Path, text: str) -> None:
 
 
 def make_fixture(root: Path) -> None:
-    """번들 §5 Phase 1 fixture — 과업 3종 + state.json 없는 폴더."""
+    """번들 §P1 fixture — 과업 5종 + state.json 없는 폴더."""
     base = root / 'docs/task-id'
     write_text(base / 'alpha-done/state.json', json.dumps(ALPHA_STATE, ensure_ascii=False))
-    write_text(base / 'alpha-done/bundle.md', '# alpha 번들')
+    write_text(base / 'alpha-done/bundle.md', ALPHA_BUNDLE)
     write_text(base / 'beta-plan/state.json', json.dumps(BETA_STATE, ensure_ascii=False))
+    write_text(base / 'delta-fallback/state.json', json.dumps(DELTA_STATE, ensure_ascii=False))
+    write_text(base / 'delta-fallback/bundle.md', DELTA_BUNDLE)
+    write_text(base / 'epsilon-bare/state.json', json.dumps(EPSILON_STATE, ensure_ascii=False))
+    write_text(base / 'epsilon-bare/bundle.md', EPSILON_BUNDLE)
     write_text(base / 'gamma-malformed/state.json', MALFORMED_TEXT)
     (base / 'empty-folder').mkdir(parents=True, exist_ok=True)
 
@@ -249,11 +284,12 @@ class DashboardServerTests(unittest.TestCase):
         self.assertNotIn('empty-folder', names)
 
     def test_t06_response_contract(self):
-        """T6 — count 일치·task 이름 오름차순·generated_at ISO8601."""
+        """T6 — count 일치·task 이름 오름차순·generated_at ISO8601.
+        (r37 갱신: fixture 3→5종 확장 — count 3 → 5, 검증 입력 변경)"""
         payload = get_json(self.base_url)
         names = [t['task'] for t in payload['tasks']]
         self.assertEqual(payload['count'], len(payload['tasks']))
-        self.assertEqual(payload['count'], 3)
+        self.assertEqual(payload['count'], 5)
         self.assertEqual(names, sorted(names))
         generated = payload['generated_at'].replace('Z', '+00:00')
         parsed = datetime.fromisoformat(generated)
@@ -312,6 +348,71 @@ class DashboardServerTests(unittest.TestCase):
         self.assertEqual(code, 2, f'점유 포트 기동 종료코드: {code}')
         stderr = proc.stderr.read()
         self.assertGreater(len(stderr.strip()), 0, 'stderr 사유 메시지 부재')
+
+    # --- r37 서버 확장(C2~C5·C14) -------------------------------------------
+
+    def test_t16_bundle_api_contract(self):
+        """T16 — GET /api/bundle/alpha-done → 200 ∧ JSON folder·markdown 키
+        ∧ markdown에 fixture 번들 원문 마커(C2)."""
+        status, headers, body = http_request(self.base_url, '/api/bundle/alpha-done')
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get('Content-Type'),
+                         'application/json; charset=utf-8')
+        payload = json.loads(body)
+        self.assertEqual(set(payload.keys()), {'folder', 'markdown'})
+        self.assertEqual(payload['folder'], 'alpha-done')
+        self.assertIn('# alpha 번들', payload['markdown'])
+        self.assertIn('alpha 원 요구 마커 FIRST-LINE', payload['markdown'])
+
+    def test_t17_bundle_traversal_blocked(self):
+        """T17 — bundle 라우트 경로 검증 전수 404(C3): 원시·1중 인코딩·이중 인코딩
+        (3단계 백필)·다중 세그먼트·state.json 부재 폴더·미존재 폴더."""
+        attempts = [
+            '/api/bundle/..%2fscripts',
+            '/api/bundle/%2e%2e',
+            '/api/bundle/%252e%252e',
+            '/api/bundle/a/b',
+            '/api/bundle/empty-folder',
+            '/api/bundle/nonexistent',
+        ]
+        for path in attempts:
+            status, _, body = http_request(self.base_url, path)
+            self.assertEqual(status, 404, f'{path} → {status}')
+            self.assertEqual(body, 'not found', f'{path} 본문에 요청 경로 반사')
+
+    def test_t18_bundle_post_rejected(self):
+        """T18 — POST /api/bundle/alpha-done → 405 ∧ stdlib HTML 에러 페이지
+        미포함(C4 — 비-GET 통일 계약 승계)."""
+        status, _, body = http_request(self.base_url, '/api/bundle/alpha-done',
+                                       method='POST')
+        self.assertEqual(status, 405)
+        self.assertNotIn('<!DOCTYPE', body)
+
+    def test_t19_excerpt_and_mtime_fields(self):
+        """T19 — /api/tasks 확장 필드(C5): excerpt 3규칙(alpha 원문·beta 번들
+        파일 부재 null·delta 폴백·epsilon 발췌원 전무 null) ∧ mtime ISO8601
+        (malformed 포함)."""
+        payload = get_json(self.base_url)
+        alpha = find_task(payload, 'alpha-done')
+        self.assertIn('alpha 원 요구 마커 FIRST-LINE', alpha['excerpt'])
+        self.assertLessEqual(len(alpha['excerpt']), 140)
+        self.assertIsNone(find_task(payload, 'beta-plan')['excerpt'])
+        self.assertIsNone(find_task(payload, 'epsilon-bare')['excerpt'])
+        self.assertEqual(find_task(payload, 'delta-fallback')['excerpt'],
+                         'delta 폴백 발췌 마커')
+        for name in ('alpha-done', 'gamma-malformed'):
+            mtime = find_task(payload, name)['mtime']
+            parsed = datetime.fromisoformat(mtime.replace('Z', '+00:00'))
+            self.assertIsNotNone(parsed.tzinfo, f'{name} mtime 타임존 부재')
+
+    def test_t25_read_only_with_bundle_get(self):
+        """T25 — /api/bundle GET 포함 전 시나리오 후 fixture 트리 스냅샷 동일
+        (C14 — 읽기 전용, T10의 bundle 경로 보강)."""
+        status, _, _ = http_request(self.base_url, '/api/bundle/alpha-done')
+        self.assertEqual(status, 200)
+        status, _, _ = http_request(self.base_url, '/api/tasks')
+        self.assertEqual(status, 200)
+        self.assertEqual(tree_snapshot(FIXTURE_ROOT), _SHARED['snap0'])
 
     # --- P2: 프론트엔드 -----------------------------------------------------
 

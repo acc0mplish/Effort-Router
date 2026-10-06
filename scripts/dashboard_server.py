@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""r36 과업 상태 HTML 대시보드 — stdlib 전용 읽기 전용 로컬 서버.
+"""r37 과업 상태 HTML 대시보드 — stdlib 전용 읽기 전용 로컬 서버.
 
 todo-flow(JakeB-5/todo-flow, MIT)의 로컬 웹 대시보드 스타일을 effort-router
-과업 상태용으로 국소 재구현한 것이다(코드 이식 아님). `<root>/docs/task-id/*/
+과업 상태용으로 재구현한 것이다(코드 이식 아님). `<root>/docs/task-id/*/
 state.json`을 요청 시점마다 재스캔해 /api/tasks로 노출하며, 어떤 파일도 쓰지
 않는다(GET 전용 — state.json writer는 메인 세션 단일 계약).
 
-보안 설계: 라우트는 고정 매핑 테이블 4키뿐이다 — 요청 경로를 파일시스템 경로로
-해석하는 분기 자체가 없어 트래버설이 구조적으로 불가능하다(경로 검증을 안 하는
-것이 아니라 해석 경로가 존재하지 않는다). 응답 본문에 요청 경로를 재사용하지
-않는다(민감 경로 반사 금지).
+보안 설계: 라우트는 고정 매핑 테이블(정적 8키 + /api/tasks)과 /api/bundle/<folder>
+단 하나다. /api/bundle은 folder명을 조회 키로 수용하는 유일한 라우트로, 4단계
+검증(접두사·디코딩·state.json 보유·bundle.md 존재)을 통과해야 200이며 임의
+경로 지정은 구조적으로 불가하다. 응답 본문에 요청 경로를 재사용하지 않는다
+(민감 경로 반사 금지).
 
 사용:
     python3 scripts/dashboard_server.py [--port 5777] [--bind 127.0.0.1] [--root 저장소루트]
@@ -23,11 +24,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import signal
 import sys
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import unquote
 
 DEFAULT_PORT = 5777
 DEFAULT_BIND = '127.0.0.1'
@@ -37,7 +40,7 @@ EXIT_CONFIG_ERROR = 2
 PARSE_ERROR_MAX = 200
 CLAIM_BUCKETS = ('verified', 'pending', 'gap')
 DOCS_DIR = 'docs/task-id'
-SERVER_NAME = 'r36-dashboard/1.0'
+SERVER_NAME = 'r37-dashboard/1.0'
 
 ASSETS_DIR = Path(__file__).resolve().parent / 'dashboard_assets'
 
@@ -47,10 +50,22 @@ STATIC_ROUTES = {
     '/': ('index.html', 'text/html; charset=utf-8'),
     '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
     '/style.css': ('style.css', 'text/css; charset=utf-8'),
+    '/tokens.css': ('tokens.css', 'text/css; charset=utf-8'),
+    '/markdown.js': ('markdown.js', 'text/javascript; charset=utf-8'),
+    '/views/list.js': ('views/list.js', 'text/javascript; charset=utf-8'),
+    '/views/activity.js': ('views/activity.js', 'text/javascript; charset=utf-8'),
+    '/views/detail.js': ('views/detail.js', 'text/javascript; charset=utf-8'),
 }
 API_ROUTE = '/api/tasks'
+BUNDLE_API_PREFIX = '/api/bundle/'
 BODY_NOT_FOUND = 'not found'
 BODY_METHOD_NOT_ALLOWED = 'method not allowed'
+
+# excerpt 발췌 — 번들 §인터페이스 3규칙(헤딩 이후 blockquote → 문서 전체 폴백 → null)
+EXCERPT_MAX = 140
+EXCERPT_HEADING = re.compile(r'^#{1,6}\s.*원.?요구')
+BLOCKQUOTE_PREFIX = '> '
+BLOCKQUOTE_BARE = '>'
 
 
 def pure_path(raw_path: str) -> str:
@@ -100,7 +115,7 @@ def claim_details(claims: list) -> list:
     return details
 
 
-def empty_task(folder: str, bundle, parse_error) -> dict:
+def empty_task(folder: str, bundle, parse_error, mtime) -> dict:
     """스키마 기본값 — malformed 격리 항목에도 동일 형태를 유지한다."""
     return {
         'task': folder, 'folder': folder, 'tier': None, 'phase': None,
@@ -108,7 +123,55 @@ def empty_task(folder: str, bundle, parse_error) -> dict:
         'claims_total': 0, 'claims': {'verified': 0, 'pending': 0, 'gap': 0, 'other': 0},
         'claim_details': [], 'bundle': bundle, 'bundle_exists': False,
         'next': None, 'parse_error': parse_error,
+        'excerpt': None, 'mtime': mtime,
     }
+
+
+def first_blockquote_line(lines: list) -> 'str | None':
+    """`^> ` 최초 매칭 행에서 접두사를 제거해 반환 — 부재 시 None."""
+    for line in lines:
+        if line.startswith(BLOCKQUOTE_PREFIX):
+            return line[len(BLOCKQUOTE_PREFIX):]
+        if line == BLOCKQUOTE_BARE:
+            return ''
+    return None
+
+
+def extract_excerpt(task_dir: Path) -> 'str | None':
+    """원 요구 발췌 추출(번들 §/api/tasks — best-effort, parse_error와 무관).
+
+    규칙1: '원 요구' 헤딩 최초 매칭 이후 첫 blockquote 행 · 규칙2: 헤딩 미발견·
+    헤딩 이후 부재 시 문서 첫 blockquote 행(폴백) · 규칙3: 발췌원 전무·번들
+    파일 부재·읽기 오류 → None. 140자 절단.
+    """
+    bundle_path = task_dir / 'bundle.md'
+    if not bundle_path.is_file():
+        return None
+    try:
+        lines = bundle_path.read_text(encoding='utf-8').splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    heading_at = None
+    for idx, line in enumerate(lines):
+        if EXCERPT_HEADING.match(line):
+            heading_at = idx
+            break
+    scope = lines[heading_at + 1:] if heading_at is not None else lines
+    excerpt = first_blockquote_line(scope)
+    if excerpt is None:
+        excerpt = first_blockquote_line(lines)
+    if excerpt is None:
+        return None
+    return excerpt[:EXCERPT_MAX]
+
+
+def state_mtime_iso(state: Path) -> 'str | None':
+    """state.json 파일 mtime — ISO8601 UTC. malformed 항목도 파일은 존재하므로 부여."""
+    try:
+        mtime = state.stat().st_mtime
+    except OSError:
+        return None
+    return datetime.fromtimestamp(mtime, timezone.utc).isoformat(timespec='seconds')
 
 
 def truncate(text: str) -> str:
@@ -129,12 +192,13 @@ def load_task(entry: Path, root: Path) -> dict:
     task 값은 state.json 기재값이라 중복 가능, 폴더명은 폴더별 유일).
     """
     state = entry / 'state.json'
+    mtime = state_mtime_iso(state)
     try:
         raw = json.loads(state.read_text(encoding='utf-8'))
     except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
-        return empty_task(entry.name, None, sanitize_parse_error(exc, state, root))
+        return empty_task(entry.name, None, sanitize_parse_error(exc, state, root), mtime)
     if not isinstance(raw, dict):
-        return empty_task(entry.name, None, 'state.json 루트가 객체가 아니다')
+        return empty_task(entry.name, None, 'state.json 루트가 객체가 아니다', mtime)
     bundle = raw.get('bundle')
     claims = raw.get('claims') if isinstance(raw.get('claims'), list) else []
     bundle_exists = isinstance(bundle, str) and bool(bundle) and (root / bundle).is_file()
@@ -152,6 +216,8 @@ def load_task(entry: Path, root: Path) -> dict:
         'bundle_exists': bundle_exists,
         'next': raw.get('next'),
         'parse_error': None,
+        'excerpt': extract_excerpt(entry),
+        'mtime': mtime,
     }
 
 
@@ -179,7 +245,7 @@ def build_payload(root: Path) -> dict:
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
-    """GET 전용 핸들러 — 고정 라우트 4키 외 전부 404, 비-GET은 405."""
+    """GET 전용 핸들러 — 고정 라우트 + /api/bundle/<folder> 외 전부 404, 비-GET은 405."""
 
     server_version = SERVER_NAME
 
@@ -189,6 +255,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_static(route)
         elif route == API_ROUTE:
             self.send_api()
+        elif route.startswith(BUNDLE_API_PREFIX):
+            self.send_bundle(route)
         else:
             self.send_not_found()
 
@@ -220,6 +288,43 @@ class DashboardHandler(BaseHTTPRequestHandler):
         # root는 make_server 이후 서버 인스턴스에 주입된다(main) — 핸들러 클래스
         # 속성으로 두면 기본값('.')이 쓰여 실제 CWD 저장소를 스캔하는 결함이 생긴다
         payload = build_payload(self.server.root)
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        self.send_bytes(200, body, 'application/json; charset=utf-8')
+
+    def resolve_bundle_path(self, route: str) -> 'Path | None':
+        """/api/bundle/<folder> 4단계 검증 — 전부 통과 시 bundle.md 경로, 아니면 None.
+
+        1) 접두사 제거 후 비지 않음 2) unquote 1회 후 '/', '\\', '..', NUL 미포함
+        (한계: 이중 인코딩 %252e→%2e는 잔류 — 실제 차단은 3)단계 폴더명 불일치
+        백필) 3) state.json 보유 폴더만 노출 4) bundle.md 존재.
+        """
+        folder = route[len(BUNDLE_API_PREFIX):]
+        if not folder:
+            return None
+        decoded = unquote(folder)
+        if '/' in decoded or '\\' in decoded or '..' in decoded or '\0' in decoded:
+            return None
+        task_dir = self.server.root / DOCS_DIR / decoded
+        if not (task_dir / 'state.json').is_file():
+            return None
+        bundle_path = task_dir / 'bundle.md'
+        if not bundle_path.is_file():
+            return None
+        return bundle_path
+
+    def send_bundle(self, route: str) -> None:
+        """번들 원문 JSON — GET 시점마다 재독(캐시 없음)·읽기 오류는 404(crash 무)."""
+        bundle_path = self.resolve_bundle_path(route)
+        if bundle_path is None:
+            self.send_not_found()
+            return
+        try:
+            markdown = bundle_path.read_text(encoding='utf-8')
+        except (OSError, UnicodeDecodeError) as exc:
+            print(f'번들 판독 실패 {bundle_path.name}: {exc}', file=sys.stderr)
+            self.send_not_found()
+            return
+        payload = {'folder': bundle_path.parent.name, 'markdown': markdown}
         body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
         self.send_bytes(200, body, 'application/json; charset=utf-8')
 
