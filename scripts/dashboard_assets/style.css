@@ -261,3 +261,5 @@
   .activity-grid { grid-template-columns: 1fr; }
   .doc-viewer { padding: 28px 20px; }
 }
+/* r37 ④ 후속 수선 — 최근 갱신 열 2줄 wrap 방지(원본 단일 행 계약) */
+.cell-mtime { white-space: nowrap; }

@@ -81,10 +81,14 @@ function excerptText(task) {
     ? EXCERPT_FALLBACK : String(task.excerpt);
 }
 
+const SHORT_TIME = new Intl.DateTimeFormat('ko-KR', {
+  month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h12',
+});
+
 function formatTime(mtime) {
   if (!mtime) { return '–'; }
   const parsed = new Date(mtime);
-  return Number.isNaN(parsed.getTime()) ? '–' : parsed.toLocaleString('ko-KR');
+  return Number.isNaN(parsed.getTime()) ? '–' : SHORT_TIME.format(parsed);
 }
 
 function buildRow(task, selected, actions) {
@@ -103,7 +107,10 @@ function buildRow(task, selected, actions) {
   const trackCell = el('td', 'cell-track');
   const title = el('p', 'track-title');
   title.appendChild(el('span', 'track-name', task.task));
-  title.appendChild(el('span', 'track-id mono-id', task.folder));
+  // 폴더명이 과업명과 같으면 중복 라벨이 되므로 다를 때만 ID 표기(원본 "제목 · ID" 패턴)
+  if (task.folder !== task.task) {
+    title.appendChild(el('span', 'track-id mono-id', task.folder));
+  }
   trackCell.appendChild(title);
   trackCell.appendChild(el('p', 'track-sub', excerptText(task)));
   trackCell.addEventListener('click', () => actions.navigate(task.folder));

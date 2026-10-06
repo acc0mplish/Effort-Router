@@ -35,7 +35,10 @@ function workRow(task, actions) {
 
   const title = el('p', 'work-title');
   title.appendChild(el('span', 'work-name', task.task));
-  title.appendChild(el('span', 'work-id mono-id', task.folder));
+  // 폴더명이 과업명과 같으면 중복 라벨 — 다를 때만 ID 표기(뷰1과 동일 계약)
+  if (task.folder !== task.task) {
+    title.appendChild(el('span', 'work-id mono-id', task.folder));
+  }
   row.appendChild(title);
 
   const stateLine = el('div', 'work-state');
