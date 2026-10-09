@@ -1,6 +1,6 @@
 ---
 name: effort-router
-description: Use when a Codex or ChatGPT task needs model and reasoning effort selected by scope, complexity, or risk.
+description: Use when starting a task in Claude Code, Codex, or ChatGPT that needs model and reasoning effort selected by scope, complexity, or risk — fires before implementation, planning, review, or audit work begins.
 ---
 
 # Effort Router
