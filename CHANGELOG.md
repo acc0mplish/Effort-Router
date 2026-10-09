@@ -2,6 +2,7 @@
 
 새 것부터. 상세 검증 기록은 `TESTS.md`·`TESTS-GATES.md`·`TESTS-ARCHIVE.md` 원장 참조.
 
+- **r39** (2026-10-09) — 트리거 복구: description이 "Codex or ChatGPT task"로 한정돼 Claude Code 세션에서 스킬 미발동(실측 — 본문 §6은 Claude Code가 기준 하니스인데 트리거만 제한). description에 Claude Code 포함·과업 착수 전 발동 명시. 본문 계약 무변경
 - **r38** (2026-10-06) — S티어 최소 기록 계약: S 과업도 완료 시 `state.json` 1회 생성 → 대시보드에 전 과업 표시
 - **r37** (2026-10-06) — 대시보드 시각 재구성: 원본 충실도 셸(사이드바+탑바)·3뷰 해시 라우팅(`#/` 목록 · `#/activity` 실행 현황 · `#/task/<folder>` 상세)·번들 마크다운 뷰어(`/api/bundle`)·탑바 시계·필터·정렬
 - **r36** (2026-10-06) — **HTML 대시보드 신설** — `python3 scripts/dashboard_server.py` 기동 → **http://localhost:5777** 브라우저에서 과업 상태 열람 (읽기 전용·로컬 전용 바인딩·README 대시보드 절 참조)

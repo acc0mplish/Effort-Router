@@ -296,10 +296,17 @@ def _sync_mirrors(mirrors: dict[str, Path]) -> int:
     synced = 0
     for root in mirrors.values():
         for relative in MIRROR_MANIFEST:
+            source = ROOT / relative
             destination = root / relative
+            # Guard: mirror root == ROOT (default --claude-mirror) -> source and
+            # destination are the same inode; copying onto itself raises
+            # "same file". It is trivially in sync, so count and continue.
+            if destination.exists() and os.path.samefile(source, destination):
+                synced += 1
+                continue
             destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(ROOT / relative, destination)
-            if destination.read_bytes() != (ROOT / relative).read_bytes():
+            shutil.copy2(source, destination)
+            if destination.read_bytes() != source.read_bytes():
                 raise OSError(f'Mirror sync verification failed: {destination}')
             synced += 1
     return synced
