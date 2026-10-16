@@ -1,6 +1,6 @@
 ---
 name: implement-med
-description: M티어 루틴 구현 전용 — 소넷(5.5) 슬롯에 medium effort. 계획이 확정된 2~5파일 기능 추가·리팩터링·분기 로직 수정 실행에 사용.
+description: M티어 루틴 구현 전용 — 하이쿠(5.5)에 high effort. 계획이 확정된 2~5파일 기능 추가·리팩터링·분기 로직 수정 실행에 사용.
 model: haiku
 effort: high
 ---

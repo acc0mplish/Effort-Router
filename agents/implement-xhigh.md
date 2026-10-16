@@ -1,6 +1,6 @@
 ---
 name: implement-xhigh
-description: XL티어 구현 전용 — 소넷(5.5) 슬롯에 medium effort. 프로토타입 이터레이션·설계 판단이 구현 중 요구되는 작업에 사용.
+description: XL티어 구현 전용 — 소넷(5.5) 슬롯에 high effort. 프로토타입 이터레이션·설계 판단이 구현 중 요구되는 작업에 사용.
 model: sonnet
 effort: high
 ---

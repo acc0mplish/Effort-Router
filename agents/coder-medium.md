@@ -1,6 +1,6 @@
 ---
 name: coder-medium
-description: 코드 작성 전용 — 소넷(5.5)에 low effort. 루틴한 구현, 리팩터링, 테스트 작성에 사용. 깊은 설계 판단 불필요한 작업용.
+description: 코드 작성 전용 — 하이쿠(5.5)에 high effort. 루틴한 구현, 리팩터링, 테스트 작성에 사용. 깊은 설계 판단 불필요한 작업용.
 model: haiku
 effort: high
 ---

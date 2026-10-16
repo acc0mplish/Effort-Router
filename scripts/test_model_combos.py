@@ -118,6 +118,19 @@ class RoleDistributionTests(unittest.TestCase):
         haiku = {name for name, (model, _) in read_claude_pairs().items() if model == 'haiku'}
         self.assertEqual(haiku, {'coder-medium.md', 'implement-med.md'})
 
+    def test_claude_descriptions_match_frontmatter(self):
+        # fd9da16이 frontmatter만 조합표로 갱신하고 설명을 안 고쳐 5개 역할의
+        # 설명이 낡은 슬롯(소넷 low/medium·하이쿠 medium)을 언급했다(2026-10-17
+        # 지적). 설명의 슬롯 문구는 frontmatter 배분과 일치해야 한다.
+        slot_ko = {'opus': '오푸스(5.5)', 'sonnet': '소넷(5.5)', 'haiku': '하이쿠(5.5)'}
+        for path in sorted((ROOT / 'agents').glob('*.md')):
+            text = path.read_text(encoding='utf-8')
+            fields = dict(FRONTMATTER_FIELD.findall(text))
+            model, effort = fields.get('model'), fields.get('effort')
+            with self.subTest(role=path.name):
+                self.assertIn(f'{slot_ko[model]}', text.split('---')[1])
+                self.assertIn(f'{effort} effort', text.split('---')[1])
+
     def test_glm_role_table_in_adapter_matches_distribution(self):
         text = (ROOT / 'platforms' / 'glm.md').read_text(encoding='utf-8')
         rows = {role: (model, effort) for role, model, effort in GLM_ROLE_ROW.findall(text)}
