@@ -59,3 +59,27 @@ ZCode는 Claude Code가 아닌 별도 하니스다 → 백엔드 교체 매핑(g
 
 - 역할별 권장 조합은 `glm.md`의 「역할별 권장 조합」 표를 따른다(케이스 4 = ZCode, 같은 GLM 백엔드). ZCode 스폰은 모델 인자가 없으므로 메인 세션이 과업 시작 시 역할 묶음 단위로 모델을 맞춘다.
 - 스폰에는 모델·effort 열이 없다 — 서브에이전트는 메인 세션의 모델을 공유한다. 모델 축 운용은 위 모델 정책 표대로 메인 세션이 과업 단위로 담당한다.
+
+## 기계적 발동 훅 (2026-10-17 추가)
+
+ZCode에는 자동 발동 트리거가 없어 전역 규칙(`~/.zcode/AGENTS.md`)이 모델 준수에만
+의존했다 — 이어하기·컨텍스트 압축 세션에서 라우터 계약이 조용히 누락되는 실패를
+관측했다(2026-10-17). 발동을 기계화하는 사용자 스코프 훅 어댑터:
+
+- 스크립트: `platforms/zcode-hooks/effort_router_hook.py` — 결정론(키·LLM 무의존),
+  상시 exit 0(절대 차단 없음), 킬 스위치 `EFFORT_ROUTER_HOOKS=0`.
+- `session`(SessionStart): 발동 규칙 블록을 세션 컨텍스트에 주입.
+- `prompt`(UserPromptSubmit): 매 발화 1줄 리마인더 주입 — 컨텍스트 압축에도 살는
+  상시 백스트랍.
+
+설치(배포 스크립트는 이 미러를 관리하지 않으므로 수동 2단계):
+
+```bash
+cp platforms/zcode-hooks/effort_router_hook.py ~/.zcode/hooks/   # chmod 755
+# ~/.zcode/cli/config.json — hooks.enabled: true + 아래 2항목(절대경로)
+# SessionStart:     [{"hooks":[{"type":"command","command":"python3 ~/.zcode/hooks/effort_router_hook.py session","timeout":5}]}]
+# UserPromptSubmit: [{"hooks":[{"type":"command","command":"python3 ~/.zcode/hooks/effort_router_hook.py prompt","timeout":5}]}]
+```
+
+설치 검증: 앱 재시작 후 세션 첫 턴 컨텍스트에 `[effort-router 발동 규칙 — 기계적 주입]`
+블록이 보이는지 확인(스크립트 단독 실행 `python3 … session` 출력과 동일문).
