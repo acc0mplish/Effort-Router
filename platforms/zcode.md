@@ -3,7 +3,7 @@
 대상: ZCode 클라이언트를 GLM Coding Plan(Z.ai) 백엔드로 연결해 쓰는 환경.
 ZCode는 Claude Code가 아닌 별도 하니스다 → 백엔드 교체 매핑(glm.md)의 '하니스 불변' 전제는 여기 적용되지 않는다. 백엔드가 GLM이므로 본문 §2의 OpenAI 모델 정책 대신 아래 GLM 허용 조합(사용자 확정 2026-10-12)을 쓴다. 케이스 4(z.ai 앱) = ZCode.
 
-삽입처: 스킬은 사용자 스코프 `~/.zcode/skills/effort-router/`(ZCode 우선) 또는 `~/.agents/skills/effort-router/`(타 도구 공유)에 설치한다. 전역 발동 규칙은 `~/.zcode/AGENTS.md`에, 프로젝트 규칙은 `<repo>/AGENTS.md`에 병합한다. 커스텀 에이전트 디렉터리는 없다 — 설치 파일 없음, 역할 계약은 스폰 프롬프트 주입으로 대체한다.
+삽입처: 스킬은 사용자 스코프 `~/.zcode/skills/effort-router/`(ZCode 우선) 또는 `~/.agents/skills/effort-router/`(타 도구 공유)에 설치한다. 전역 발동 규칙은 `~/.zcode/AGENTS.md`에, 프로젝트 규칙은 `<repo>/AGENTS.md`에 병합한다. 커스텀 에이전트는 `~/.zcode/agents/*.md`로 로드된다(2026-10-17 실측 — 10개 역할 세션 등재 확인) — 역할·모델 매핑은 `~/.zcode/AGENTS.md` 전역 규칙이 정한다.
 
 > 본 문서는 effort-router SKILL.md(§1 티어·§3 제약·§6 매핑)의 파생 축약 이식본이다 — 규칙 충돌 시 본문이 우선한다. 본문 갱신 시 본 파일도 파생 갱신한다.
 
@@ -17,13 +17,13 @@ ZCode는 Claude Code가 아닌 별도 하니스다 → 백엔드 교체 매핑(g
 
 - 작업 착수 전 티어 판정·실행 지침 요약을 먼저 출력한다.
 - 적용 에이전트 라인 = `general-purpose (주입 역할: plan-high 상당)` 형태 또는 `없음(메인 세션 직접)`. 팬아웃 라인은 실제 실행 구성을 적는다(예: `ON: 심층 general-purpose ×1 + 경량 Explore ×2 병렬 (완전성/기술적오류/위험)`). 단계 상태 라인은 인계를 실제 운반할 때만 기입.
-- **스폰 타입 화이트리스트 = 빌트인만** — `general-purpose`(일반·멀티스텝), `Explore`(읽기 전용 탐색·경량 검증 렌즈), `judge`(렌더링 산출물 시각 검수). Claude 에이전트명(`plan-high`, `implement-med`, `review-pr-high` 등)을 subagent_type으로 지목하지 않는다 — 존재 ≠ 허가.
+- **스폰 타입 화이트리스트 = 라우팅 테이블 역할만** — `~/.zcode/agents/*.md`에 설치된 동명 역할(`plan-high`, `implement-med`, `review-pr-high` 등) + 빌트인 `general-purpose`·`Explore`(경량 검증 렌즈)·`judge`(렌더링 산출물 시각 검수). 테이블 밖 에이전트명은 지목하지 않는다 — 존재 ≠ 허가(2026-10-17 실측: `~/.zcode/agents/` 커스텀 에이전트 로드 확인).
 - **judge는 시각 검수 전용** — 계획 적대 검증·PR 리뷰에 쓰지 않는다(②검토의 심층 렌즈·④리뷰는 `general-purpose`, ②검토의 경량 렌즈는 `Explore`).
 - 증거기반 보고·§5 state.json 계약은 하니스 무관 — 그대로 적용한다.
 
 ## ZCode 대응 (본문 §6)
 
-- 서브에이전트: 빌트인 3종만 스폰 가능. 커스텀 에이전트 파일(`~/.claude/agents/` 상당)은 설치 불가 — 역할 분리는 동봉 `agents/*.md`의 역할 계약(산출물 필수 요소·금지 행동)을 스폰 프롬프트에 원문 주입해 구현한다.
+- 서브에이전트: `~/.zcode/agents/*.md` 커스텀 역할(10종) + 빌트인(`general-purpose`·`Explore`·`judge`)이 스폰 가능하다(2026-10-17 실측). 본문 §2 라우팅 테이블의 동명 역할을 subagent_type으로 지목한다.
 - effort·모델: 스폰 인자에 없음 — 서브에이전트는 메인 세션이 선택한 모델을 공유한다. 라우팅의 본질은 effort 수치가 아니라 **역할·산출물 분리**인 것은 그대로다.
 - **이원 모델 정책**: GLM Coding Plan의 모든 플랜이 GLM-5.3과 GLM-5.3-Flash를 함께 지원한다(docs.z.ai/devpack). 메인 세션은 UI 또는 `/model`로 선택(본문 §3) — 치환 기준은 하단 모델 정책 표. 심야(23:00–09:00) Flash 무제한 캠페인은 대량 반복 과제 타이밍으로 쓸 수 있다(조건은 공식 문서 확인).
 - **비전**: 시각 이해 MCP가 GLM-5.3-Flash에 번들된다. ZCode의 `judge`·스크린샷 경로가 이 비전 MCP를 타는지는 미확인 — 확인 전까지 단정하지 않는다.
@@ -68,6 +68,9 @@ ZCode에는 자동 발동 트리거가 없어 전역 규칙(`~/.zcode/AGENTS.md`
 
 - 스크립트: `platforms/zcode-hooks/effort_router_hook.py` — 결정론(키·LLM 무의존),
   상시 exit 0(절대 차단 없음), 킬 스위치 `EFFORT_ROUTER_HOOKS=0`.
+- **출력은 `hookSpecificOutput.additionalContext` JSON 랩이어야 한다** — ZCode 훅 러너(zcode.cjs)는
+  '{'로 시작하지 않는 stdout을 조용히 폐기한다(2026-10-17 실측). 평문 print는 exit 0으로
+  성공 기록되지만 아무것도 주입되지 않는다.
 - `session`(SessionStart): 발동 규칙 블록을 세션 컨텍스트에 주입.
 - `prompt`(UserPromptSubmit): 매 발화 1줄 리마인더 주입 — 컨텍스트 압축에도 살는
   상시 백스트랍.
@@ -82,4 +85,4 @@ cp platforms/zcode-hooks/effort_router_hook.py ~/.zcode/hooks/   # chmod 755
 ```
 
 설치 검증: 앱 재시작 후 세션 첫 턴 컨텍스트에 `[effort-router 발동 규칙 — 기계적 주입]`
-블록이 보이는지 확인(스크립트 단독 실행 `python3 … session` 출력과 동일문).
+블록이 보이는지 확인(스크립트 단독 실행 `python3 … session` 출력의 additionalContext 값과 동일문).
