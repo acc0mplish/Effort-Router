@@ -68,6 +68,8 @@ REPLACEMENTS = (
                         'model_reasoning_effort = "high"')),
 )
 # AGENTS.md 어휘 표 2행 의미 교환 — 구형 감지 시에만 (이중 교환 방지 §5-W3).
+# r31 이후 설치 계약(README §3 스니펫)에는 어휘 표가 없다 — 표를 갖지 않은
+# AGENTS.md는 교환 대상도 게이트 대상도 아니다(게이트는 미교환 구형 행 잔여로 판정).
 VOCAB_SWAP = (
     ('vocab_high',
      '| high | 별도 지시가 있을 때만 사용 |',
@@ -76,7 +78,6 @@ VOCAB_SWAP = (
      '| xhigh | 계획 및 고난도 추론의 `gpt-6.1-sol` |',
      '| xhigh | 별도 지시가 있을 때만 사용 |'),
 )
-VOCAB_NEW_MARKERS = ('| high | 계획 및 고난도 추론의', '| xhigh | 별도 지시')
 
 
 def _apply_replacements(text: str, table=REPLACEMENTS) -> tuple[str, dict[str, int]]:
@@ -327,7 +328,10 @@ def _gate_g1(codex_home: Path, config_pre: dict) -> dict:
     config = tomllib.loads(texts[0])
     top_ok = (_top_level_state(config) == _top_level_state(config_pre)
               and set(config) == set(config_pre))
-    vocab_ok = all(marker in texts[1] for marker in VOCAB_NEW_MARKERS)
+    # 미교환 구형 어휘 행이 잔존하면 실패다. r31 이후 설치 계약의 AGENTS.md는
+    # 어휘 표 자체가 없으므로(README §3), 표 부재는 합격이다 — 게이트가 잡는
+    # 대상은 치환 후에도 남은 구형 행뿐이다.
+    vocab_ok = not any(old in texts[1] for _, old, _ in VOCAB_SWAP)
     passed = sum(residual.values()) + roles_residual == 0 and top_ok and vocab_ok
     return {'pass': passed, 'residual': sum(residual.values()) + roles_residual,
             'top_level_ok': top_ok, 'vocab_table_ok': vocab_ok}
