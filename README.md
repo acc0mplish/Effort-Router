@@ -1,3 +1,11 @@
+<!-- gitreels:start -->
+<p align="center">
+  <a href="https://gitreels.com/acc0mplish/Effort-Router"><img src="https://gitreels.com/acc0mplish/Effort-Router.webp" alt="acc0mplish/Effort-Router in 15 seconds" width="100%"></a>
+  <br>
+  <a href="https://gitreels.com"><img src="https://gitreels.com/badge.svg" alt="Made with GitReels" height="24"></a>
+</p>
+<!-- gitreels:end -->
+
 # effort-router
 
 작업의 규모·위험도를 티어(S/M/L/XL)로 판정하고 단계별 모델·에포트를 배정하는 Codex·ChatGPT Skill. 일반 작업은 GPT-6-Luna max, 계획·고난도 추론은 GPT-6.1-Sol high를 사용한다.
