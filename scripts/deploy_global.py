@@ -46,7 +46,7 @@ _SCRIPT_MIRROR_FILES = (
     'test_tree_claim_hook.py', 'test_tree_gate.py', 'test_verify_exec.py',
     'test_verify_pin.py', 'test_worktree_gate.py', 'test_worktree_gate_hardening.py',
     'deploy_global.py', 'test_deploy_global.py', 'test_verify_duplicate_detection.py',
-    'test_usage_log.py',
+    'test_usage_log.py', 'glm_slot_gate.py', 'test_glm_slot_gate.py',
 )
 MIRROR_MANIFEST = (
     _ROOT_MIRROR_FILES

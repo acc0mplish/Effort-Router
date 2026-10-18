@@ -19,6 +19,10 @@ effort-router 본문(SKILL.md)은 Codex와 ChatGPT를 1급 대상으로 하며, 
 
 관측·재현된 에이전트 실패 1건을 실행 가능하고 검증 가능한 예방 규칙 1줄로 바꿔 누적한다. 전역 파일에는 모든 저장소에 적용되는 규칙만 두며, 프로젝트 고유 실패는 가장 가까운 프로젝트 guide file에 둔다. 같은 실패의 규칙은 중복 추가하지 않고 기존 줄을 정밀화한다.
 
+| 날짜 | 실패 | 재발 방지 (guide file · 강제 수단) |
+|---|---|---|
+| 2026-10-18 | GLM 세션의 역할 서브에이전트가 `model: opus\|sonnet\|haiku` 별칭 때문에 Claude로 스폰돼 Claude 사용량 소모 | `platforms/CLAUDE.md` 두뇌 프로토콜 규칙 · `scripts/glm_slot_gate.py`(스폰 전 exit 0 확인) · `scripts/test_glm_slot_gate.py`(매핑 블록·역할 별칭 강제) |
+
 ## 설치·붙여넣기 절차 표
 
 | 파일 | 대상 | 삽입처(사용자 실행) | 형태 |

@@ -33,6 +33,26 @@
 - **Flash 대체는 과업 단위로만** — 렌즈별 스폰 치환은 §3 model override 금지로 불가하다. 반복 구현·리컨·대량 소비 구간을 메인 세션 모델 전환으로 Flash로 돌린다. 계획·검토·리뷰·최종 판정·보안감사는 GLM-5.3 고정.
 - **Flash 구간 산출물 적대검토** — Flash로 돌린 구간의 산출물에는 GLM-5.3(메인 재전환·심층 렌즈)의 교차검증 1건 이상을 추가한다 — 경량 구간의 품질 회귀를 잡는다.
 
+## 슬롯 매핑 (필수 — 미설정 시 Claude 사용량 침범)
+
+역할 파일(`agents/*.md`)의 `model:`은 Claude 별칭(`haiku`·`sonnet`·`opus`)이다. GLM 세션에서 이 별칭은 아래 매핑이 있어야만 GLM으로 해석된다. 매핑이 없으면 서브에이전트가 **Claude 모델로 스폰돼 Claude 사용량을 소모한다**(2026-10-18 실사고).
+
+GLM 세션의 Claude Code 설정(`env`)에 다음을 **모두** 넣는다. 베이스 URL은 Z.ai 공식 문서 값을 쓴다(본 문서는 값을 단정하지 않는다).
+
+```json
+"env": {
+  "ANTHROPIC_BASE_URL": "<Z.ai 공식 문서의 Anthropic 호환 엔드포인트>",
+  "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-5.3-flash",
+  "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-5.3",
+  "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-5.3"
+}
+```
+
+- 값은 `scripts/glm_slot_gate.py`의 `SLOT_MODEL`과 정확히 일치해야 한다(테스트 `scripts/test_glm_slot_gate.py`가 이 블록을 강제한다). 정책을 바꾸면 게이트·본 블록·역할 표를 함께 바꾼다.
+- Z.ai 공식 샘플은 다른 모델명(예: glm-4.x)을 보여 주며 매핑 하드코딩을 권하지 않는다. 본 저장소는 사용자 확정 정책(glm-5.3 계열)을 따르므로 공식 샘플을 그대로 복사하지 않는다.
+- **세션 시작 점검**: `python3 scripts/glm_slot_gate.py` — exit 0(PASS) 확인 후 작업한다. exit 1이면 위반 목록의 변수를 채우고 세션을 재시작한다. exit 2는 GLM 세션이 아니라는 뜻이다.
+- 매핑 변경은 세션 재시작 뒤에 반영된다고 본다(재시작 전 스폰 결과는 신뢰하지 않는다).
+
 ## effort 강등 주의 (본문 §3 실측 인용)
 
 - 카탈로그 미수록 모델(GLM 프록시)에서 xhigh는 high로 자동 강등이 실측됐다 — effort frontmatter는 설정값이며 실발효 값과 다를 수 있다.

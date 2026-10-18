@@ -230,7 +230,7 @@ Claude Code와 기타 환경에서는 티어 판정·증거 계약·Output Contr
 | 케이스 | 어댑터 | 형태 |
 |------|--------|------|
 | ① Claude Code | `platforms/CLAUDE.md` | 10세션 토폴로지 + `~/.claude/agents/` 역할 정의 |
-| ② Claude Code + GLM 백엔드 | `platforms/glm.md` | 백엔드 교체 매핑(하니스 불변) + 역할별 GLM 조합 표 |
+| ② Claude Code + GLM 백엔드 | `platforms/glm.md` | 백엔드 교체 매핑(하니스 불변) + 역할별 GLM 조합 표. **필수 슬롯 매핑**(`ANTHROPIC_DEFAULT_*_MODEL`) 미설정 시 역할 서브에이전트가 Claude로 스폰돼 Claude 사용량을 소모한다 — 세션 시작 시 `python3 scripts/glm_slot_gate.py` exit 0 확인 |
 | ③ ChatGPT 앱 & Codex | `platforms/codex.md`, `platforms/chat-app.md` | Codex TOML role↔effort 매핑 + ChatGPT Work/Classic 조합 |
 | ④ ZCode (GLM 백엔드) | `platforms/zcode.md` | 빌트인 스폰 + 역할 계약 주입, 모델은 메인 세션이 과업 단위로 선택 |
 
