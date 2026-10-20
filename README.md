@@ -53,7 +53,7 @@ fetch(Sec-Fetch-Site)를 차단한다. 성능 한계: ops-admin(103과업) 스�
 | `AGENTS.md` | 저장소 작업의 모델·에포트 정책과 역할 템플릿 오류 예방 규칙 |
 | `agents/` | Claude Code 역할 정의 11종(역할 10 + 온디맨드 `ops-supervisor`) |
 | `platforms/` | Codex·ChatGPT 실행 어댑터와 기타 하니스 파생 문서 |
-| `scripts/` | 전역 Codex 역할 라우팅·설치 검증 스크립트 + jev 판단 계층 CLI(jev_judge.py·jev_modes.py — CLI 13종: tier·prune·escalation·memory-gate·stall·done·dup·loop·verify-run·watch·route·guard·intake) + 인테이크 게이트 CLI(intake_gate.py — 항상 켬 필수 계층) + Stagehand 게이트 CLI(stagehand_gate.py 3종) + 검증 핀 게이트 CLI(verify_pin.py + 실행 엔진 verify_exec.py) + 워크트리 수명주기 게이트 CLI(worktree_gate.py 4종: create·done·list·sweep) + 트리 소유 게이트 CLI(tree_gate.py 5종: claim·release·check·status·prune) + 루프 탈출 게이트 CLI(neverstuck_gate.py — 결정론 무장 판정: 무브류 3회 게이트·S7 하드 시그널·선언탐색·취향 면제) |
+| `scripts/` | 전역 Codex 역할 라우팅·설치 검증 스크립트 + jev 판단 계층 CLI(jev_judge.py·jev_modes.py — CLI 13종: tier·prune·escalation·memory-gate·stall·done·dup·loop·verify-run·watch·route·guard·intake) + 인테이크 게이트 CLI(intake_gate.py — 항상 켬 필수 계층) + Stagehand 게이트 CLI(stagehand_gate.py 3종) + 검증 핀 게이트 CLI(verify_pin.py + 실행 엔진 verify_exec.py) + 워크트리 수명주기 게이트 CLI(worktree_gate.py 4종: create·done·list·sweep — 디스크 보고·부산물 회수 포함) + 트리 소유 게이트 CLI(tree_gate.py 5종: claim·release·check·status·prune) + 루프 탈출 게이트 CLI(neverstuck_gate.py — 결정론 무장 판정: 무브류 3회 게이트·S7 하드 시그널·선언탐색·취향 면제) |
 | `TESTS.md` | 검증 프로토콜·측정 결과·라운드별 개정 이력·재현 절차(방법론 원장 — r29 하드캡 분할 이후 게이트 과업 절은 TESTS-GATES.md로, r33 분할 이후 과거 라운드 r4~r17 기록은 TESTS-ARCHIVE.md로 이동) |
 | `TESTS-ARCHIVE.md` | 과거 라운드(r4~r17) 기록 아카이브(r33 내용 불변 순수 이동) |
 | `TESTS-GATES.md` | 게이트 과업별 검증 원장(r22~r28·r29) — 원 요구·계약 요지·RED/GREEN·회귀 증거 표 |
@@ -167,7 +167,7 @@ export TYPESAFE_API_KEY='<본인 키>'
 | 인테이크 (r42) | 발화 6항목 신호 점검 → 질문 상한 분류(항상 켬 — 원문 보존) | `scripts/intake_gate.py "<발화>"` |
 | Stagehand (r21) | 브라우저 자동화 실행 → jev가 통과/재시도 판정 | `scripts/stagehand_gate.py --task-file <json>` |
 | 검증 핀 (r23) | 검증에 HEAD를 핀 + 테스트 파일 약화·은닉 탐지 — "옛 검증으로 새 코드 통과" 차단 | `scripts/verify_pin.py --base <앵커> --verify-cmd <테스트명령>` |
-| 워크트리 수명주기 (r24) | worktree 완료 시 강제 제거 — 미커밋분은 자동 커밋 보존(디스크 잔여 방지) | `scripts/worktree_gate.py create\|done\|list\|sweep --task <id>` |
+| 워크트리 수명주기 (r24+r43) | worktree 완료 시 강제 제거 — 미커밋분은 자동 커밋 보존·디스크 보고·ignored 부산물 무인 회수(디스크 잔여 방지) | `scripts/worktree_gate.py create\|done\|list\|sweep --task <id>` |
 | 트리 소유 (r27+r28) | 여러 세션이 같은 저장소에서 작업 중임을 서로 탐지 — 상대 claim 있으면 경고 + `git add -A`류 전체 스테이징 차단 | `scripts/tree_gate.py claim\|release\|check --session <id>` |
 | 루프 탈출 (r29) | 같은 수정 3회 실패 → 증상 패치 금지·원인 진단 강제(neverstuck) | `scripts/neverstuck_gate.py --history <이력.json>` |
 

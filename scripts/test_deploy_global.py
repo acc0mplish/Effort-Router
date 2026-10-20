@@ -126,7 +126,8 @@ class DeployGlobalTests(unittest.TestCase):
                             report['gates'])
             self.assertEqual(len(report['roles_copied']), 10)
             # r42: 매니페스트 +4(intake_gate·jev_intake·test_intake_gate·test_jev_intake) × 미러 2곳
-            self.assertEqual(report['mirror_synced'], 132)  # r40 120 + GLM 슬롯 게이트 매니페스트 +2파일 × 미러 2곳 (d86ccbc) + r42 인테이크 +4파일 × 미러 2곳
+            # r43: 매니페스트 +2(worktree_artifacts·test_worktree_artifacts) × 미러 2곳
+            self.assertEqual(report['mirror_synced'], 136)  # r40 120 + GLM 슬롯 게이트 매니페스트 +2파일 × 미러 2곳 (d86ccbc) + r42 인테이크 +4파일 × 미러 2곳 + r43 워크트리 부산물 +2파일 × 미러 2곳
             self.assertTrue(Path(report['backup_dir']).is_dir())
             # (iv) 최상위 무손상 — 치환은 tail 섹션에만 적용됐다(r40 루트 luna/max 유지).
             config = tomllib.loads((home / 'config.toml').read_text())

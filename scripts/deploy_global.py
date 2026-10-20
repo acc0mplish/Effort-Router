@@ -39,13 +39,16 @@ _PLATFORM_MIRROR_FILES = (
 _SCRIPT_MIRROR_FILES = (
     'configure_codex_plan.py', 'intake_gate.py', 'jev_intake.py', 'jev_judge.py',
     'jev_modes.py', 'neverstuck_gate.py', 'tree_gate.py', 'verify_exec.py',
-    'verify_global_install.py', 'verify_pin.py', 'worktree_gate.py',
-    'worktree_gate_lib.py', 'usage_log.py',
+    'verify_global_install.py', 'verify_pin.py', 'worktree_artifacts.py',
+    # r43: worktree_artifacts는 worktree_gate 앞(의존 역순 — gate가 import한다,
+    # 복사 창 ImportError 소멸). 제거 시 gate 배선과 동반 revert(번들 §10).
+    'worktree_gate.py', 'worktree_gate_lib.py', 'usage_log.py',
     'test_codex_routing.py', 'test_intake_gate.py', 'test_jev_intake.py',
     'test_jev_judge.py', 'test_jev_modes.py',
     'test_jev_modes_extra.py', 'test_neverstuck_gate.py', 'test_plan_routing.py',
     'test_tree_claim_hook.py', 'test_tree_gate.py', 'test_verify_exec.py',
-    'test_verify_pin.py', 'test_worktree_gate.py', 'test_worktree_gate_hardening.py',
+    'test_verify_pin.py', 'test_worktree_artifacts.py', 'test_worktree_gate.py',
+    'test_worktree_gate_hardening.py',
     'deploy_global.py', 'test_deploy_global.py', 'test_verify_duplicate_detection.py',
     'test_usage_log.py', 'glm_slot_gate.py', 'test_glm_slot_gate.py',
 )

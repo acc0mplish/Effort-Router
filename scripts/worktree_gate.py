@@ -29,15 +29,60 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import worktree_artifacts as artifacts
 import worktree_gate_lib as lib
 from worktree_gate_lib import (BRANCH_PREFIX, EXIT_ATTENTION, EXIT_PASS, FLAG_MISSING,
                                FLAG_REMOVABLE, FLAG_SALVAGE, GATE, GateConfigError,
                                classify_entries, du_bytes, perform_salvage_unmanaged)
 
 
+# ------------------------------------------------------------------ r43 부산물
+
+# 자동 트리거 술어용 — 가드 실패(미삭제) skipped 사유 집합. remove_failed·
+# measure_error는 가드 통과분이라 술어에서 제외한다(M6 정의적 판독).
+ARTIFACTS_GUARD_FAIL_REASONS = frozenset(
+    {'tracked_present', 'not_ignored', 'check_ignore_error', 'ls_files_error'})
+
+
+def artifacts_guard_passed(report: dict[str, Any]) -> bool:
+    """create 자동 트리거 술어(r43 M6) — 가드 3중 통과 후보 > 0의 정의적 판독."""
+    total = report['summary']['candidates']
+    failed = sum(1 for target in report['targets'] for item in target['skipped']
+                 if item['reason'] in ARTIFACTS_GUARD_FAIL_REASONS)
+    return total > failed
+
+
+def auto_artifacts_sweep(repo: Path, disk: dict[str, Any]) -> dict[str, Any] | None:
+    """create 자동 트리거(r43 §3.5) — disk.low ∧ eligible 잔존 부산물 > 0일 때만
+    eligible(phase=done ∨ 고아) 한정 부산물 회수를 실행한다(H1 — active 무인
+    미접촉). best-effort: 회수 오류는 create 실패로 전파하지 않고 error 문자열로
+    기록한다(R4 — create 원자성 보존). 회수 실행 시 컨테이너 artifacts-sweep.log에
+    1줄 영수증을 append한다(M12). low가 아니거나 잔존 부산물이 없으면 None —
+    artifacts_sweep 필드 자체를 첨부하지 않는다(스키마 최소)."""
+    if not disk['low']:
+        return None
+    try:
+        report = artifacts.sweep_artifacts(
+            repo, dry_run=False, disk=disk,
+            max_dirs=artifacts.AUTO_TRIGGER_MAX_DIRS,
+            max_files=artifacts.AUTO_TRIGGER_MAX_FILES, eligible_only=True)
+        if not artifacts_guard_passed(report):
+            return None
+        artifacts.append_sweep_log(lib.container_dir(repo), report)
+        payload: dict[str, Any] = {'mode': 'artifacts-only',
+                                   'targets': report['targets'],
+                                   'summary': report['summary']}
+        if report.get('budget_exceeded'):
+            payload = {**payload, 'budget_exceeded': True}
+        return payload
+    except Exception as error:  # noqa: BLE001 — best-effort 부수 효과(R4)
+        return {'error': str(error)}
+
+
 # ------------------------------------------------------------------ 서브커맨드
 
 def cmd_create(repo: Path, args: argparse.Namespace) -> dict[str, Any]:
+    disk = lib.disk_usage_report(repo)  # 진입부 env 판정(N7) — 부수효과 직전
     task = lib.validate_task(args.task)
     reg_path = lib.registry_path(repo, task)
     if reg_path.exists():
@@ -68,13 +113,18 @@ def cmd_create(repo: Path, args: argparse.Namespace) -> dict[str, Any]:
                                   'created_utc': lib.utc_now(), 'done_utc': None,
                                   'salvage_commit': None,
                                   'dropped_branch_tip': None})
-    return {'ok': True, 'gate': GATE, 'subcommand': 'create', 'task': task,
-            'timestamp_utc': lib.utc_now(),
-            'worktree': {'path': str(wt), 'branch': branch, 'created': True,
-                         'head_sha': head},
-            'base': {'ref': args.base, 'sha': base_sha},
-            'registry': lib.registry_field(repo, task, True),
-            'flags': [], 'saved_to': None}
+    result = {'ok': True, 'gate': GATE, 'subcommand': 'create', 'task': task,
+              'timestamp_utc': lib.utc_now(), 'disk': disk,
+              'worktree': {'path': str(wt), 'branch': branch, 'created': True,
+                           'head_sha': head},
+              'base': {'ref': args.base, 'sha': base_sha},
+              'registry': lib.registry_field(repo, task, True),
+              'flags': [], 'saved_to': None}
+    # 7단계 완료 후 자동 트리거(r43 §3.5) — 조건 불충분 시 필드 미첨부(스키마 최소)
+    artifacts_sweep = auto_artifacts_sweep(repo, disk)
+    if artifacts_sweep is not None:
+        result = {**result, 'artifacts_sweep': artifacts_sweep}
+    return result
 
 
 def require_done_phase(repo: Path, task: str) -> None:
@@ -328,8 +378,10 @@ def cmd_list(repo: Path, args: argparse.Namespace) -> dict[str, Any]:
                'unmanaged': sum(1 for info in infos if not info['managed']),
                'eligible': eligible}
     return {'ok': not flags, 'gate': GATE, 'subcommand': 'list',
-            'timestamp_utc': lib.utc_now(), 'entries': entries_out,
-            'summary': summary, 'flags': flags, 'saved_to': None}
+            'timestamp_utc': lib.utc_now(),
+            'disk': lib.disk_usage_report(repo),
+            'entries': entries_out, 'summary': summary, 'flags': flags,
+            'saved_to': None}
 
 
 def remove_unmanaged(entry: dict[str, Any]) -> dict[str, Any]:
@@ -355,7 +407,19 @@ def remove_unmanaged(entry: dict[str, Any]) -> dict[str, Any]:
 
 def cmd_sweep(repo: Path, args: argparse.Namespace) -> dict[str, Any]:
     """sweep — eligible(phase=="done" ∨ 고아)에 done 절차 일괄 적용. 불일치·활성·
-    미관리는 기본 보고만(존재 ≠ 허가), 제거는 --unmanaged 명시 시뿐이다."""
+    미관리는 기본 보고만(존재 ≠ 허가), 제거는 --unmanaged 명시 시뿐이다.
+    --artifacts-only는 배타 모드다(r43) — 부산물 회수만 수행하고 기존 경로에는
+    접촉하지 않는다(보존 제약 1)."""
+    disk = lib.disk_usage_report(repo)  # 진입부 env 판정(N7)·측정 1회(회수 전, L9)
+    if args.artifacts_only:
+        report = artifacts.sweep_artifacts(repo, dry_run=args.dry_run, disk=disk)
+        ignored = [name for name, enabled in
+                   (('unmanaged', args.unmanaged),
+                    ('drop-branch', args.drop_branch)) if enabled]
+        if ignored:  # 배타 모드에서 무시되는 플래그 — 투명 표기(M5)
+            report = {**report, 'summary': {**report['summary'],
+                                            'ignored_flags': ignored}}
+        return report
     items: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     flags: list[str] = []
@@ -397,7 +461,8 @@ def cmd_sweep(repo: Path, args: argparse.Namespace) -> dict[str, Any]:
             flags.extend(item['flags'])
     flags = sorted(set(flags))
     return {'ok': not flags, 'gate': GATE, 'subcommand': 'sweep',
-            'timestamp_utc': lib.utc_now(), 'items': items, 'skipped': skipped,
+            'timestamp_utc': lib.utc_now(), 'disk': disk, 'items': items,
+            'skipped': skipped,
             'summary': {'swept': len(items), 'skipped': len(skipped)},
             'flags': flags, 'saved_to': None}
 
@@ -441,6 +506,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     sweep.add_argument('--drop-branch', action='store_true',
                        help='sweep 대상(managed wt/<task-id>) 브랜치도 tip SHA 기록 '
                             '후 삭제 — 미관리 원본 브랜치는 삭제하지 않는다')
+    sweep.add_argument('--artifacts-only', action='store_true',
+                       help='배타 모드(r43) — done 절차 없이 ignored 부산물만 회수'
+                            '(가드 3중 통과분 한정·tracked 보존). --unmanaged·'
+                            '--drop-branch와의 조합은 무시되고 ignored_flags로 표기')
     add_save(sweep)
     return parser.parse_args(argv)
 

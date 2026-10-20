@@ -129,10 +129,12 @@ python3 scripts/worktree_gate.py done --task <task-id> [--drop-branch] [--no-sal
 # 적체 대조 — 제거 대상(done·고아) 존재 시 exit 1
 python3 scripts/worktree_gate.py list [--du]
 
-# 일괄 정리 — 보고 먼저, 실제 sweep은 사용자 명시 시에만
+# 일괄 정리 — 보고 먼저, 실제 sweep은 사용자 명시 시에만(무인 salvage 금지).
+# r43 예외: --artifacts-only는 salvage가 아닌 무손실 ignored 부산물 회수라 허용
 python3 scripts/worktree_gate.py sweep --dry-run
 python3 scripts/worktree_gate.py sweep [--drop-branch]
 python3 scripts/worktree_gate.py sweep --unmanaged   # 미관리(수동·기존 잔존분)도 salvage 후 제거
+python3 scripts/worktree_gate.py sweep --artifacts-only   # r43 배타 모드 — done 절차 없이 부산물만 회수
 ```
 
 **exit 1은 attention — 셸 체인에서 조용히 무시하지 않는다**(jev의 exit 1 폴백=진행과 정반대). rc 확인 패턴:
@@ -152,7 +154,7 @@ fi
 | `create` | `--task`(필수) `--base REF`(기본 HEAD) | task-id 검증 → 중복 레지스트리·경로·잔존 브랜치·base 선행 검사 → `worktree add -b wt/<task-id>` → 레지스트리 기록. add 실패 시 생성된 브랜치 best-effort 정리(부분 실패 원자성) |
 | `done` | `--task`(필수) `--drop-branch` `--no-salvage` | 7단계: 대상 확정(레지스트리리스 경로 포함) → 멱등 → locked → phase 검사(r25) → salvage(동시 작성 감지 루프, r25) → remove --force → prune → 기록 |
 | `list` | `--du` | worktree·레지스트리·state.json phase 대조 entries + summary. 제거 대상 1건 이상 시 exit 1 |
-| `sweep` | `--dry-run` `--unmanaged` `--drop-branch` | eligible(done·고아)에 done 절차 일괄 적용. `--dry-run`은 보고만(무변경), `--unmanaged`는 미관리도 salvage 후 제거 |
+| `sweep` | `--dry-run` `--unmanaged` `--drop-branch` `--artifacts-only` | eligible(done·고아)에 done 절차 일괄 적용. `--dry-run`은 보고만(무변경), `--unmanaged`는 미관리도 salvage 후 제거. `--artifacts-only`(r43)는 배타 모드 — 기존 경로 무접촉·ignored 부산물만 회수 |
 
 | 종료코드 | 의미 |
 |---|---|
@@ -166,6 +168,36 @@ fi
 | `salvage_committed` | done·sweep에서 미커밋 변경분을 salvage 커밋했다 | 완료 선언·push 전 `salvage.files` 열람 — 시크릿 확인 시 브랜치 drop 후 시크릿 교체 |
 | `removable_worktrees_present` | list에서 제거 대상(done·고아) 잔존 | done·sweep으로 해소 |
 | `worktree_missing` | 활성 레지스트리인데 디렉터리가 게이트 밖에서 소실 | 잔여 미커밋분 손실 가능 — 수동 확인 후 정리 |
+
+**디스크 보고·부산물 회수 (r43)** — `create`·`list`·`sweep` 응답에는 저장소 볼륨 보고가 최상위 첨부된다(측정 경로는 본체 저장소 루트 — 컨테이너가 sibling이라 같은 볼륨):
+
+```json
+{"disk": {"free_gb": 12.3, "total_gb": 500.0, "low": false}}
+```
+
+- `low` = 여유 bytes < `WORKTREE_MIN_FREE_GB` × 1024³(측정은 각 서브커맨드 절차 개시 시 1회 — 회수 전 값). **`low:true`는 flags를 발행하지 않고 exit도 바꾸지 않는다**(경고 필드 — 관측 시 메인 세션은 사용자에게 통보한다). env 값 공간: 기본 10.0 · `0`=비활성화(low 항상 false·보고는 유지) · 무효값(비숫자·음수·nan·inf·>100000.0)은 exit 2. 판정 위치는 disk 첨부 3지점(create·list·sweep 내부)뿐이며 **done은 env를 읽지 않는다**. 판정 시점은 각 서브커맨드 진입부·부수효과 직전이다.
+- 회수 대상 화이트리스트(G1)는 디렉터리 세그먼트명 매칭이다 — node_modules·dist·build·out·target·__pycache__·.venv·venv·.pytest_cache·.mypy_cache·.ruff_cache·.tox·.nox·.eggs·.next·.nuxt·.output·.turbo·.parcel-cache·coverage·htmlcov·.gradle·*.egg-info. `.idea`·`.vscode`(사용자 설정 성분)·`.cache`(재생성되지 않는 누적 데이터)·`bin`·`obj`(범용 오탐)는 의도적 제외다.
+
+**`sweep --artifacts-only` (r43)** — 배타 모드: 기존 sweep 경로(done 절차·salvage·remove·prune)를 전혀 실행하지 않고 ignored 부산물만 회수한다. 수동 호출의 대상은 managed(등록·고아) 전체 — active-phase 부산물도 회수한다(사용자 명시). unmanaged·locked·detached는 스캔 대상 외(`summary.unmanaged_excluded`·`locked_excluded` 계수만 보고). `--unmanaged`·`--drop-branch` 조합은 무시되고 `summary.ignored_flags`로 투명 표기된다. 성공(회수 0건 포함)은 exit 0이며 flags를 발행하지 않는다. 가드 3중 — **전부 통과한 디렉터리만 rmtree한다(부분 삭제 없음)**:
+
+| 가드 | 판정 | 반례 방어 |
+|---|---|---|
+| G1 패턴 | 디렉터리 세그먼트명 ∈ 화이트리스트(위 표) | 화이트리스트 밖은 후보 등록 자체가 안 된다. 후보 발견 지점에서 하위 미진입(prune — 중복 스캔 없음) |
+| G2 check-ignore | `git check-ignore -q --no-index -- <path>`(cwd=해당 worktree) exit 0 | ignore 규칙 없는 저장소는 전부 미통과 → 삭제 0(fail-closed). `--no-index`는 패턴 전용 판정(기본 모드는 index를 consult해 tracked 경로를 무조건 not-ignored로 돌려 G3이 무의미해진다). git 오류는 `check_ignore_error` skipped |
+| G3 tracked 0 | `git ls-files -- <path>`(cwd=해당 worktree) 빈 출력 | tracked 파일 1건으로 디렉터리 전체 보존(`tracked_present`). `ls-files` 실패는 `ls_files_error` skipped(fail-closed). 미커밋 소스·non-ignored untracked는 G2가 원천 차단(`not_ignored`) |
+
+skipped 사유 어휘(6종, 확정): `tracked_present`·`not_ignored`·`check_ignore_error`·`ls_files_error`·`measure_error`(scandir 재귀 실패)·`remove_failed`(rmtree 실패 — NotADirectoryError 포함). 전부 best-effort로 sweep 전체 ok는 유지된다. 반례 시나리오 요약:
+
+| 반례 | 동작 |
+|---|---|
+| ignore 규칙이 없는 저장소 | G2 전부 미통과 — 삭제 0(fail-closed) |
+| tracked 동명 디렉터리 | G3 `tracked_present` — 디렉터리 전체 보존 |
+| check-ignore·ls-files·scandir 실패 | 각 `*_error` skipped — ok 유지 |
+| active-phase worktree × 무인 경로 | 자동 트리거 미접촉 — 수동 `--artifacts-only`에서만 회수된다 |
+
+**create 자동 트리거 (r43)** — 7단계 완료·응답 조립 직후 `disk.low ∧ 가드 3중 통과 후보 > 0`이면 **eligible(phase=done ∨ 고아) 한정** 회수를 실행한다 — active-phase worktree는 무인 경로에서 절대 접촉하지 않는다(위 반례 표 4행). 결과는 응답 `artifacts_sweep` 필드({targets, summary} 축약본)로 첨부되고 조건 불충분 시 필드 자체가 없다(스키마 최소). 회수 실행 오류는 create를 깨지 않는다(`artifacts_sweep.error` 문자열 — best-effort, ok:true 유지). 무인 불가역 삭제라 컨테이너 `artifacts-sweep.log`에 1줄 영수증을 append한다(`ISO 타임스탬프 | recovered_gb | worktrees | budget_exceeded` — 저장소 외부 효과는 컨테이너 디렉터리와 동일 취지). 예산 상한: 후보 디렉터리 50·measure 파일 200,000 — 초과 시 그 시점까지의 부분 회수분만 보고하고 최상위 `budget_exceeded: true`를 표기한다(수동 sweep은 예산 미적용 — 사용자 명시 대기 감수).
+
+**한계 (r43)** — 회수 대상은 worktree 내부 부산물뿐이다: **본체 저장소 자체의 부산물(node_modules 등)은 범위 밖** — low가 worktree 회수 후에도 지속되면 자동 트리거는 매 create마다 0 회수로 종료된다(영구 무효 경로 — 본체 부산물은 사용자 수동 정리 대상이다).
 
 **명명·레지스트리** — worktree 경로 `<본체 저장소 부모>/<저장소 디렉터리명>-worktrees/<task-id>`, 브랜치 `wt/<task-id>`(미관리 salvage 전용 `salvage/unmanaged-<UTC스탬프>`), 레지스트리 본체 `<repo>/docs/task-id/<task-id>/worktree.json`(worktree 파기에도 본체에 생존 — 고아 판정·명명규칙 재구성의 뿌리). task-id 검증 `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` — 팬아웃 렌즈용 `<task-id>-l<n>`도 통과한다. 모든 경로 파생은 `git rev-parse --git-common-dir` 본체 식별 기준 — worktree 내부에서 실행해도 본체 기준으로 동작한다.
 

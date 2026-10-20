@@ -2,6 +2,7 @@
 
 새 것부터. 상세 검증 기록은 `TESTS.md`·`TESTS-GATES.md`·`TESTS-ARCHIVE.md` 원장 참조.
 
+- **r43** (2026-10-20) — 워크트리 게이트 디스크 보고·부산물 회수: `create`·`list`·`sweep` 응답 최상위 `disk` 필드(free_gb·total_gb·low — 임계 기본 10GB·env `WORKTREE_MIN_FREE_GB`, 0=비활성화) · `sweep --artifacts-only` 배타 모드(가드 3중: 패턴 화이트리스트 ∧ check-ignore ∧ tracked 0 — tracked 1건으로 디렉터리 전체 보존) · create 자동 트리거(disk.low ∧ eligible 잔존 부산물 — active 무인 미접촉·예산 상한 후보 50/파일 200,000·컨테이너 artifacts-sweep.log 영수증)
 - **r42** (2026-10-20) — 인테이크 계층(§0) 신설: 발화 6항목 신호 블록 — ① 결정론 엔진 `intake_gate.py`(hard/soft/advisory/context_dep/loop_pass 분류·규칙 0 긴급 면제·원문 보존) + ② jev 옵션 엔진 `intake` 모드(6항목 Noul fan-out·폴백) · Output Contract 인테이크 라인 · CLI 13종
 - **r41** (2026-10-13) — 대시보드 프로젝트 필터 신설: `/api/projects` · `/api/tasks?project=` · 2세그먼트 번들(`/api/bundle/<project>/<folder>`) · Host·Sec-Fetch-Site 가드 · 심볼릭 링크 차단(nofollow lstat·`O_NOFOLLOW`) · `--workspace`(워크스페이스 전 프로젝트 탐색, 미지정 시 home 단일) + 사이드바 프로젝트 네비·`#/task/<project>/<folder>` 해시 라우팅 · 배포 G2 게이트 역방향 계약 수정(verify exit 0=통과 — 구 계약은 정상 설치에서 영원히 실패)
 - **r39** (2026-10-12) — Asana 브라우저 에이전트 보고서 적용: Stagehand 러너 SDK 표면 수리(PR-0) · 토큰 사용량 수집기 `usage_log.py`(P1, 과업 폴더 `usage.jsonl`) · 게이트 토큰 상한 `--max-tokens`(P2) · 프리픽스 감사·모델 예산 조사 보고서(P3·P7, 정책 변경 없음). P4 실험 하네스는 예산 게이트 미충족으로 보류

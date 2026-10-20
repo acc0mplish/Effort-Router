@@ -12,6 +12,7 @@ salvage 후에는 재판정 루프(동시 작성 감지·3라운드)로 제거 �
 """
 from __future__ import annotations
 
+import math
 import os
 import json
 import re
@@ -208,6 +209,44 @@ def du_bytes(path: str) -> int | None:
     except (OSError, ValueError, subprocess.TimeoutExpired):
         pass
     return None
+
+
+# --------------------------------------------------- 디스크 보고(r43 §3.2)
+
+MIN_FREE_GB_DEFAULT = 10.0
+MIN_FREE_GB_MAX = 100000.0
+
+
+def min_free_gb() -> float:
+    """env WORKTREE_MIN_FREE_GB 판독(r43) — 무효값(비숫자·음수·nan·inf·상한
+    초과)은 GateConfigError(exit 2 — config/env 오류 어휘 합류). 0은 무효값이
+    아니라 비활성화(0.0 반환 — low 항상 false·disk 보고 유지)다. nan은 low 영구
+    false 무음 무효화·inf는 전수 스캔 유인이라 차단한다(M4)."""
+    raw = os.environ.get('WORKTREE_MIN_FREE_GB')
+    if raw is None:
+        return MIN_FREE_GB_DEFAULT
+    try:
+        value = float(raw)
+    except ValueError:
+        raise GateConfigError(
+            f'WORKTREE_MIN_FREE_GB 무효값(비숫자): {raw!r}') from None
+    if not math.isfinite(value) or value < 0 or value > MIN_FREE_GB_MAX:
+        raise GateConfigError(
+            f'WORKTREE_MIN_FREE_GB 무효값'
+            f'(0 이상 {MIN_FREE_GB_MAX} 이하의 유한 수여야 한다): {raw!r}')
+    return value
+
+
+def disk_usage_report(path) -> dict[str, Any]:
+    """저장소 볼륨 디스크 보고(r43) — {free_gb, total_gb, low}. 임계 비교는
+    원시 bytes로 하고 보고만 소수 1자리 반올림한다. min이 0(비활성화)이면 low는
+    항상 false다. low:true는 경고 필드일 뿐 flags를 발행하지 않는다(보존 제약 3)."""
+    usage = shutil.disk_usage(os.fspath(path))
+    free = float(usage.free)
+    minimum = min_free_gb()
+    return {'free_gb': round(free / 1024**3, 1),
+            'total_gb': round(float(usage.total) / 1024**3, 1),
+            'low': minimum > 0 and free < minimum * 1024**3}
 
 
 # ------------------------------------------------------------------- salvage
