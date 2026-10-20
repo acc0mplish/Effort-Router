@@ -30,6 +30,7 @@ ChatGPT Work Output Contract의 에이전트 줄은 다음처럼 쓴다.
 
 ```text
 [Effort Router]
+- 인테이크: advisory — 질문 상한 0개 (엔진: 수동)
 - 판정 티어: M
 - 작업 단계: 계획
 - 적용 에이전트·모델·에포트: 없음(ChatGPT Work 단일 세션) (gpt-6.1-sol / high)

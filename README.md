@@ -53,12 +53,12 @@ fetch(Sec-Fetch-Site)를 차단한다. 성능 한계: ops-admin(103과업) 스�
 | `AGENTS.md` | 저장소 작업의 모델·에포트 정책과 역할 템플릿 오류 예방 규칙 |
 | `agents/` | Claude Code 역할 정의 11종(역할 10 + 온디맨드 `ops-supervisor`) |
 | `platforms/` | Codex·ChatGPT 실행 어댑터와 기타 하니스 파생 문서 |
-| `scripts/` | 전역 Codex 역할 라우팅·설치 검증 스크립트 + jev 판단 계층 CLI(jev_judge.py·jev_modes.py — CLI 12종: tier·prune·escalation·memory-gate·stall·done·dup·loop·verify-run·watch·route·guard) + Stagehand 게이트 CLI(stagehand_gate.py 3종) + 검증 핀 게이트 CLI(verify_pin.py + 실행 엔진 verify_exec.py) + 워크트리 수명주기 게이트 CLI(worktree_gate.py 4종: create·done·list·sweep) + 트리 소유 게이트 CLI(tree_gate.py 5종: claim·release·check·status·prune) + 루프 탈출 게이트 CLI(neverstuck_gate.py — 결정론 무장 판정: 무브류 3회 게이트·S7 하드 시그널·선언탐색·취향 면제) |
+| `scripts/` | 전역 Codex 역할 라우팅·설치 검증 스크립트 + jev 판단 계층 CLI(jev_judge.py·jev_modes.py — CLI 13종: tier·prune·escalation·memory-gate·stall·done·dup·loop·verify-run·watch·route·guard·intake) + 인테이크 게이트 CLI(intake_gate.py — 항상 켬 필수 계층) + Stagehand 게이트 CLI(stagehand_gate.py 3종) + 검증 핀 게이트 CLI(verify_pin.py + 실행 엔진 verify_exec.py) + 워크트리 수명주기 게이트 CLI(worktree_gate.py 4종: create·done·list·sweep) + 트리 소유 게이트 CLI(tree_gate.py 5종: claim·release·check·status·prune) + 루프 탈출 게이트 CLI(neverstuck_gate.py — 결정론 무장 판정: 무브류 3회 게이트·S7 하드 시그널·선언탐색·취향 면제) |
 | `TESTS.md` | 검증 프로토콜·측정 결과·라운드별 개정 이력·재현 절차(방법론 원장 — r29 하드캡 분할 이후 게이트 과업 절은 TESTS-GATES.md로, r33 분할 이후 과거 라운드 r4~r17 기록은 TESTS-ARCHIVE.md로 이동) |
 | `TESTS-ARCHIVE.md` | 과거 라운드(r4~r17) 기록 아카이브(r33 내용 불변 순수 이동) |
 | `TESTS-GATES.md` | 게이트 과업별 검증 원장(r22~r28·r29) — 원 요구·계약 요지·RED/GREEN·회귀 증거 표 |
 | `CHANGELOG.md` | 라운드별 변경 이력(r1~r38·jev) 전량 |
-| `GATES.md` | 게이트 5종 CLI 전체 참조 — 플래그·종료코드·JSON 스키마·한계 |
+| `GATES.md` | 게이트 6종 CLI 전체 참조 — 플래그·종료코드·JSON 스키마·한계 |
 
 ## 설치 (Codex + ChatGPT 데스크톱 앱)
 
@@ -139,7 +139,7 @@ export TYPESAFE_API_KEY='<본인 키>'
 
 미설정 시 스킬은 기존 프로세스로 동작한다 — jev는 선택 계층이며, 키 부재 시 jev_judge.py는 exit 1 폴백 신호를 낸다. 사용 규칙(데이터 유출 면·감사 저장·권한 계약)은 SKILL.md의 '판단 계층(jev)' 절을 따른다.
 
-`unset TYPESAFE_API_KEY`가 즉시 비활성 스위치다(호출 전 폴백). 키 로테이션 시 셸 프로파일의 모든 export 지점을 함께 갱신한다. 판단 모드는 **CLI 12종** — tier·prune·escalation·memory-gate·stall 기본 5종 + 채택 판정 7종(done·dup·loop·verify-run·watch·route·guard).
+`unset TYPESAFE_API_KEY`가 즉시 비활성 스위치다(호출 전 폴백). 키 로테이션 시 셸 프로파일의 모든 export 지점을 함께 갱신한다. 판단 모드는 **CLI 13종** — tier·prune·escalation·memory-gate·stall 기본 5종 + 채택 판정 8종(done·dup·loop·verify-run·watch·route·guard·intake).
 
 **판단 역할 (실험 1200호출로 캘리브레이션됨)** — 판정 1호출 비용(~0.3초·~1.2k 토큰)은 승인·차단하는 행동(심층 스폰·오배치) 비용의 극소수 %:
 
@@ -158,12 +158,13 @@ export TYPESAFE_API_KEY='<본인 키>'
 
 설계 원칙: 질문 쪼개기 · 판별 소재 질문 내장 · 사실 필드(이력·신호)로 주기 · 예외 조건 미리 적기. 상세 원리·한계 표는 SKILL.md '판단 계층(jev)' 절 참조.
 
-### 게이트 5종 (선택 계층)
+### 게이트 6종 (선택 계층 + 인테이크)
 
-반복 실패를 막는 결정론 스크립트들. 전부 선택 계층 — 안 쓰면 기존 프로세스 그대로 동작한다.
+반복 실패를 막는 결정론 스크립트들. 아래 5종은 전부 선택 계층 — 안 쓰면 기존 프로세스 그대로 동작한다. 유일 예외는 **인테이크(r42)** — 모든 코딩 착수 전 항상 발동하는 필수 계층이다(SKILL.md §0).
 
 | 게이트 | 뭐 하는 거 | 기본 명령 |
 |---|---|---|
+| 인테이크 (r42) | 발화 6항목 신호 점검 → 질문 상한 분류(항상 켬 — 원문 보존) | `scripts/intake_gate.py "<발화>"` |
 | Stagehand (r21) | 브라우저 자동화 실행 → jev가 통과/재시도 판정 | `scripts/stagehand_gate.py --task-file <json>` |
 | 검증 핀 (r23) | 검증에 HEAD를 핀 + 테스트 파일 약화·은닉 탐지 — "옛 검증으로 새 코드 통과" 차단 | `scripts/verify_pin.py --base <앵커> --verify-cmd <테스트명령>` |
 | 워크트리 수명주기 (r24) | worktree 완료 시 강제 제거 — 미커밋분은 자동 커밋 보존(디스크 잔여 방지) | `scripts/worktree_gate.py create\|done\|list\|sweep --task <id>` |

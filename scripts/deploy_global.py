@@ -37,11 +37,12 @@ _PLATFORM_MIRROR_FILES = (
     'CLAUDE.md', 'README.md', 'chat-app.md', 'codex.md', 'glm.md', 'zcode.md',
 )
 _SCRIPT_MIRROR_FILES = (
-    'configure_codex_plan.py', 'jev_judge.py', 'jev_modes.py',
-    'neverstuck_gate.py', 'tree_gate.py', 'verify_exec.py',
+    'configure_codex_plan.py', 'intake_gate.py', 'jev_intake.py', 'jev_judge.py',
+    'jev_modes.py', 'neverstuck_gate.py', 'tree_gate.py', 'verify_exec.py',
     'verify_global_install.py', 'verify_pin.py', 'worktree_gate.py',
     'worktree_gate_lib.py', 'usage_log.py',
-    'test_codex_routing.py', 'test_jev_judge.py', 'test_jev_modes.py',
+    'test_codex_routing.py', 'test_intake_gate.py', 'test_jev_intake.py',
+    'test_jev_judge.py', 'test_jev_modes.py',
     'test_jev_modes_extra.py', 'test_neverstuck_gate.py', 'test_plan_routing.py',
     'test_tree_claim_hook.py', 'test_tree_gate.py', 'test_verify_exec.py',
     'test_verify_pin.py', 'test_worktree_gate.py', 'test_worktree_gate_hardening.py',

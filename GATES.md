@@ -1,6 +1,6 @@
 # 게이트 CLI 참조
 
-README '게이트 5종' 요약의 전체 참조 — 플래그·종료코드·JSON 스키마·명명 규칙·한계 전문.
+README '게이트 6종' 요약의 전체 참조 — 플래그·종료코드·JSON 스키마·명명 규칙·한계 전문.
 계약(사용 시점·권한·폴백·감사)은 SKILL.md 각 게이트 절을 따른다.
 
 ### Stagehand 게이트 (r21)
@@ -355,3 +355,39 @@ contract_reminder 전문 — 무장 시 게이트가 노출하는 고정 문자�
 치환 규칙 — three_attempt_gate: `무브류 <무브류 쉼표 열거>` / s7_hard_signal: `knob <K>의 값 <v1>@<c1>·<v2>@<c2>`(상이쌍 전부 열거 — 값 직렬화는 JSON 규칙: str은 따옴표 포함, 수치는 그대로).
 
 **한계** — move_class 문자열 동일성 기반(근접 변형 미감지 — 이력 기록 시 무브류 정규화 기재로 완화, 자동 유사도 판정은 단죄 위험으로 미도입)·S7은 knob·value·context 기재 의존(완비 그룹 0 = `s7_evaluable:false` 투명 표기 — 미감지 방향)·게이트는 무장 '판정'만(밴 준수·소급 예측 품질·실험 1개 규율은 SKILL 계약 텍스트 영역)·무장 후 진입·밴 해제·에스컬레이션 판정 권한은 메인(해제 시 사유+감사 1건). 분기 전수는 `python3 scripts/test_neverstuck_gate.py`(34케이스)에서 결정적으로 검증한다.
+
+### 인테이크 게이트 (r42)
+
+`scripts/intake_gate.py`는 인테이크 계층의 ① 기본 엔진이다 — **선택 계층이 아니라 항상 켬 필수 계층**(모든 코딩 착수 전 발동, SKILL.md §0). 발화 원문을 재작성하지 않는다(원문 보존 계약) — 6항목(target·task_type·scope·risk·verification·pattern_ref) 신호를 결정적 키워드 판정으로 점검해 병렬 신호 블록(action·모호도·질문 상한)으로 출력한다. stdlib만 사용하며 jev·API 무의존 — 미러 동봉 대상. ② 옵션 엔진은 `jev_judge.py intake`(6항목 Noul fan-out, noul≥0.6=충족)이고 exit 1 = ① 폴백 신호다.
+
+```bash
+# 발화 신호 블록 — action 무관 판정(exit 0), hard는 exit 1(질문 1개 의무)
+python3 scripts/intake_gate.py "<발화 원문>"
+python3 scripts/intake_gate.py - < <발화 원문 파일>          # stdin 입력
+python3 scripts/intake_gate.py "<발화>" --context <맥락|파일|->   # 누락 항목 맥락 재검색
+python3 scripts/intake_gate.py "<발화>" --task-active --urgent --source auto
+
+# 감사 저장 — 모든 action에서 기록. 저장 실패는 exit 유지 + saved_to:null + stderr 경고
+python3 scripts/intake_gate.py "<발화>" --save docs/task-id/<task-id>/intake
+```
+
+| 종료코드 | 의미 |
+|---|---|
+| 0 | 판정 성공(action 무관 — hard 제외·--save 저장 실패 포함) — JSON action 필드 소비 |
+| 1 | hard(경질) — 질문 1개 의무(질문 없이 진행 금지) |
+| 2 | 무효 입력 전용(빈 발화·인자 위반 — stderr `FAIL intake gate: <사유>`) — 이유가 붙은 bypass |
+
+응답 JSON — 정상 출력은 단일 JSON 객체다(exit 1 포함, exit 2 = stdout 없음):
+
+```json
+{"ok": true, "gate": "intake", "mode": "basic", "source": "user",
+ "items": {"target": "present|missing|context_satisfied", "task_type": "…",
+           "scope": "…", "risk": "…", "verification": "…", "pattern_ref": "…"},
+ "missing_count": 3, "ambiguity_score": 0.5,
+ "action": "hard|soft|advisory|context_dep|loop_pass", "questions_max": 0,
+ "context_dep": false, "task_active": false, "urgent": false,
+ "utterance": "<발화 원문 그대로>", "saved_to": null,
+ "note": "선택 — context_dep·advisory+누락 시 표기 주석(①② 동일 형식, build_note 단일 소스)"}
+```
+
+action 우선순위(§3.5): 0 `--urgent` → advisory 강하 / 1 `--task-active` ∧ 루프 동사 → loop_pass / 2 대명사·직전 참조 → context_dep(누락 항목 맥락 기준 충족 간주·missing_count=0) / 3 target·task_type 누락 → hard / 4 잔여 4항목 누락 ≥3 → soft(질문 min(누락수,3)) / 5 advisory. `ambiguity_score` = missing_count/6(context_dep 예외 — 0.0). **② jev intake는 jev 어휘다**(exit 0 + ok:true / exit 1 = ① 폴백) — ①은 게이트 어휘, ②는 폴백 어휘로 의도된 차이다. 분기 전수는 `cd scripts && python3 -m pytest test_intake_gate.py`(T1~T18)·`python3 -m pytest test_jev_intake.py`(J1~J11)에서 결정적으로 검증한다.

@@ -2,6 +2,7 @@
 
 새 것부터. 상세 검증 기록은 `TESTS.md`·`TESTS-GATES.md`·`TESTS-ARCHIVE.md` 원장 참조.
 
+- **r42** (2026-10-20) — 인테이크 계층(§0) 신설: 발화 6항목 신호 블록 — ① 결정론 엔진 `intake_gate.py`(hard/soft/advisory/context_dep/loop_pass 분류·규칙 0 긴급 면제·원문 보존) + ② jev 옵션 엔진 `intake` 모드(6항목 Noul fan-out·폴백) · Output Contract 인테이크 라인 · CLI 13종
 - **r41** (2026-10-13) — 대시보드 프로젝트 필터 신설: `/api/projects` · `/api/tasks?project=` · 2세그먼트 번들(`/api/bundle/<project>/<folder>`) · Host·Sec-Fetch-Site 가드 · 심볼릭 링크 차단(nofollow lstat·`O_NOFOLLOW`) · `--workspace`(워크스페이스 전 프로젝트 탐색, 미지정 시 home 단일) + 사이드바 프로젝트 네비·`#/task/<project>/<folder>` 해시 라우팅 · 배포 G2 게이트 역방향 계약 수정(verify exit 0=통과 — 구 계약은 정상 설치에서 영원히 실패)
 - **r39** (2026-10-12) — Asana 브라우저 에이전트 보고서 적용: Stagehand 러너 SDK 표면 수리(PR-0) · 토큰 사용량 수집기 `usage_log.py`(P1, 과업 폴더 `usage.jsonl`) · 게이트 토큰 상한 `--max-tokens`(P2) · 프리픽스 감사·모델 예산 조사 보고서(P3·P7, 정책 변경 없음). P4 실험 하네스는 예산 게이트 미충족으로 보류
 - **r40** (2026-10-12) — 4케이스 재정비: 허용 조합 9개(Codex 3·Claude 3·GLM 3) 확정 · `gpt-6-luna / max` 상시 기본 · Claude `haiku` 코드 구현 전용·`sonnet` 임계경로 · Codex `review-pr-high` sol low · 전역 `config.toml` 루트 luna/max · ZCode·ChatGPT 어댑터 활성화 · 미사용 하니스 어댑터 qwen·gemini·grok 삭제 · 계약 테스트 `test_model_combos.py` · 배포 백업 스냅샷 동일 초 충돌 수정(mkdtemp, 회귀 테스트 `SnapshotCollisionTests`)

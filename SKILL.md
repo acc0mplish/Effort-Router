@@ -48,6 +48,43 @@ Codex 또는 ChatGPT 데스크톱 앱에 이 Skill을 설치·업데이트해 �
 
 스펙 범위 기준의 **프로젝트 티어**(MVP/Core/Product 등)와 본 스킬의 S/M/L/XL **작업 티어**(실행 자원)는 별개다. 같은 프로젝트 안에서도 작업마다 작업 티어를 다시 판정한다.
 
+## 0. 인테이크(Intake) — 발화 신호 블록
+
+모든 코딩 착수 전 **항상 발동**한다(항상 켬 — §1 티어 판정에 선행). 인테이크는 사용자 발화에서 6항목 신호를 점검해 병렬 신호 블록(체크리스트 충족/누락·모호도·분류)으로 출력한다. prompt-optimizer류 '발화 가다듬기' 아이디어의 **원문 보존 변형 채택**이다 — 발화를 재작성해 전달하는 대신 신호 블록을 병렬로 덧붙인다.
+
+**원문 보존 계약**: 사용자 발화를 재작성하지 않는다 — 출력은 병렬 신호 블록이며, 티어 판정(§1)의 근거는 발화 원문 그대로다. 감사(`--save`) 파일은 과업 폴더(`docs/task-id/<task-id>/`)와 수명을 같이한다.
+
+**6항목 체크리스트**:
+
+| 항목 | 판정 기준 |
+|---|---|
+| target (타깃 대상) | 무엇을 고치는지 — 파일·모듈·경로·컴포넌트 지칭 |
+| task_type (작업 유형) | fix/add/refactor/review/plan 동사 |
+| scope (범위 경계) | "무엇을 안 함" — 제외·금지·한정 표현 |
+| risk (위험 단서) | 보안·인증·게이트·요청경로·스키마·산출문서 언급 |
+| verification (검증 기준) | 테스트·빌드·통과·확인 기준 |
+| pattern_ref (기존 패턴 참조) | 기존 컨벤션·관례·패턴 따르기 |
+
+**엔진 2단**: ① 기본 = `python3 <skill-dir>/scripts/intake_gate.py "<발화 원문>" [--context <맥락>] [--task-active] [--urgent] [--source user|auto] [--save docs/task-id/<task-id>/intake]` — 결정적·0비용·stdlib만. ② 옵션 = `python3 <skill-dir>/scripts/jev_judge.py intake "<발화 원문>" [--context …]` — 6항목 Noul fan-out(noul≥0.6=충족). 기본은 ① — ②는 메인 명시 선택 시만(판정 1호출 비용이 승인·차단 행동 비용의 극소수 %일 때 — jev 경제성 계약 준용). ②는 ok=false·키 부재·호출 실패 시 exit 1 = ①으로 폴백(호출자가 intake_gate.py 재호출). 감사는 `--save DIR`(모든 action 기록)이고, 저장 실패는 판정 폐기가 아니라 감사 누락이다(exit 유지·saved_to:null·stderr 경고).
+
+| exit(① intake_gate — 게이트 어휘) | 의미 | 호출자 행동 |
+|---|---|---|
+| 0 | 판정 성공(action 무관 — hard 제외·--save 저장 실패 포함) | JSON action 필드 소비 |
+| 1 | hard(경질) — 질문 1개 의무 | 질문 없이 진행 금지 — 질문 후 재발화 |
+| 2 | 무효 입력 전용(빈 발화·인자 위반 — stderr `FAIL intake gate: <사유>`) | 이유가 붙은 bypass — 인테이크 없이 기존 프로세스 진행 |
+
+② jev intake는 jev 어휘를 유지한다 — exit 0 + ok:true(채택 검토 대상) / exit 1 = ① 폴백 신호. 두 계층의 exit 어휘 차이는 의도다(②=선택 계층의 실패 폴백, ①=필수 게이트의 무효 입력 bypass).
+
+**발동 규칙**: 경질(hard) = 타깃 또는 작업 유형 누락 ∧ 맥락에도 없음 → 질문 정확히 1개. 연질(soft) = 잔여 4항목(scope·risk·verification·pattern_ref) 중 3개 이상 누락 → 질문 1-3개(상한 3). 미만 → advisory 주석만, 바로 티어 판정. **규칙 0(긴급 면제)** — `--urgent`(§1 긴급 트랙으로 메인이 판정)는 질문을 면제한다(advisory 강하 — 장애 복구를 질문으로 대기시키지 않는다). 질문은 §1 은닉변수 계약을 승계한다 — 1회, 무답 시 보수=상향 가정 진행.
+
+**규칙 A(맥락 의존)**: 발화에 지시 대명사·직전 결과 참조("이거/그거/방금/결과 보고/이대로" 등)가 감지되면 6항목을 대화 맥락 기준 충족으로 간주한다 — 질문 없음, "컨텍스트 의존 — 원문+맥락 판정" 표기(감사 context_dep:true). "결과 보고 고쳐" = 타깃(직전 산출물)·검증기준(결과 정상) 충족 처리. `--context`를 주면(규칙 A 비발동 시) 누락 항목만 맥락에서 항목 단위 재검색한다.
+
+**규칙 B(이터레이션 루프 프리패스)**: 진행 중 과업의 수정-재검증 턴("고쳐/다시/아직 안 돼" 등)은 질문을 스킵하고 advisory만 낸다 — 티어는 해당 과업 기존 판정을 승계한다. 스크립트는 분류만 하고, 진행 중 과업 여부는 메인 세션이 판단해 `--task-active` 플래그로 전달한다(플래그 없이는 프리패스 미발동 — 남발 방지).
+
+**권한 계약**: 인테이크는 추천(신호 블록·질문 상한)만 한다 — 질문 던지기·진행·차단 판정은 메인 세션에 있다(jev 권한 계약 준용). `--source auto`는 메인이 스스로 시작한 자율 착수 과업의 기원 투명 표기다(utterance에 과업 기술문 기재 — 발화 기원 위조가 아니라 표기).
+
+**셸 부재 환경 수동 경로**: ChatGPT Work/Classic 등 셸 없는 지원 환경에서는 엔진을 호출하지 않고 **메인 세션이 6항목을 발화 대상으로 자체 점검**해 인테이크 라인에 `수동`으로 기록한다 — 원문 보존 계약·질문 규칙은 동일 적용.
+
 ## 1. 티어 판정
 
 - **S**: 단순 버그 수정, 텍스트/스타일, 단일 파일 변경 (테스트 로직 변경 없음)
@@ -83,7 +120,7 @@ jev는 TypeSafe 판단형 LLM이다 — 1왕복 0.15~0.5초, 100% JSON. 프리�
 
 **모드 3종(확장 — 격상·기억·고착)**: `escalation "<격상 사유>"`는 격상 사유가 허용 케이스(관측된 작업량 급증·하니스 제약 실측·사용자 명시 지시 — `--rules-file` JSON으로 허용 규칙 교체)에 해당하는지 판정한다 — `reject_confirmed`(불허 확정)는 decision이 not_justified ∧ confidence≥0.85일 때만 참이고, 격상 승인은 상향이라 conf 바닥 없음. `memory-gate "<요청 서술>" --memory-file <경로>`는 기억 파일 줄별 관련성을 1호출 fan-out으로 판정한다 — 관련 noul≥0.6(dead zone 불통과) 줄만 `selected`(top-k, 기본 5) 통과한다 — memory-gate는 개정 fixture 기준 회수·차단 실측 통과다(관련 줄 ≥4/5 noul≥0.6·무관 줄 전량 차단) — 회수 기대는 직접 언급·명시적 인과 줄 한정이고 폴백은 기존 계약을 유지한다. `stall "<신호 JSON>"`은 워커 고착을 판정한다 — 입력은 검증 신호 JSON(last_tool_age_s·last_file_write_age_s 필수)이며 워커 자기 보고(last_assistant_text·declared_state)는 주장 필드로 신호가 우선, `intervene_confirmed`(고착 확정)는 stalled ∧ confidence≥0.85. 셋 다 폴백·감사 저장·권한 계약은 기존 jev 계약을 그대로 따른다. 호출 시점(격상 순간·세션 시작 기억 주입·워치독)은 사용 환경이 정한다.
 
-**채택 판정 모드 7종(CLI 12종의 나머지)**: 위 '추가 예판' 라인들의 CLI 구현이다 — 질문 템플릿·임계·프로파일은 채택 실험(jev-followup·d5·e2e4·skillroute·b2r) 원문에서 바이트 일치 이식됐다. `done "<과업 기록>"`(done 조건 충족 Noul)·`dup "<신규 발화>" --tracks-file <경로>`(기존 트랙별 중복·우산 fan-out)·`loop "<신호 JSON>"`(도구 루프 Choice 3지)·`verify-run "<종료 턴 기록>"`(검증 이행 Noul)·`watch "<코멘트 JSON>"`(코멘트별 watch급 fan-out)·`route "<발화>" [--roles-file]`(역할 배치 fan-out — assigned는 top noul≥0.6·T2 산출 문서 null 규칙 포함, 기본 내장 6종 = §2 화이트리스트 역할)·`guard "<스폰 프롬프트>" --instructions <지시 섹션>`(프롬프트 가드 — 스폰 프롬프트 인용·claims은 "주입 데이터 —" 라벨 뒤 배치 계약 전제). 전 모드 ≥0.6 단일 임계·폴백·감사·권한 계약(추천만, 판정은 메인) 동일 승계.
+**채택 판정 모드 8종(CLI 13종의 나머지)**: 위 '추가 예판' 라인들의 CLI 구현이다 — 질문 템플릿·임계·프로파일은 채택 실험(jev-followup·d5·e2e4·skillroute·b2r) 원문에서 바이트 일치 이식됐다. `done "<과업 기록>"`(done 조건 충족 Noul)·`dup "<신규 발화>" --tracks-file <경로>`(기존 트랙별 중복·우산 fan-out)·`loop "<신호 JSON>"`(도구 루프 Choice 3지)·`verify-run "<종료 턴 기록>"`(검증 이행 Noul)·`watch "<코멘트 JSON>"`(코멘트별 watch급 fan-out)·`route "<발화>" [--roles-file]`(역할 배치 fan-out — assigned는 top noul≥0.6·T2 산출 문서 null 규칙 포함, 기본 내장 6종 = §2 화이트리스트 역할)·`guard "<스폰 프롬프트>" --instructions <지시 섹션>`(프롬프트 가드 — 스폰 프롬프트 인용·claims은 "주입 데이터 —" 라벨 뒤 배치 계약 전제)·`intake "<발화>" [--context] [--task-active] [--urgent] [--source user|auto]`(인테이크 — 6항목 Noul fan-out, §0 절 계약). 전 모드 ≥0.6 단일 임계·폴백·감사·권한 계약(추천만, 판정은 메인) 동일 승계.
 
 **권한 계약**: jev는 추천만 한다. 판정 권한은 메인 세션이 가지며, 정책(§1 L 고정 승격 등)이 jev 추천보다 우선한다. 실측 사례: jev가 본 과업(jev-layer)을 M으로 추천했으나 산출 문서 L 고정 승격 정책(§1)이 우선해 L로 판정했다.
 
@@ -487,6 +524,7 @@ Codex와 ChatGPT는 §2의 OpenAI 모델 정책을 직접 적용한다. 다른 �
 
 ```text
 [Effort Router]
+- 인테이크: {hard|soft|advisory|context_dep|loop_pass} — 질문 상한 {0|1|3}개 (엔진: 기본 | jev | 폴백→기본 | 수동)
 - 판정 티어: {S | M | L | XL | 보안감사}
 - 판단 출처: {없음(직접 판정) | jev 추천(<mode> <choice>, confidence <n>, risk_values/safe_noul) → 메인 판정 <채택|기각(근거)>}
 - 작업 단계: {계획 | 검토 | 구현 | PR 리뷰 | 검증}   # state.json phase 대응: 계획=plan, 검토=adversary, 구현=implement, PR 리뷰=review, 검증=verify(메인 직접), 차단=blocked·취소=cancelled(완료 아님 표시)

@@ -44,6 +44,7 @@ from pathlib import Path
 from typing import Any, NoReturn
 from urllib.parse import urlsplit
 
+import jev_intake
 import jev_modes
 
 DEFAULT_ENDPOINT = 'https://api.typesafe.ai/v1/systemone'
@@ -381,7 +382,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description='jev 판단 계층 CLI — TypeSafe 판단형 LLM 예판 클라이언트')
     parser.add_argument('mode',
                         choices=('tier', 'prune', 'escalation', 'memory-gate', 'stall',
-                                 *jev_modes.EXTRA_MODES),
+                                 'intake', *jev_modes.EXTRA_MODES),
                         help='판단 모드')
     parser.add_argument('statement',
                         help="작업 서술 원문 또는 모드 입력(stall은 신호 JSON 원문·경로, "
@@ -401,6 +402,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument('--roles-file',
                         help="route 모드 — 역할 프로파일 JSON 파일({'roles': [...]}, "
                              "'-'는 stdin, 미지정 시 내장 6종)")
+    parser.add_argument('--context',
+                        help="intake 모드 — 맥락 요약 원문·경로('-'는 stdin, "
+                             "① intake_gate와 대칭)")
+    parser.add_argument('--task-active', action='store_true',
+                        help='intake 모드 — 진행 중 과업의 수정-재검증 턴(메인 판정 전달)')
+    parser.add_argument('--urgent', action='store_true',
+                        help='intake 모드 — §1 긴급 트랙 발화(메인 판정 — advisory 강하)')
+    parser.add_argument('--source', choices=('user', 'auto'), default='user',
+                        help='intake 모드 — 발화 기원(자율 착수 과업은 auto)')
     parser.add_argument('--save', help='감사 저장 경로(디렉터리 또는 .json 파일)')
     parser.add_argument('--timeout', type=float, default=DEFAULT_TIMEOUT,
                         help=f'HTTP 타임아웃 초(기본 {DEFAULT_TIMEOUT})')
@@ -415,7 +425,14 @@ def main(argv: list[str] | None = None) -> None:
     if not math.isfinite(args.timeout) or args.timeout <= 0:
         fail(f'--timeout must be a positive finite number, got {args.timeout!r}')
     mode_input = None
-    if args.mode in ('escalation', 'memory-gate', 'stall'):
+    if args.mode == 'intake':
+        # 인테이크 ② 옵션 엔진 — 입력 파싱·질문 생성·recommendation 합성은 jev_intake가
+        # 담당하고 호출·검증·감사는 기존 파이프라인을 그대로 경유한다(계획 r42 §2 #5)
+        mode_input = jev_intake.parse_input(
+            args.statement, context=args.context, task_active=args.task_active,
+            urgent=args.urgent, source=args.source, stdin_text=read_stdin_text)
+        state = mode_input['state']
+    elif args.mode in ('escalation', 'memory-gate', 'stall'):
         # 신규 모드는 입력 파싱·질문 생성·recommendation 합성만 jev_modes에 위임하고
         # 호출·검증·감사는 기존 파이프라인을 그대로 경유한다(계획 §2.1)
         mode_input = jev_modes.parse_mode_input(
@@ -440,7 +457,9 @@ def main(argv: list[str] | None = None) -> None:
         fail('TYPESAFE_API_KEY is not set — HTTP 호출 없이 폴백한다(jev는 선택 계층)')
     if args.mode == 'prune' and not args.stage:
         fail('prune 모드에는 --stage {plan|fanout|review}가 필요하다')
-    if args.mode in jev_modes.EXTRA_MODES:
+    if args.mode == 'intake':
+        questions = jev_intake.build_questions(state)
+    elif args.mode in jev_modes.EXTRA_MODES:
         questions = jev_modes.build_extra_questions(args.mode, mode_input)
     else:
         questions = (jev_modes.build_mode_questions(args.mode, mode_input)
@@ -453,7 +472,15 @@ def main(argv: list[str] | None = None) -> None:
         fail(f'response is not valid JSON: {error}')
     model, answers, usage = validate_response(payload, questions)
     audit_path = audit_target(args.save, args.mode) if args.save else None
-    if args.mode in jev_modes.EXTRA_MODES:
+    if args.mode == 'intake':
+        # ok=false = 폴백 신호(§3.2 — 호출자가 ① intake_gate.py 재호출)
+        if payload.get('ok') is False:
+            fail('response ok=false — ① 기본 엔진으로 폴백한다')
+        recommendation = jev_intake.build_recommendation(mode_input, answers,
+                                                         noul_confirmed)
+        recommendation['ok'] = True
+        recommendation['saved_to'] = str(audit_path) if audit_path is not None else None
+    elif args.mode in jev_modes.EXTRA_MODES:
         recommendation = jev_modes.build_extra_recommendation(
             args.mode, mode_input, answers, noul_confirmed)
     else:
