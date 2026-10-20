@@ -39,11 +39,11 @@ fetch(Sec-Fetch-Site)를 차단한다. 성능 한계: ops-admin(103과업) 스�
 
 ## 변경 이력
 
-최근 주요 변경 3건 — 전체 기록(r1~r45·jev)은 [CHANGELOG.md](CHANGELOG.md) 참조.
+최근 주요 변경 3건 — 전체 기록(r1~r46·jev)은 [CHANGELOG.md](CHANGELOG.md) 참조.
 
+- **r46** (2026-10-21) — 스폰 프롬프트 작성 규칙(STE100 이식): §5 신규 불릿 — STE 구조 규칙 5종 한국어 적용형(능동태·한 문장 한 지시·모달리티 보존·명사군 상한·복문 분할), 주입 전문·원문 무가공 복사 — 가정 확정 격상·산문 덩어리 스폰 방지
 - **r45** (2026-10-21) — 기존 해결 우선 탐색 계약: M+ 신규 기능 과업 ①계획 의무 섹션 '기존 해결 조사'(adopt/extend/compose/build 판정+근거) — 라이브러리 있는데 코드 생성 방지
 - **r44** (2026-10-20) — 스폰 워치독 기계화: `scripts/spawn_watchdog.py`(무진행 10분 → 버스트 3회 → 무활동 확정 보고) · 스폰 수명 분할 계약(③구현 스폰은 완료 보고 시점 종료 — 파생 작업은 별도 스폰·메인)
-- **r43** (2026-10-20) — 워크트리 게이트 디스크 가드·부산물 회수: create·list·sweep 응답 `disk` 필드(임계 기본 10GB) · `sweep --artifacts-only` 배타 모드(가드 3중) · create 자동 트리거(disk.low ∧ eligible 잔존 부산물)
 
 ## 구조
 
@@ -57,7 +57,7 @@ fetch(Sec-Fetch-Site)를 차단한다. 성능 한계: ops-admin(103과업) 스�
 | `TESTS.md` | 검증 프로토콜·측정 결과·라운드별 개정 이력·재현 절차(방법론 원장 — r29 하드캡 분할 이후 게이트 과업 절은 TESTS-GATES.md로, r33 분할 이후 과거 라운드 r4~r17 기록은 TESTS-ARCHIVE.md로 이동) |
 | `TESTS-ARCHIVE.md` | 과거 라운드(r4~r17) 기록 아카이브(r33 내용 불변 순수 이동) |
 | `TESTS-GATES.md` | 게이트 과업별 검증 원장(r22~r28·r29) — 원 요구·계약 요지·RED/GREEN·회귀 증거 표 |
-| `CHANGELOG.md` | 라운드별 변경 이력(r1~r45·jev) 전량 |
+| `CHANGELOG.md` | 라운드별 변경 이력(r1~r46·jev) 전량 |
 | `GATES.md` | 게이트 7종 CLI 전체 참조 — 플래그·종료코드·JSON 스키마·한계 |
 
 ## 설치 (Codex + ChatGPT 데스크톱 앱)
