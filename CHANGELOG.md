@@ -2,6 +2,7 @@
 
 새 것부터. 상세 검증 기록은 `TESTS.md`·`TESTS-GATES.md`·`TESTS-ARCHIVE.md` 원장 참조.
 
+- **r45** (2026-10-21) — 기존 해결 우선 탐색 계약(search-first): §5 ①계획 의무 섹션 '기존 해결 조사'(adopt/extend/compose/build 판정+근거, build는 "탐색했으나 부적합" 근거 동반) · 탐색 채널 순서(저장소 내 rg → 로컬 스킬/MCP → 레지스트리(npm/PyPI) → GitHub) · 티어 분기(S 생략·M Quick 로컬 채널 한정·L/XL Full) · 안티패턴 3종(silent skipping·dependency bloat·과도한 래핑) · 웹 탐색 이원 시점 규칙 소비 · stdlib-only 면책(기각 근거 1줄 통과) · ④ 대조 gap(섹션 부재·build 무근거 — 신규 기계 없음) · '자주 하는 실패' 신규 행 · 원천 ECC search-first SKILL.md 대조 채택
 - **r44** (2026-10-20) — 스폰 워치독 기계화: `scripts/spawn_watchdog.py`(진행 신호 = 감시 대상 파일 mtime·git HEAD — 전부 CLI 인자 지정) — 무진행 10분 → 1분 간격 3회 버스트, 변화 1건이면 복귀(오탐 0)·3회 연속 무변화만 무활동 확정 보고(exit 1 — 자동 정지 없음, 판정·재스폰은 메인·사용자) · `--watch` 루프(사이클 jsonl 스트림·신호 소실 warn 지속 후 `--lost-exit-cycles` 도달 시 exit 2) · `--save` 감사·jev `stall_input` 조립 · SKILL §3 타이밍 규격 갱신 + 스폰 수명 분할 bullet 신설(③구현 스폰은 완료 보고 시점 종료 — 파생 작업은 별도 스폰·메인)
 - **r43** (2026-10-20) — 워크트리 게이트 디스크 보고·부산물 회수: `create`·`list`·`sweep` 응답 최상위 `disk` 필드(free_gb·total_gb·low — 임계 기본 10GB·env `WORKTREE_MIN_FREE_GB`, 0=비활성화) · `sweep --artifacts-only` 배타 모드(가드 3중: 패턴 화이트리스트 ∧ check-ignore ∧ tracked 0 — tracked 1건으로 디렉터리 전체 보존) · create 자동 트리거(disk.low ∧ eligible 잔존 부산물 — active 무인 미접촉·예산 상한 후보 50/파일 200,000·컨테이너 artifacts-sweep.log 영수증)
 - **r42** (2026-10-20) — 인테이크 계층(§0) 신설: 발화 6항목 신호 블록 — ① 결정론 엔진 `intake_gate.py`(hard/soft/advisory/context_dep/loop_pass 분류·규칙 0 긴급 면제·원문 보존) + ② jev 옵션 엔진 `intake` 모드(6항목 Noul fan-out·폴백) · Output Contract 인테이크 라인 · CLI 13종
