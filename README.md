@@ -31,6 +31,12 @@ setsid nohup python3 scripts/dashboard_server.py --workspace /mnt/d/DEV/acc0mpli
 fetch(Sec-Fetch-Site)를 차단한다. 성능 한계: ops-admin(103과업) 스캔은 drvfs에서
 약 2.7초 — 실측 중앙값(기준선 3.1초 대비 개선).
 
+세션 시작 시 자동 기동(r47)은 멱등 래퍼를 쓴다 — [상세 계약](#html-대시보드-r37):
+
+```bash
+python3 scripts/dashboard_autostart.py --workspace /mnt/d/DEV/acc0mplish   # 이미 떠 있으면 skip
+```
+
 ## 왜 필요한가
 
 - 단일 모델·단일 에포트로 모든 과업을 처리하면 단순 수정에 과투자, 대형 변경에 과소검증이 된다
@@ -39,11 +45,11 @@ fetch(Sec-Fetch-Site)를 차단한다. 성능 한계: ops-admin(103과업) 스�
 
 ## 변경 이력
 
-최근 주요 변경 3건 — 전체 기록(r1~r46·jev)은 [CHANGELOG.md](CHANGELOG.md) 참조.
+최근 주요 변경 3건 — 전체 기록(r1~r47·jev)은 [CHANGELOG.md](CHANGELOG.md) 참조.
 
+- **r47** (2026-10-21) — 대시보드 자동 기동: `scripts/dashboard_autostart.py` — SessionStart 훅용 멱등 래퍼(프로브 후 미기동 시에만 기동 · 항상 exit 0 · 로컬 전용 바인드 강제 유지)
 - **r46** (2026-10-21) — 스폰 프롬프트 작성 규칙(STE100 이식): §5 신규 불릿 — STE 구조 규칙 5종 한국어 적용형(능동태·한 문장 한 지시·모달리티 보존·명사군 상한·복문 분할), 주입 전문·원문 무가공 복사 — 가정 확정 격상·산문 덩어리 스폰 방지
 - **r45** (2026-10-21) — 기존 해결 우선 탐색 계약: M+ 신규 기능 과업 ①계획 의무 섹션 '기존 해결 조사'(adopt/extend/compose/build 판정+근거) — 라이브러리 있는데 코드 생성 방지
-- **r44** (2026-10-20) — 스폰 워치독 기계화: `scripts/spawn_watchdog.py`(무진행 10분 → 버스트 3회 → 무활동 확정 보고) · 스폰 수명 분할 계약(③구현 스폰은 완료 보고 시점 종료 — 파생 작업은 별도 스폰·메인)
 
 ## 구조
 
@@ -57,7 +63,7 @@ fetch(Sec-Fetch-Site)를 차단한다. 성능 한계: ops-admin(103과업) 스�
 | `TESTS.md` | 검증 프로토콜·측정 결과·라운드별 개정 이력·재현 절차(방법론 원장 — r29 하드캡 분할 이후 게이트 과업 절은 TESTS-GATES.md로, r33 분할 이후 과거 라운드 r4~r17 기록은 TESTS-ARCHIVE.md로 이동) |
 | `TESTS-ARCHIVE.md` | 과거 라운드(r4~r17) 기록 아카이브(r33 내용 불변 순수 이동) |
 | `TESTS-GATES.md` | 게이트 과업별 검증 원장(r22~r28·r29) — 원 요구·계약 요지·RED/GREEN·회귀 증거 표 |
-| `CHANGELOG.md` | 라운드별 변경 이력(r1~r46·jev) 전량 |
+| `CHANGELOG.md` | 라운드별 변경 이력(r1~r47·jev) 전량 |
 | `GATES.md` | 게이트 7종 CLI 전체 참조 — 플래그·종료코드·JSON 스키마·한계 |
 
 ## 설치 (Codex + ChatGPT 데스크톱 앱)
@@ -206,6 +212,28 @@ python3 scripts/dashboard_server.py --port 0   # OS 할당 포트 — stdout REA
 - 표시 범위: `state.json`을 남기는 전 과업 — S티어(완료 시 최소 기록만 생성, r38 계약)도 포함. S 레코드는 발췌 없음(번들 부재 → 폴백 문구)·claims 칩 `–`·완료 카운트 합산
 - 종료: Ctrl+C(SIGINT/SIGTERM → exit 0). 포트 점유 등 config 오류는 stderr 사유 + exit 2
 - `--port 0`은 테스트 용도 — `scripts/test_dashboard_server.py`(T1~T25)가 READY 라인 파싱 계약으로 사용한다. `--root`로 탐색 루트 교체 가능(테스트 격리)
+
+#### 자동 기동 (r47)
+
+`scripts/dashboard_autostart.py` — SessionStart 훅용 멱등 래퍼. HTTP 프로브
+(`GET /`, 1초)로 이미 기동 중인지 확인하고, 미기동일 때만 서버를 분리 세션
+(`start_new_session` — setsid nohup 상당)으로 띄운다.
+
+- 종료 코드 항상 0 — 훅이 세션 시작을 방해하지 않는다(사유는 stderr·stdout 수취 라인)
+- `--bind` 미제공 — 서버 기본 `127.0.0.1`(로컬 전용) 강제 유지, 외부 노출 경로 없음
+- 프로브는 `ConnectionRefused`만 미기동으로 본다 — 타임아웃·비-HTTP 리스너(가비지 응답)·기타 오류는 보수적으로 기동 중 판정, 이중 기동 방지가 우선
+- 동시 훅 경합 시 늦은 쪽이 bind 오류로 즉시 exit 2 — 무해(수취 라인은 pid 생존 확인으로 구분)
+- 인자: `--workspace`(전달) · `--root`(전달) · `--port`(기본 5777) · `--log`(기본 `~/.cache/effort-router-dashboard.log`) · `--timeout`(기동 응답 대기, 기본 10초)
+- 검증: `scripts/test_dashboard_autostart.py`(T1~T7 — 에페메럴 포트 실기동 관측)
+- WSL2 미러 네트워킹 한계: 리스너 없는 포트가 타임아웃으로 보수 판정('already' 무음 스킵)될 수 있다(실측). 일반 Linux 배포 대상은 거부 즉시 미기동 판정 — 정상 작동
+
+타 서버 SessionStart 훅 장착(`~/.claude/settings.json` — 기존 훅과 병합, 저장소
+클론 필요 — 스킬 전역 배포본에는 대시보드 파일이 없다):
+
+```json
+{"hooks": {"SessionStart": [{"hooks": [{"type": "command",
+  "command": "python3 /절대경로/Effort-Router/scripts/dashboard_autostart.py --workspace /워크스페이스/루트"}]}]}}
+```
 
 ## 모델 매핑
 
