@@ -10,3 +10,4 @@ docs/task-id/
 .claude/jev-signal/
 .venv-stagehand/
 __pycache__/
+.serena/
