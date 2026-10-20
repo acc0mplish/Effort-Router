@@ -1,6 +1,6 @@
 # 게이트 CLI 참조
 
-README '게이트 6종' 요약의 전체 참조 — 플래그·종료코드·JSON 스키마·명명 규칙·한계 전문.
+README '게이트 7종' 요약의 전체 참조 — 플래그·종료코드·JSON 스키마·명명 규칙·한계 전문.
 계약(사용 시점·권한·폴백·감사)은 SKILL.md 각 게이트 절을 따른다.
 
 ### Stagehand 게이트 (r21)
@@ -423,3 +423,48 @@ python3 scripts/intake_gate.py "<발화>" --save docs/task-id/<task-id>/intake
 ```
 
 action 우선순위(§3.5): 0 `--urgent` → advisory 강하 / 1 `--task-active` ∧ 루프 동사 → loop_pass / 2 대명사·직전 참조 → context_dep(누락 항목 맥락 기준 충족 간주·missing_count=0) / 3 target·task_type 누락 → hard / 4 잔여 4항목 누락 ≥3 → soft(질문 min(누락수,3)) / 5 advisory. `ambiguity_score` = missing_count/6(context_dep 예외 — 0.0). **② jev intake는 jev 어휘다**(exit 0 + ok:true / exit 1 = ① 폴백) — ①은 게이트 어휘, ②는 폴백 어휘로 의도된 차이다. 분기 전수는 `cd scripts && python3 -m pytest test_intake_gate.py`(T1~T18)·`python3 -m pytest test_jev_intake.py`(J1~J11)에서 결정적으로 검증한다.
+
+### 스폰 워치독 (r44)
+
+`scripts/spawn_watchdog.py`는 장기·비동기 스폰의 진행 신호(감시 대상 파일 mtime·git HEAD)를 스냅샷해 무진행을 판정하고 보고만 한다 — **자동 정지 없음**(판정·정지·재스폰 권한은 메인·사용자). stdlib만이며 감시 대상에 읽기 외 접근이 없고 `--save` 감사 파일이 유일한 쓰기다.
+
+```bash
+# 1회 판정(기본) — 진행 신호는 전부 호출자가 지정한다(하니스별 경로 탐색 미내장)
+python3 scripts/spawn_watchdog.py --watch-file <세션 jsonl> --watch-file <상태 파일> --repo . --save docs/task-id/<task-id>/
+
+# 반복 감시 — 사이클마다 판정 JSON 1줄(jsonl 스트림), 무활동 확정 사이클에서 exit 1로 종료
+setsid nohup python3 scripts/spawn_watchdog.py --watch --poll-interval-s 60 \
+    --watch-file <세션 jsonl> --repo . > /tmp/spawn-watchdog.log 2>&1 &   # tmux 사용 시 remain-on-exit 권고
+```
+
+| 플래그 | 기본 | 규칙 |
+|---|---|---|
+| `--watch-file`(반복 가능) | 없음 | `*.jsonl` 접미 = 세션 jsonl(tool-age 신호원), 그 외 = 일반 파일(file-write 신호원). 파싱하지 않고 mtime만 관찰 |
+| `--repo` | 없음 | 진행 신호 = HEAD sha 변화, 신호 시각 = HEAD 커밋의 committer 시각(`git log -1 --format=%cI`) |
+| `--threshold-s` | 600 | 무진행 판정 임계(초). 양수 유한 — 위반 exit 2 |
+| `--burst-interval-s` / `--burst-count` | 60 / 3 | 버스트 확인 간격·횟수 |
+| `--watch` / `--poll-interval-s` / `--max-cycles` / `--lost-exit-cycles` | off / 60 / 0(무한) / 3 | 루프 모드. 신호 전부 소실은 `status:"signals_lost"`·최상위 `lost_cycles` warn 보고로 poll을 지속하다 연속 `--lost-exit-cycles` 도달 시 exit 2(즉시 사멸 아님 — r2 H6) |
+| `--save DIR` | 없음 | 감사 저장 `spawn-watchdog-<UTC스탬프>.json`(watch는 사이클별 append jsonl). 저장 실패 = 판정 exit 유지 + `saved_to:null` + stderr 경고 |
+
+판정 상태 기계: last_progress = 전 신호 시각 최댓값, age = max(0, now − ts) 클램프 → `age < threshold`면 `progressing`(exit 0) → 이상이면 버스트(burst_count회 재스냅샷, **변화 = mtime 갱신·HEAD sha 변화·신규 경로 등장 한정 — 신호 소실은 회복 불산입**) → 변화 1건이면 `recovered`(exit 0 — 오탐 0 계약의 기계 보증), 연속 무변화면 `dead_confirmed`(exit 1).
+
+| 종료코드 | 의미 |
+|---|---|
+| 0 | `progressing`·`recovered` |
+| 1 | 무활동 확정 보고(`ok:true ∧ flags:["dead_confirmed"]`) — **dead_confirmed = 무활동 확정이지 사망 확정이 아니다**(정상 종료 — 완료 보고 후 종료 — 포함). 수신 주체는 재스폰 판정 전 상태 파일 phase(done 여부) 대조 + signals 경로·mtime 근거의 마지막 산출 열람이 확인 의무다 |
+| 2 | 감시 대상 0개·최초 스냅샷 전량 부재(단발)·비git repo·git 실패·무효 인자·watch 소실 상한 도달 — stderr `FAIL spawn watchdog: <사유>`, stdout 없음(`--save` 실패만 예외 — 판정 exit 유지) |
+| 3 | 미사용(상향 경로 없음) |
+
+응답은 단일 JSON 객체(watch는 jsonl 스트림 — `mode:"watch"`·`cycle` 추가): `ok`·`gate:"spawn-watchdog"`·`timestamp_utc`·`config`·`signals{files[{path,kind,mtime_utc,age_s,skipped}]·git{repo,head_sha,head_committer_utc,age_s}|null}`·`last_progress_age_s`·`last_progress_source`·`burst{triggered,checks,changed}`·`status`·`flags`·`saved_to`. `stall_input`은 jsonl 신호 ≥1일 때만 첨부(조건부 필드) — `{last_tool_age_s: jsonl 최소 age, last_file_write_age_s: 비jsonl 파일·git 최소 age, last_assistant_text: null, declared_state: null}`(jev stall 스키마 정합, 주장 필드는 null). 부재 신호는 `signals.files`의 확장 엔트리 `{path, reason, mtime_utc}`로 투명 표기한다.
+
+반복 호출 계약(하니스 어댑터): 훅 배선은 기각 — settings 훅은 피감시 세션 자신의 이벤트로 구동돼 피감시가 죽으면 발화 이벤트 자체가 없고, 버스트 1회 판정 최대 소요(`burst_count × burst_interval_s` = 기본 3분)는 훅 timeout(5~12초)에 못 들어간다. 기동은 (a) `--watch`(setsid nohup 관습) 또는 (b) 스폰 프롬프트에 감시 줄 사전 명시 — 둘 중 하나(SKILL §3 계약 원천). **단발 호출 타임아웃 하한 ≥ `burst_count × burst_interval_s + 60s`(기본 인자 기준 ≥240s)** — `timeout 300 python3 scripts/spawn_watchdog.py …`. 이 환경 Bash 도구 기본 120s는 버스트를 못 담는다. 셸 재기동 루프는 `python3 … || break`로 종결 — exit 1은 확인 의무지 재기동 트리거가 아니다.
+
+jev stall 선택 결합(임시파일 경유 — 의존 아님, jev 부재 시 무영향):
+
+```bash
+python3 scripts/spawn_watchdog.py --watch-file <…> > /tmp/wd-report.json
+python3 -c 'import json; d=json.load(open("/tmp/wd-report.json")); print(json.dumps(d["stall_input"]))' > /tmp/wd-stall.json
+python3 scripts/jev_judge.py stall "$(cat /tmp/wd-stall.json)" --save <DIR>
+```
+
+한계: 오탐 원천(하니스 heartbeat·무관 쓰기의 신호 오염 — 감시 대상 선정은 호출자 책임, 미탐 방향이 보수 방향)·mtime 정밀도(WSL DrvFs 1~2초 — 제품 기본 600s/60s는 무영향)·판정 권한(보고만 — **종단 주체는 사용자·메인**이며 메인 사망 시 보고 수신→재스폰 판정은 사람이 한다)·감시 대상 소실(watch는 signals_lost warn 후 상한 종료, 단발은 exit 2)·**강제(비자발) 재스폰 경로는 증거번들이 부재한다** — "재구성 비용 0" 전제는 자발적 종료에만 성립. 테스트: `cd scripts && python3 -m pytest test_spawn_watchdog.py -q`(W1~W11·C1~C14).
