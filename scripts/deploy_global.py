@@ -53,6 +53,7 @@ _SCRIPT_MIRROR_FILES = (
     'test_worktree_gate_hardening.py',
     'deploy_global.py', 'test_deploy_global.py', 'test_verify_duplicate_detection.py',
     'test_usage_log.py', 'glm_slot_gate.py', 'test_glm_slot_gate.py',
+    'cache_probe.py', 'test_cache_probe.py',  # r49: 프롬프트 캐시 프로브 +2
 )
 MIRROR_MANIFEST = (
     _ROOT_MIRROR_FILES

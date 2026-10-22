@@ -468,3 +468,28 @@ python3 scripts/jev_judge.py stall "$(cat /tmp/wd-stall.json)" --save <DIR>
 ```
 
 한계: 오탐 원천(하니스 heartbeat·무관 쓰기의 신호 오염 — 감시 대상 선정은 호출자 책임, 미탐 방향이 보수 방향)·mtime 정밀도(WSL DrvFs 1~2초 — 제품 기본 600s/60s는 무영향)·판정 권한(보고만 — **종단 주체는 사용자·메인**이며 메인 사망 시 보고 수신→재스폰 판정은 사람이 한다)·감시 대상 소실(watch는 signals_lost warn 후 상한 종료, 단발은 exit 2)·**강제(비자발) 재스폰 경로는 증거번들이 부재한다** — "재구성 비용 0" 전제는 자발적 종료에만 성립. 테스트: `cd scripts && python3 -m pytest test_spawn_watchdog.py -q`(W1~W11·C1~C14).
+
+### 프롬프트 캐시 프로브 (r49)
+
+`scripts/cache_probe.py`는 세션 jsonl(**Claude Code 원천 한정** — Codex 하니스의 토큰 관측은 `usage_log.py`(rollout)이 담당한다 — SKILL 캐시 유지 계층 규칙 5)의 assistant usage를 집계해 보고만 한다 — **자동화 없음**(keepalive 전송·compact 실행·/loop 기동 일절 없음, 적용·판단 권한은 메인). stdlib만이며 원본 jsonl에 읽기 외 접근이 없고 `--save` 감사 파일이 유일한 쓰기다.
+
+```bash
+python3 scripts/cache_probe.py --jsonl ~/.claude/projects/<slug>/<세션>.jsonl --save docs/task-id/<task-id>/
+```
+
+| 플래그 | 기본 | 규칙 |
+|---|---|---|
+| `--jsonl`(1개 이상) | 없음 | 세션 jsonl 경로. 디렉터리 지정 시 `*.jsonl` 비재귀 수집. 유효 원천 0이면 exit 2 |
+| `--save DIR` | 없음 | 감사 저장 `cache-probe-<UTC스탬프>.json`(report 전문 — 프로브의 유일한 쓰기). 저장 실패는 exit 유지 + stderr 경고 |
+
+파싱 계약: `type=='assistant'` ∧ `message.usage` 존재 레코드만 — `message.id` 키 dedup(첫 등장 우선, 재등장은 `dropped_duplicates` 가산. 미제거 시 이중 계상 — 실측 138레코드/35 id), 파손 라인은 `skipped_bad_lines` 가산, 읽기 실패(부호화·권한) 파일은 `skipped_bad_files` 가산 + stderr 경고(부분 실패는 exit 유지). 추출은 숫자 화이트리스트 6필드 한정(텍스트 필드·이 외 키 출력 금지 — usage_log 계약 승계): `input_tokens`·`cache_read_input_tokens`·`cache_creation_input_tokens`·`output_tokens`·`ephemeral_1h_input_tokens`·`ephemeral_5m_input_tokens`(후 2종 원천은 `message.usage.cache_creation.*` — TTL 계급 관측 신호, 부재 시 0). 부분 누락 필드는 0 관측(구버전 스키마 방어).
+
+응답은 stdout JSON 1줄: `ok`·`gate:"cache_probe"`·`files`·`records`·`dropped_duplicates`·`skipped_bad_lines`·`skipped_bad_files`·`missing_files`(부재 경로 — 유효 원천 존재 시에도 항상 보고)·`sums`(6필드)·`hit_ratio`(= cache_read / max(1, input+cache_read+cache_creation) — cache_creation=0 보고 관측으로 분모 왜곡 가능성 동반 표기)·`max_gap_s`(인접 dedup 레코드 timestamp 차 최댓값 — keepalive 필요성 관측 재료, 판정은 메인)·`first_ts`·`last_ts`.
+
+| 종료코드 | 의미 |
+|---|---|
+| 0 | 보고 성공(records ≥ 1) |
+| 1 | 미사용(상향 경로 없음 — 판정 도구가 아니다) |
+| 2 | bypass — 원천 부재·usage 0건·전량 파손(읽기 실패 포함). stderr `FAIL cache probe: <사유>`, stdout 없음 |
+
+한계: usage 스키마 하니스 버전 의존(필드 부재는 0 채움, usage 레코드 전량 0건은 exit 2)·TTL 실측 불가(Claude Code 구독 1h·API키 5m은 **원천 관측치 — 본 환경 미실측**, ephemeral 필드 관측이 실측 재료)·hit_ratio 기준선 미관측(GLM 정상 범위 미확정 — 누적 관측 후 판정)·관측 원천 Claude Code 한정(Codex는 usage_log). 테스트: `python3 scripts/test_cache_probe.py`(T1~T9·C1).
