@@ -455,7 +455,7 @@ setsid nohup python3 scripts/spawn_watchdog.py --watch --poll-interval-s 60 \
 | 2 | 감시 대상 0개·최초 스냅샷 전량 부재(단발)·비git repo·git 실패·무효 인자·watch 소실 상한 도달 — stderr `FAIL spawn watchdog: <사유>`, stdout 없음(`--save` 실패만 예외 — 판정 exit 유지) |
 | 3 | 미사용(상향 경로 없음) |
 
-응답은 단일 JSON 객체(watch는 jsonl 스트림 — `mode:"watch"`·`cycle` 추가): `ok`·`gate:"spawn-watchdog"`·`timestamp_utc`·`config`·`signals{files[{path,kind,mtime_utc,age_s,skipped}]·git{repo,head_sha,head_committer_utc,age_s}|null}`·`last_progress_age_s`·`last_progress_source`·`burst{triggered,checks,changed}`·`status`·`flags`·`saved_to`. `stall_input`은 jsonl 신호 ≥1일 때만 첨부(조건부 필드) — `{last_tool_age_s: jsonl 최소 age, last_file_write_age_s: 비jsonl 파일·git 최소 age, last_assistant_text: null, declared_state: null}`(jev stall 스키마 정합, 주장 필드는 null). 부재 신호는 `signals.files`의 확장 엔트리 `{path, reason, mtime_utc}`로 투명 표기한다.
+응답은 단일 JSON 객체(watch는 jsonl 스트림 — `mode:"watch"`·`cycle` 추가): `ok`·`gate:"spawn-watchdog"`·`timestamp_utc`·`config`·`signals{files[{path,kind,mtime_utc,age_s,skipped}]·git{repo,head_sha,head_committer_utc,age_s}|null}`·`last_progress_age_s`·`last_progress_source`·`burst{triggered,checks,changed,signals_lost}` — `signals_lost`는 버스트 재스냅 중 감시 신호 전량 소실 표기(r50 — 단발·watch 공용, 소실은 회복 불산입 유지)·`status`·`flags`·`saved_to`. `dead_confirmed` 응답은 무활동 확정 판정 시각 `confirmed_at`(ISO8601 UTC — 스냅샷 `timestamp_utc`와 독립, dead_confirmed 응답 한정·타 상태엔 부재, r50)을 추가로 지닌다. `stall_input`은 jsonl 신호 ≥1일 때만 첨부(조건부 필드) — `{last_tool_age_s: jsonl 최소 age, last_file_write_age_s: 비jsonl 파일·git 최소 age, last_assistant_text: null, declared_state: null}`(jev stall 스키마 정합, 주장 필드는 null). 부재 신호는 `signals.files`의 확장 엔트리 `{path, reason, mtime_utc}`로 투명 표기한다.
 
 반복 호출 계약(하니스 어댑터): 훅 배선은 기각 — settings 훅은 피감시 세션 자신의 이벤트로 구동돼 피감시가 죽으면 발화 이벤트 자체가 없고, 버스트 1회 판정 최대 소요(`burst_count × burst_interval_s` = 기본 3분)는 훅 timeout(5~12초)에 못 들어간다. 기동은 (a) `--watch`(setsid nohup 관습) 또는 (b) 스폰 프롬프트에 감시 줄 사전 명시 — 둘 중 하나(SKILL §3 계약 원천). **단발 호출 타임아웃 하한 ≥ `burst_count × burst_interval_s + 60s`(기본 인자 기준 ≥240s)** — `timeout 300 python3 scripts/spawn_watchdog.py …`. 이 환경 Bash 도구 기본 120s는 버스트를 못 담는다. 셸 재기동 루프는 `python3 … || break`로 종결 — exit 1은 확인 의무지 재기동 트리거가 아니다.
 
@@ -467,7 +467,7 @@ python3 -c 'import json; d=json.load(open("/tmp/wd-report.json")); print(json.du
 python3 scripts/jev_judge.py stall "$(cat /tmp/wd-stall.json)" --save <DIR>
 ```
 
-한계: 오탐 원천(하니스 heartbeat·무관 쓰기의 신호 오염 — 감시 대상 선정은 호출자 책임, 미탐 방향이 보수 방향)·mtime 정밀도(WSL DrvFs 1~2초 — 제품 기본 600s/60s는 무영향)·판정 권한(보고만 — **종단 주체는 사용자·메인**이며 메인 사망 시 보고 수신→재스폰 판정은 사람이 한다)·감시 대상 소실(watch는 signals_lost warn 후 상한 종료, 단발은 exit 2)·**강제(비자발) 재스폰 경로는 증거번들이 부재한다** — "재구성 비용 0" 전제는 자발적 종료에만 성립. 테스트: `cd scripts && python3 -m pytest test_spawn_watchdog.py -q`(W1~W11·C1~C14).
+한계: 오탐 원천(하니스 heartbeat·무관 쓰기의 신호 오염 — 감시 대상 선정은 호출자 책임, 미탐 방향이 보수 방향)·mtime 정밀도(WSL DrvFs 1~2초 — 제품 기본 600s/60s는 무영향)·판정 권한(보고만 — **종단 주체는 사용자·메인**이며 메인 사망 시 보고 수신→재스폰 판정은 사람이 한다)·감시 대상 소실(watch는 signals_lost warn 후 상한 종료, 단발은 exit 2)·**강제(비자발) 재스폰 경로는 증거번들이 부재한다** — "재구성 비용 0" 전제는 자발적 종료에만 성립. 테스트: `cd scripts && python3 -m pytest test_spawn_watchdog.py -q`(W1~W11·N1T·N2T·C1~C14).
 
 ### 프롬프트 캐시 프로브 (r49)
 

@@ -45,11 +45,11 @@ python3 scripts/dashboard_autostart.py --workspace /mnt/d/DEV/acc0mplish   # 이
 
 ## 변경 이력
 
-최근 주요 변경 3건 — 전체 기록(r1~r49·jev)은 [CHANGELOG.md](CHANGELOG.md) 참조.
+최근 주요 변경 3건 — 전체 기록(r1~r50·jev)은 [CHANGELOG.md](CHANGELOG.md) 참조.
 
+- **r50** (2026-10-22) — 스폰 워치독 LOW 6건 수선: `dead_confirmed` 응답 `confirmed_at`(무활동 확정 판정 시각 — 스냅샷 timestamp와 독립) 신설 · 버스트 중 감시 신호 전량 소실 `burst.signals_lost` 병기 · 데드 조건부 제거·watch/단발 흐름 명시·SIGINT 경합 창 축소·테스트 위생(W8·W9)
 - **r49** (2026-10-22) — 프롬프트 캐시 유지 계층(선택 비용 절감): SKILL 신규 절 — 행동 계약 5규칙(프리픽스 안정·10만 토큰 미만 무시·keepalive·compact는 캐시 생존 중에만·하니스별 조건·관측 의무) · 관측 CLI `scripts/cache_probe.py`(세션 jsonl usage 숫자 화이트리스트 6필드·message.id 중복 제거·exit 0/2·보고만)
 - **r48** (2026-10-22) — 스폰 통로 판정 계약: §3 신규 불릿 — 도구 탐색(ToolSearch) 0매칭 ≠ 스폰 통로 부재, 경량 직접 호출 프로브로 판정(Claude Code 2.1.304+ Agent 도구 색인 미등록 오판 방지 — 2026-10-22 실측)
-- **r47** (2026-10-21) — 대시보드 자동 기동: `scripts/dashboard_autostart.py` — SessionStart 훅용 멱등 래퍼(프로브 후 미기동 시에만 기동 · 항상 exit 0 · 로컬 전용 바인드 강제 유지)
 
 ## 구조
 
@@ -63,7 +63,7 @@ python3 scripts/dashboard_autostart.py --workspace /mnt/d/DEV/acc0mplish   # 이
 | `TESTS.md` | 검증 프로토콜·측정 결과·라운드별 개정 이력·재현 절차(방법론 원장 — r29 하드캡 분할 이후 게이트 과업 절은 TESTS-GATES.md로, r33 분할 이후 과거 라운드 r4~r17 기록은 TESTS-ARCHIVE.md로 이동) |
 | `TESTS-ARCHIVE.md` | 과거 라운드(r4~r17) 기록 아카이브(r33 내용 불변 순수 이동) |
 | `TESTS-GATES.md` | 게이트 과업별 검증 원장(r22~r28·r29) — 원 요구·계약 요지·RED/GREEN·회귀 증거 표 |
-| `CHANGELOG.md` | 라운드별 변경 이력(r1~r49·jev) 전량 |
+| `CHANGELOG.md` | 라운드별 변경 이력(r1~r50·jev) 전량 |
 | `GATES.md` | 게이트 7종·프로브 1종 CLI 전체 참조 — 플래그·종료코드·JSON 스키마·한계 |
 
 ## 설치 (Codex + ChatGPT 데스크톱 앱)

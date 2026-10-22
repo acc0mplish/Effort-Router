@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""r44 스폰 워치독 단위테스트 — 진행 신호 스냅샷·버스트 판정 상태 기계·watch 루프 전수(W1~W11·C1~C14).
+"""r44 스폰 워치독 단위테스트 — 진행 신호 스냅샷·버스트 판정 상태 기계·watch 루프 전수(W1~W11·N1T·N2T·C1~C14).
 
 시간 주입 이원화: 단위(W)는 판정 코어 순수 함수에 now·sleep_fn·snapshot_fn을
 주입해 실대기 0으로 판정 분기를 검증하고, CLI(C)는 subprocess 실행 + 임계 인자화
@@ -10,7 +10,8 @@ mtime 모의는 os.utime으로 과거 시각을 설정해 실대기 없이 무�
 
 claims 대응(r44 plan §5): W3=C-progressing 분기, W4=C2, W5=C3(오탐 0 — 본 과업
 핵심), W6/W7=claim 10(stall_input 조건부), W8=C5(결손·전량 부재), W9=C11(무효
-구성), W10=r2 M4(소실 불산입), W11=r2 L6(음수 클램프), C12/C13=claim 12,
+구성), W10=r2 M4(소실 불산입), W11=r2 L6(음수 클램프), N1T=r50(confirmed_at —
+dead 한정 채움·live 부재), N2T=r50(버스트 중 전량 소실 병기 — 단발·watch 공용 코어), C12/C13=claim 12,
 C14=r2 H6(watch 소실 warn → --lost-exit-cycles 후 exit 2).
 """
 from __future__ import annotations
@@ -197,7 +198,6 @@ class SpawnWatchdogUnitTests(unittest.TestCase):
         alive, gone = self.path('alive.md'), self.path('gone.md')
         alive.write_text('x', encoding='utf-8')
         gone.write_text('x', encoding='utf-8')
-        snap = wd.real_snapshot(cfg([alive, gone]), self.now)
         gone.unlink()
         snap = wd.real_snapshot(cfg([alive, gone]), self.now)
         skipped = [e for e in snap['files'] if e['skipped']]
@@ -234,7 +234,6 @@ class SpawnWatchdogUnitTests(unittest.TestCase):
             with self.subTest(payload=payload):
                 with self.assertRaises(wd.GateConfigError):
                     wd.validate_config(argparse.Namespace(**payload))
-        self.assertEqual(wd.map_exit('signals_lost', 'single'), 2)
 
     # --- W10 소실 불산입 --------------------------------------------------
 
@@ -265,6 +264,48 @@ class SpawnWatchdogUnitTests(unittest.TestCase):
                                sleep_fn=lambda _s: None,
                                snapshot_fn=lambda _c, _n: snap)
         self.assertEqual(report['last_progress_age_s'], 0.0)
+
+    # --- N1T/N2T r50 — confirmed_at(dead 한정)·버스트 중 전량 소실 병기 ------
+
+    def test_n1t_dead_confirmed_carries_confirmed_at(self):
+        clock = [self.now]
+
+        def now_fn():
+            clock[0] += 5.0
+            return clock[0]
+
+        snap = fake_snap({'/w/a.jsonl': self.now - 900}, now=self.now)
+        report = wd.judge_once(cfg(threshold=10, interval=5, count=3),
+                               now_fn=now_fn, sleep_fn=lambda _s: None,
+                               snapshot_fn=lambda _c, _n: snap)
+        self.assertEqual(report['status'], 'dead_confirmed')
+        self.assertIn('confirmed_at', report)
+        self.assertEqual(report['confirmed_at'], wd.iso_utc(clock[0]))
+        self.assertNotEqual(report['confirmed_at'], report['timestamp_utc'])
+        alive = fake_snap({'/w/a.jsonl': self.now - 1}, now=self.now)
+        ok_report = wd.judge_once(cfg(threshold=600), now_fn=lambda: self.now,
+                                  sleep_fn=lambda _s: None,
+                                  snapshot_fn=lambda _c, _n: alive)
+        self.assertEqual(ok_report['status'], 'progressing')
+        self.assertNotIn('confirmed_at', ok_report)
+
+    def test_n2t_burst_all_signals_lost_reported(self):
+        before = fake_snap({'/w/a.jsonl': self.now - 900}, now=self.now)
+        after_lost = fake_snap({}, now=self.now + 5)
+        calls = []
+
+        def snapshot_fn(_c, _n):
+            calls.append(1)
+            return before if len(calls) == 1 else after_lost
+
+        report = wd.judge_once(cfg(threshold=10, interval=5, count=3),
+                               now_fn=lambda: self.now,
+                               sleep_fn=lambda _s: None,
+                               snapshot_fn=snapshot_fn)
+        self.assertEqual(report['status'], 'dead_confirmed')
+        self.assertTrue(report['burst']['signals_lost'])
+        self.assertFalse(report['burst']['changed'])
+        self.assertEqual(wd.map_exit('dead_confirmed'), 1)
 
 
 class SpawnWatchdogCliTests(unittest.TestCase):

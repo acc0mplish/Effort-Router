@@ -9,7 +9,9 @@ age = max(0, now − ts)(음수 클램프 — 시계 스큐 방어) → age < th
 progressing(exit 0) → 이상이면 버스트(burst_interval_s 간격 burst_count회
 재스냅샷, 변화 = 기존 신호 mtime 갱신·HEAD sha 변화·신규 경로 등장 한정 —
 신호 소실은 회복으로 산입하지 않는다) → 변화 1건이면 recovered(exit 0 —
-오탐 0 계약), 연속 무변화면 dead_confirmed(exit 1).
+오탐 0 계약), 연속 무변화면 dead_confirmed(exit 1 — 응답은 무활동 확정 판정 시각 confirmed_at을
+동반하며 스냅샷 timestamp와 독립이다). 버스트 재스냅 중 감시 신호가 전량 소실하면
+회복으로 산입하지 않고 burst.signals_lost로 병기한다.
 
 **자동 정지 없음 — 보고만이다.** 감시 대상 프로세스·파일에 어떤 시그널·종료·
 쓰기도 하지 않는다(--save 감사 파일이 유일한 쓰기). 판정·정지·재스폰 권한은
@@ -165,7 +167,8 @@ def build_stall_input(snap: dict, now: float) -> dict | None:
 
 def build_report(config: dict, snap: dict, now: float, status: str, burst: dict,
                  mode: str = 'single', cycle: int | None = None,
-                 lost_cycles: int | None = None) -> dict:
+                 lost_cycles: int | None = None,
+                 confirmed_at: float | None = None) -> dict:
     report = {'ok': True, 'gate': GATE, 'mode': mode}
     if mode == 'watch':
         report['cycle'] = cycle
@@ -185,6 +188,8 @@ def build_report(config: dict, snap: dict, now: float, status: str, burst: dict,
     report['burst'] = dict(burst)
     report['status'] = status
     report['flags'] = ['dead_confirmed'] if status == 'dead_confirmed' else []
+    if status == 'dead_confirmed' and confirmed_at is not None:
+        report['confirmed_at'] = iso_utc(confirmed_at)
     stall = build_stall_input(snap, now)
     if stall is not None:
         report['stall_input'] = stall
@@ -200,27 +205,33 @@ def judge_once(config: dict, now_fn=time.time, sleep_fn=time.sleep,
         snapshot_fn = real_snapshot
     now = now_fn()
     snap = snapshot_fn(config, now)
-    burst = {'triggered': False, 'checks': 0, 'changed': False}
+    burst = {'triggered': False, 'checks': 0, 'changed': False,
+             'signals_lost': False}
     if not snap['live'] and snap['git'] is None:
         return build_report(config, snap, now, 'signals_lost', burst,
                             mode=mode, cycle=cycle)
     status = 'progressing'
-    if snap['live'] or snap['git'] is not None:
-        top_ts = max(ts for ts, _ in progress_candidates(snap))
-        if max(0.0, now - top_ts) >= config['threshold_s']:
-            burst['triggered'] = True
-            status = 'dead_confirmed'
-            for _ in range(config['burst_count']):
-                sleep_fn(config['burst_interval_s'])
-                burst['checks'] += 1
-                now2 = now_fn()
-                resnap = snapshot_fn(config, now2)
-                if detect_change(snap, resnap):
-                    burst['changed'] = True
-                    status = 'recovered'
-                    snap, now = resnap, now2
-                    break
-    return build_report(config, snap, now, status, burst, mode=mode, cycle=cycle)
+    confirmed_at = None
+    top_ts = max(ts for ts, _ in progress_candidates(snap))
+    if max(0.0, now - top_ts) >= config['threshold_s']:
+        burst['triggered'] = True
+        status = 'dead_confirmed'
+        for _ in range(config['burst_count']):
+            sleep_fn(config['burst_interval_s'])
+            burst['checks'] += 1
+            now2 = now_fn()
+            resnap = snapshot_fn(config, now2)
+            if detect_change(snap, resnap):
+                burst['changed'] = True
+                status = 'recovered'
+                snap, now = resnap, now2
+                break
+            if not resnap['live'] and resnap['git'] is None:
+                burst['signals_lost'] = True
+        if status == 'dead_confirmed':
+            confirmed_at = now_fn()
+    return build_report(config, snap, now, status, burst, mode=mode, cycle=cycle,
+                        confirmed_at=confirmed_at)
 
 
 def map_exit(status: str, mode: str = 'single') -> int:
@@ -415,16 +426,17 @@ def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     try:
         config = validate_config(args)
-    except GateConfigError as error:
-        fail_config(str(error))
-    if args.watch:
-        _install_signal_handlers()
-        run_watch(config, args.save)
-    try:
+        if args.watch:
+            _install_signal_handlers()
+            run_watch(config, args.save)
+            raise SystemExit(EXIT_PASS)  # run_watch는 전 경로 SystemExit — 단발 블록은 watch에서 도달 불가(흐름 명시)
         report = judge_once(config)
         if report['status'] == 'signals_lost':
             raise GateConfigError(
                 '최초 스냅샷에서 감시 신호가 전량 부재하다 — 감시 대상 경로 확인')
+    except WatchStopped:
+        # 핸들러 등록~run_watch 진입 경합 창의 SIGINT/SIGTERM도 운영자 정지 exit 0으로 흡수
+        raise SystemExit(EXIT_PASS)
     except GateConfigError as error:
         fail_config(str(error))
     emit_single(report, args.save)
