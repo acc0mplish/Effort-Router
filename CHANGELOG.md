@@ -2,6 +2,7 @@
 
 새 것부터. 상세 검증 기록은 `TESTS.md`·`TESTS-GATES.md`·`TESTS-ARCHIVE.md` 원장 참조.
 
+- **r56** (2026-11-02) — 참조논문 정리: 규칙 근거로 쓰이지 않거나 반복 축소 방향과 반대인 근거 삭제 — README [3] GameCraft·[4] EvoHarness-RL·반복 실측(FrontierSWE) 항목, books PDF 2종(EvoHarness-RL 번역·멀티에이전트 논문집), SKILL '반복의 근거' 문단·'②는 HoH에 없는 층' 1행. Procedural Graphs·Magenta를 [3]·[4]로 재번호
 - **r53** (2026-11-01) — 계획·검토 역할 tools 제한: plan-high·plan-xhigh(Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch)·plan-adversary-xhigh(Write·Edit 제외) frontmatter `tools:` 1행 추가(저장소·설치본) — 스폰 첫 턴 컨텍스트 실측 42.7k→9.3k, 기존 해결 조사의 MCP 채널은 사용 불가(투명 기록), 구현·ops 역할 ALL 유지
 - **r52** (2026-11-01) — 스폰 Read 범위 계약: §5 불릿 1행 · 467 탐색 범위 부기 · TESTS 미해결 1행(간단 과업 미해소, 후속: SKILL 분할)
 - **r50** (2026-10-22) — 스폰 워치독 LOW 6건 수선(r44 ④리뷰 이관): `dead_confirmed` 응답 신규 필드 `confirmed_at`(무활동 확정 판정 시각 ISO8601 UTC — 최대 버스트 구간(기본 3분) 과거 표기던 스냅샷 `timestamp_utc`와 독립, dead_confirmed 응답 한정 채움·타 상태 부재) · 버스트 재스냅 중 감시 신호 전량 소실 시 `burst.signals_lost` 병기(judge_once 코어 적용 — 단발·watch 양 모드 동일, 소실은 여전히 회복 불산입) · 데드 조건부 제거(judge_once — signals_lost 조기 반환 후 항상 참인 `if snap['live'] or snap['git'] is not None:`) · main watch 분기 흐름 명시(run_watch 전 경로 SystemExit 확인 후 `raise SystemExit(EXIT_PASS)` — 단발 블록 도달 불가 정리) · SIGINT/SIGTERM 핸들러 등록~run_watch 진입 경합 창 축소(try 블록 확장 — 창 내 시그널도 운영자 정지 exit 0 흡수) · 테스트 위생(W8 데드 호출 — unlink 전 미독 real_snapshot 제거·W9 중복 단언 — `map_exit('signals_lost','single')==2`의 W9 측 사본 제거) · 신규 테스트 N1T·N2T(27케이스) · GATES r44 절 스키마 갱신 · r44 판정 알고리즘·종료코드 어휘 무변경
