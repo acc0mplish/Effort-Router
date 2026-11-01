@@ -2,6 +2,7 @@
 
 새 것부터. 상세 검증 기록은 `TESTS.md`·`TESTS-GATES.md`·`TESTS-ARCHIVE.md` 원장 참조.
 
+- **r57** (2026-11-02) — 반복 상한 1회·얇은 계획 6칸: ②1회(반려 시 계획 1회 수정 후 재검토 없이 ③), ④gap 재구현 1회·재리뷰 대신 확인 명령 재실행, done의 HIGH는 발생 시나리오 있는 것만 차단, round 상한 각 1회, ① 최소 기준 = 6칸(30줄)
 - **r56** (2026-11-02) — 참조논문 정리: 규칙 근거로 쓰이지 않거나 반복 축소 방향과 반대인 근거 삭제 — README [3] GameCraft·[4] EvoHarness-RL·반복 실측(FrontierSWE) 항목, books PDF 2종(EvoHarness-RL 번역·멀티에이전트 논문집), SKILL '반복의 근거' 문단·'②는 HoH에 없는 층' 1행. Procedural Graphs·Magenta를 [3]·[4]로 재번호
 - **r53** (2026-11-01) — 계획·검토 역할 tools 제한: plan-high·plan-xhigh(Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch)·plan-adversary-xhigh(Write·Edit 제외) frontmatter `tools:` 1행 추가(저장소·설치본) — 스폰 첫 턴 컨텍스트 실측 42.7k→9.3k, 기존 해결 조사의 MCP 채널은 사용 불가(투명 기록), 구현·ops 역할 ALL 유지
 - **r52** (2026-11-01) — 스폰 Read 범위 계약: §5 불릿 1행 · 467 탐색 범위 부기 · TESTS 미해결 1행(간단 과업 미해소, 후속: SKILL 분할)
