@@ -242,3 +242,18 @@ exit 1 유지). §2.3 출력 계약 — 게이트 평가 단계(L400-405) 제외
 (루트 4→5 — r32 운영 규칙 3의 수치는 역사 기록으로 원문 유지, 본 섹션이 갱신 근거).
 mirror_synced 기대치 122. 분할 실측: TESTS.md 분할 직후 218줄 → r33 append 후 최종 242줄·TESTS-ARCHIVE.md 430줄(양쪽 ≤650),
 이동 블록 424줄(L133-556) diff 무차이 입증.
+
+## wfd-001 GitHub 다중 에이전트 워크플로우 문서 정규화·수선 (2026-11-13)
+
+원 요구: "'GitHub 다중 에이전트 개발 워크플로우.md' … 에포트 라우터 위에 … 정규화 시켜주고 고칠꺼 찾아서고쳐"
+대상: 저장소 밖 사용자 원칙 문서(36→59라인·in-place 수선 — 스냅샷 앵커 docs/task-id/wfd-001/source-snapshot.md sha256 7df7cac3…) + 본 저장소 사본 편입 docs/github-multi-agent-workflow.md(바이트 동일 — sha256 73be0581…·cp diff 검증)
+변경: 사용자 문서(반영 서술 정정 병기·대응 표 10행 신설·헤더 계층 지위 문장), CHANGELOG.md(wfd-001 항목), TESTS.md(본 섹션). SKILL.md·README·에이전트 파일 무변경(r57 이후 절명 §2·§3·§4·§5·r24·r27·r28 실재 재확인 — "상한 5 PR" 포함)
+검증 실측(exit code):
+| V1 | diff 스냅샷→최종 | 변경 hunk 4개(3/28/30a33,51/33,36) — 원칙 1~6·단계 요약 표 미포함(무수정 입증) |
+| V2 | sha256·wc·CR·BOM | 73be0581…·59라인·CR 0·BOM 없음·말미 0a — 형식 유지 |
+| V3 | grep r42·행번호 인용 | 0건·0건 — 절명 계약 준수 |
+| V4 | curl api.github.com/repos/alibaba/open-code-review | HTTP 200 — 메인·④ 양측 재실행 |
+| V5 | git status --porcelain | 빈 출력 — 저장소 무변경(사본 편입 커밋 전 기준) |
+| V6 | grep 고유 표현 3종 | 킹크랩 요약·Jake 기준·일단 깃연결부터 각 1건 존재 |
+claims 판정: ④ review-pr-xhigh — 7/7 verified·gap 0·claims 밖 결함 없음(LOW 2 — F5 회신 사항)·메인 재측정 전부 일치. 스폰 10회(①1·②6·③2·④1)·round 0/0.
+TDD 해당 없음(문서 과업) — 대체 확인 수단 V1~V6이 verify를 구성. 검증 입력 변경 없음.
