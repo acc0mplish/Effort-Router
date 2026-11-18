@@ -8,7 +8,7 @@
 
 # effort-router
 
-작업의 규모·위험도를 티어(S/M/L/XL)로 판정하고 단계별 모델·에포트를 배정하는 Codex·ChatGPT Skill. 일반 작업은 GPT-6-Luna max, 계획·고난도 추론은 GPT-6.1-Sol high를 사용한다.
+작업의 규모·위험도를 티어(S/M/L/XL)로 판정하고 단계별 모델·에포트를 배정하는 Codex · ChatGPT · Claude Code · Gemini(Google Antigravity) Skill. Codex는 일반 작업에 GPT-6-Luna max·계획 및 고난도 추론에 GPT-6.1-Sol high를 사용하고, Gemini / Antigravity는 메인 Argon Medium · 루틴 구현 Hydrogen High · 임계경로 코어 및 간이 리뷰 Argon High · 계획 및 심층 검토 Carbon High 4조합을 사용한다.
 
 ```text
 Decision(티어 판정) → Requirement → Acceptance → Task → Evidence → Learning
@@ -142,6 +142,51 @@ python3 ~/.codex/skills/effort-router/scripts/verify_global_install.py
 ```
 
 `PASS global effort-router installation`이 나와야 로컬 Skill, 전역 모델·effort, subagent 활성화, 전역 발동 규칙, 10개 custom agent가 모두 설치된 상태다. 상세 병합법은 `platforms/codex.md` 참조.
+
+## 설치 (Gemini / Google Antigravity)
+
+Google Antigravity(`agy` CLI · Antigravity IDE · Antigravity 2.0)는 머신 전역 경로 `~/.gemini/config/`에서 스킬, 상시 규칙(`trigger: always_on`), 커스텀 서브에이전트 11종(`agents/*.md`)을 로드한다.
+
+### 1. 전역 스킬 · 커스텀 서브에이전트(11종) · 상시 발동 규칙 설치
+
+```bash
+mkdir -p ~/.gemini/config/skills/effort-router ~/.gemini/config/agents ~/.gemini/config/rules ~/.agents/skills/effort-router
+cp -R SKILL.md README.md TESTS*.md CHANGELOG.md GATES.md AGENTS.md agents platforms scripts docs ~/.gemini/config/skills/effort-router/
+cp -R SKILL.md README.md TESTS*.md CHANGELOG.md GATES.md AGENTS.md agents platforms scripts docs ~/.agents/skills/effort-router/
+cp platforms/gemini-agents/*.md ~/.gemini/config/agents/
+cp platforms/gemini-rules/effort-router.md ~/.gemini/config/rules/
+```
+
+- 전 11종 서브에이전트는 `inheritCustomizations: false`로 설정되어 서브에이전트의 `effort-router` 재귀 호출을 엔진 레벨에서 차단한다.
+- 검토·리뷰·보안감사 4종(`plan-adversary-xhigh`, `review-pr-high`, `review-pr-xhigh`, `security-audit`)은 `edit_file`·`write_file`을 제거한 읽기 전용으로 격리된다.
+
+### 2. `~/.gemini/antigravity-cli/settings.json` 전역 기본 모델 설정
+
+기존 설정(인증·테마·신뢰 워크스페이스 등)을 보존한 채 최상위 `"model"` 키를 **`"gemini-4-argon-medium"`**으로 병합한다:
+
+```json
+{
+  "model": "gemini-4-argon-medium"
+}
+```
+
+### 3. Gemini 4조합 역할 배분 및 슬러그 핀 고정
+
+- **메인 기본 세션 · 감시(`ops-supervisor`)**: `gemini-4-argon-medium` (`Gemini 4 Argon (Medium)`, `model: inherit`)
+- **루틴·일반 구현(`coder-medium`, `implement-med`)**: `gemini-4-hydrogen-high` (`Gemini 4 Hydrogen (High)`, `model: pro`)
+- **XL 임계경로·코어 구현(`implement-xhigh`, `core-xhigh`) · S/M 간이 리뷰(`review-pr-high`)**: `gemini-4-argon-high` (`Gemini 4 Argon (High)`, `model: pro`)
+- **계획·적대검토·심층 리뷰·보안감사(`plan-*`, `review-pr-xhigh`, `security-audit`)**: `gemini-4-carbon-high` (`Gemini 4 Carbon (High)`, `model: pro`)
+- Antigravity `agents/*.md` 로더는 `model:` 필드에 `inherit | pro | flash | flash_lite` 4종 티어만 허용하므로, 고위험 판정·2회 실패 진단 등에서 역할별 목표 슬러그(`gemini-4-hydrogen-high` / `gemini-4-argon-high` / `gemini-4-carbon-high`) 물리적 핀 고정이 필요할 때는 `agy -p --model <슬러그>` 또는 `swarm(action="add", model="<슬러그>")`를 사용한다.
+
+### 4. 재로드 · 검증
+
+설치 후 Antigravity / `agy` 세션을 재시작하고 전역 설치 검증 스크립트를 실행한다:
+
+```bash
+python3 ~/.gemini/config/skills/effort-router/scripts/verify_gemini_install.py --require-agy
+```
+
+`PASS global Gemini effort-router installation` 및 `custom subagents: 11/11 validated`(`agy plugin validate` 스키마 오류 0건)가 출력되어야 정상 설치된 상태다. 상세 계약은 [Gemini adapter](platforms/gemini.md) 참조.
 
 ### (선택) jev 판단 계층
 
