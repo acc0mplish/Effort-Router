@@ -16,12 +16,12 @@ EXPECTED = {
     'implement-med': ('gpt-6-luna', 'max'),
     'implement-xhigh': ('gpt-6-luna', 'max'),
     'core-xhigh': ('gpt-6-luna', 'max'),
-    'plan-high': ('gpt-6.1-sol', 'high'),
-    'plan-xhigh': ('gpt-6.1-sol', 'high'),
-    'plan-adversary-xhigh': ('gpt-6.1-sol', 'high'),
-    'review-pr-high': ('gpt-6.1-sol', 'low'),
-    'review-pr-xhigh': ('gpt-6.1-sol', 'high'),
-    'security-audit': ('gpt-6.1-sol', 'high'),
+    'plan-high': ('gpt-6.2-sol', 'high'),
+    'plan-xhigh': ('gpt-6.2-sol', 'high'),
+    'plan-adversary-xhigh': ('gpt-6.2-sol', 'high'),
+    'review-pr-high': ('gpt-6.2-sol', 'low'),
+    'review-pr-xhigh': ('gpt-6.2-sol', 'high'),
+    'security-audit': ('gpt-6.2-sol', 'high'),
 }
 
 
@@ -33,7 +33,7 @@ class FixedRoutingTests(unittest.TestCase):
     @staticmethod
     def _stale_plan_high(agents):
         stale = agents / 'plan-high.toml'
-        stale.write_text(stale.read_text().replace('model = "gpt-6.1-sol"', 'model = "gpt-6-luna"', 1))
+        stale.write_text(stale.read_text().replace('model = "gpt-6.2-sol"', 'model = "gpt-6-luna"', 1))
         return stale.read_text()
 
     def test_apply_preserves_custom_settings_and_is_idempotent(self):

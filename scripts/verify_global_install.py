@@ -72,7 +72,7 @@ def main() -> int:
         for marker in (
             'effort-router',
             'GPT-6-Luna',
-            'GPT-6.1-Sol',
+            'GPT-6.2-Sol',
             'max',
             '실패 기반 영구 예방 규칙',
             '과거 실패 1건',

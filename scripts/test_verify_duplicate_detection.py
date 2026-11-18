@@ -22,7 +22,7 @@ def _fixture(home: Path) -> None:
         'model = "gpt-6-luna"\nmodel_reasoning_effort = "max"\n'
         '[agents]\nenabled = true\n')
     (home / 'AGENTS.md').write_text(
-        'effort-router GPT-6-Luna GPT-6.1-Sol max 실패 기반 영구 예방 규칙 '
+        'effort-router GPT-6-Luna GPT-6.2-Sol max 실패 기반 영구 예방 규칙 '
         '과거 실패 1건 CLAUDE.md .cursorrules')
 
 

@@ -14,16 +14,16 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / 'scripts/deploy_global.py'
 
 AGENTS_OLD = (
-    'effort-router GPT-6-Luna GPT-6.1-Sol max 실패 기반 영구 예방 규칙 '
+    'effort-router GPT-6-Luna GPT-6.2-Sol max 실패 기반 영구 예방 규칙 '
     '과거 실패 1건 CLAUDE.md .cursorrules\n'
     '\n'
-    '일반 작업은 `gpt-6-luna / max`, 계획과 고난도 추론은 `gpt-6.1-sol / xhigh`를 사용한다.\n'
+    '일반 작업은 `gpt-6-luna / max`, 계획과 고난도 추론은 `gpt-6.2-sol / xhigh`를 사용한다.\n'
     '| Level | Meaning |\n'
     '|---|---|\n'
     '| high | 별도 지시가 있을 때만 사용 |\n'
-    '| xhigh | 계획 및 고난도 추론의 `gpt-6.1-sol` |\n'
-    "고난도 설정: `-m gpt-6.1-sol -c 'model_reasoning_effort=\"xhigh\"'`\n"
-    '계획과 리뷰는 **GPT-6.1-Sol·xhigh**\n'
+    '| xhigh | 계획 및 고난도 추론의 `gpt-6.2-sol` |\n'
+    "고난도 설정: `-m gpt-6.2-sol -c 'model_reasoning_effort=\"xhigh\"'`\n"
+    '계획과 리뷰는 **GPT-6.2-Sol·xhigh**\n'
 )
 
 CONFIG_OLD = (
@@ -33,12 +33,12 @@ CONFIG_OLD = (
     'enabled = true\n'
     '\n'
     '[profiles.planning]\n'
-    'model = "gpt-6.1-sol"\n'
+    'model = "gpt-6.2-sol"\n'
     'model_reasoning_effort = "xhigh"\n'
 )
 
 CONFIG_ROOT_OVERRIDE = (
-    'model = "gpt-6.1-sol"\n'
+    'model = "gpt-6.2-sol"\n'
     'model_reasoning_effort = "xhigh"\n'
     '[agents]\n'
     'enabled = true\n'
@@ -183,7 +183,7 @@ class DeployGlobalTests(unittest.TestCase):
             _fixture(home)
             claude_mirror = home / 'claude-mirror' / 'effort-router'
             agents_md = home / 'AGENTS.md'
-            agents_md.write_text(agents_md.read_text() + '변형형 잔존: GPT-6.1-SOL / XHIGH\n')
+            agents_md.write_text(agents_md.read_text() + '변형형 잔존: GPT-6.2-SOL / XHIGH\n')
             config_before = (home / 'config.toml').read_bytes()
             agents_before = agents_md.read_bytes()
 

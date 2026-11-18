@@ -8,7 +8,7 @@
 
 # effort-router
 
-작업의 규모·위험도를 티어(S/M/L/XL)로 판정하고 단계별 모델·에포트를 배정하는 Codex · ChatGPT · Claude Code · Gemini(Google Antigravity) Skill. Codex는 일반 작업에 GPT-6-Luna max·계획 및 고난도 추론에 GPT-6.1-Sol high를 사용하고, Gemini / Antigravity는 메인 Argon Medium · 루틴 구현 Hydrogen High · 임계경로 코어 및 간이 리뷰 Argon High · 계획 및 심층 검토 Carbon High 4조합을 사용한다.
+작업의 규모·위험도를 티어(S/M/L/XL)로 판정하고 단계별 모델·에포트를 배정하는 Codex · ChatGPT · Claude Code · Gemini(Google Antigravity) Skill. Codex는 일반 작업에 GPT-6-Luna max·계획 및 고난도 추론에 GPT-6.2-Sol high를 사용하고, Gemini / Antigravity는 메인 Argon Medium · 루틴 구현 Hydrogen High · 임계경로 코어 및 간이 리뷰 Argon High · 계획 및 심층 검토 Carbon High 4조합을 사용한다.
 
 ```text
 Decision(티어 판정) → Requirement → Acceptance → Task → Evidence → Learning
@@ -53,11 +53,11 @@ python3 scripts/dashboard_autostart.py --workspace /mnt/d/DEV/acc0mplish   # 이
 
 ## 변경 이력
 
-최근 주요 변경 3건 — 전체 기록(r1~r58·jev)은 [CHANGELOG.md](CHANGELOG.md) 참조.
+최근 주요 변경 3건 — 전체 기록(r1~r59·jev)은 [CHANGELOG.md](CHANGELOG.md) 참조.
 
+- **r59** (2026-11-18) — Codex · ChatGPT 계획·검토·간이리뷰 모델 `gpt-6.2-sol`(`GPT-6.2-Sol` / `Sol 6.2`) 업그레이드: `gpt-6.1-sol / high` → `gpt-6.2-sol / high`(`plan-*`·`review-pr-xhigh`·`security-audit`), `gpt-6.1-sol / low` → `gpt-6.2-sol / low`(`review-pr-high`) 일괄 전환
 - **r58** (2026-11-18) — Gemini / Antigravity 정식 어댑터·전역 검증 편입: 5케이스 13조합 확장(`gemini-4-argon-medium` [`inherit`] · `gemini-4-hydrogen-high` [`pro`] · `gemini-4-argon-high` [`pro`] · `gemini-4-carbon-high` [`pro`]) · 커스텀 서브에이전트 `platforms/gemini-agents/*.md` 11종(`inheritCustomizations: false`·읽기 전용 4종 쓰기 도구 제외) · 상시 규칙 `platforms/gemini-rules/effort-router.md`(`trigger: always_on`) · 어댑터 `platforms/gemini.md` · 전역 설치 검증 `scripts/verify_gemini_install.py`·`scripts/test_gemini_routing.py` · 배포 매니페스트 72→87(`mirror_synced` 174)
 - **r57** (2026-11-02) — 반복 상한 1회·얇은 계획 6칸: ②1회(반려 시 계획 1회 수정 후 재검토 없이 ③), ④gap 재구현 1회·재리뷰 대신 확인 명령 재실행, done의 HIGH는 발생 시나리오 있는 것만 차단, round 상한 각 1회, ① 최소 기준 = 6칸(30줄)
-- **r50** (2026-10-22) — 스폰 워치독 LOW 6건 수선: `dead_confirmed` 응답 `confirmed_at`(무활동 확정 판정 시각 — 스냅샷 timestamp와 독립) 신설 · 버스트 중 감시 신호 전량 소실 `burst.signals_lost` 병기 · 데드 조건부 제거·watch/단발 흐름 명시·SIGINT 경합 창 축소·테스트 위생(W8·W9)
 
 ## 구조
 
@@ -119,8 +119,8 @@ enabled = true
 기존 내용을 보존하고 다음 단편을 추가한다.
 
 ```markdown
-코딩 작업 착수 전 설치된 `effort-router`를 사용한다. 일반 작업은 GPT-6-Luna max, 계획·고난도 추론은 GPT-6.1-Sol high를 사용한다. Terra는 사용하지 않는다. native spawn/fan-out은 사용하지 않는다.
-`configure_codex_plan.py --apply`는 고정 전역 role 매핑만 적용하고, 변경 후 Codex를 재시작한다. 동일 접근 2회 실패 시 GPT-6.1-Sol high로 검토하고 확정된 구현은 GPT-6-Luna max로 진행한다.
+코딩 작업 착수 전 설치된 `effort-router`를 사용한다. 일반 작업은 GPT-6-Luna max, 계획·고난도 추론은 GPT-6.2-Sol high를 사용한다. Terra는 사용하지 않는다. native spawn/fan-out은 사용하지 않는다.
+`configure_codex_plan.py --apply`는 고정 전역 role 매핑만 적용하고, 변경 후 Codex를 재시작한다. 동일 접근 2회 실패 시 GPT-6.2-Sol high로 검토하고 확정된 구현은 GPT-6-Luna max로 진행한다.
 
 ## 실패 기반 영구 예방 규칙
 
@@ -295,8 +295,8 @@ python3 scripts/dashboard_server.py --port 0   # OS 할당 포트 — stdout REA
 | 케이스 | 허용 조합 | 역할 배분 |
 |---|---|---|
 | ③ ChatGPT·Codex | `gpt-6-luna / max` | **일반 구현 — 항상 기본값** (`coder-medium`·`implement-med`·`implement-xhigh`·`core-xhigh`) |
-| ③ ChatGPT·Codex | `gpt-6.1-sol / high` | 계획·검토·보안 판정 (`plan-*`·`review-pr-xhigh`·`security-audit`) |
-| ③ ChatGPT·Codex | `gpt-6.1-sol / low` | S/M 간이 리뷰 (`review-pr-high`) |
+| ③ ChatGPT·Codex | `gpt-6.2-sol / high` | 계획·검토·보안 판정 (`plan-*`·`review-pr-xhigh`·`security-audit`) |
+| ③ ChatGPT·Codex | `gpt-6.2-sol / low` | S/M 간이 리뷰 (`review-pr-high`) |
 | ① Claude Code | `haiku-5.5 / high` | 코드 구현 전용 (`coder-medium`·`implement-med`) |
 | ① Claude Code | `sonnet / high` | 임계경로 구현·코어 (`implement-xhigh`·`core-xhigh`·`ops-supervisor`) |
 | ① Claude Code | `opus-5.5 / high` | 계획·검토·보안 (`plan-*`·`review-pr-*`·`security-audit`) |

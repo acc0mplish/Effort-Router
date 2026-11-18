@@ -6,7 +6,7 @@
 
 ## 현재 로컬 Codex 정책
 
-일반 작업은 `gpt-6-luna / max`, 계획·고난도 추론은 `gpt-6.1-sol / high`다. 아래 라운드별 모델 표기는 당시 upstream 실험 기록이다.
+일반 작업은 `gpt-6-luna / max`, 계획·고난도 추론은 `gpt-6.2-sol / high`다. 아래 라운드별 모델 표기는 당시 upstream 실험 기록이다.
 
 ## 측정 지표
 

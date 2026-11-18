@@ -74,11 +74,11 @@ MIRROR_MANIFEST = (
 
 # r31 확정 표 + R3 정규식 변형형 (MED-6) — 발견 시에만 적용·카운트 기록.
 REPLACEMENTS = (
-    ('combined_lower', (r'gpt-6\.1-sol ?/ ?xhigh', 'gpt-6.1-sol / high')),
-    ('combined_upper', (r'GPT-6\.1-Sol ?/ ?xhigh', 'GPT-6.1-Sol / high')),
-    ('space_upper', (r'GPT-6\.1-Sol xhigh', 'GPT-6.1-Sol high')),
+    ('combined_lower', (r'gpt-6\.2-sol ?/ ?xhigh', 'gpt-6.2-sol / high')),
+    ('combined_upper', (r'GPT-6\.2-Sol ?/ ?xhigh', 'GPT-6.2-Sol / high')),
+    ('space_upper', (r'GPT-6\.2-Sol xhigh', 'GPT-6.2-Sol high')),
     ('middot_upper', (r'Sol·xhigh', 'Sol·high')),
-    ('sol_61', (r'Sol 6\.1 xhigh', 'Sol 6.1 high')),
+    ('sol_61', (r'Sol 6\.2 xhigh', 'Sol 6.2 high')),
     ('effort_literal', (r'model_reasoning_effort ?= ?"xhigh"',
                         'model_reasoning_effort = "high"')),
 )
@@ -88,9 +88,9 @@ REPLACEMENTS = (
 VOCAB_SWAP = (
     ('vocab_high',
      '| high | 별도 지시가 있을 때만 사용 |',
-     '| high | 계획 및 고난도 추론의 `gpt-6.1-sol` |'),
+     '| high | 계획 및 고난도 추론의 `gpt-6.2-sol` |'),
     ('vocab_xhigh',
-     '| xhigh | 계획 및 고난도 추론의 `gpt-6.1-sol` |',
+     '| xhigh | 계획 및 고난도 추론의 `gpt-6.2-sol` |',
      '| xhigh | 별도 지시가 있을 때만 사용 |'),
 )
 

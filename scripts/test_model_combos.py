@@ -20,7 +20,7 @@ if str(ROOT / 'scripts') not in sys.path:
 import verify_gemini_install  # noqa: E402
 
 ALLOWED_CLAUDE = {('opus', 'high'), ('sonnet', 'high'), ('haiku', 'high')}
-ALLOWED_CODEX = {('gpt-6-luna', 'max'), ('gpt-6.1-sol', 'high'), ('gpt-6.1-sol', 'low')}
+ALLOWED_CODEX = {('gpt-6-luna', 'max'), ('gpt-6.2-sol', 'high'), ('gpt-6.2-sol', 'low')}
 ALLOWED_GLM = {('glm-5.3', 'max'), ('glm-5.3', 'high'), ('glm-5.3-flash', 'max')}
 # 주의: Gemini 쌍은 Claude/Codex/GLM의 (model, effort)가 아니라
 # 확정 목표 모델 슬러그와 Antigravity 서브에이전트 로더 티어의 (target_slug, subagent_tier) 쌍이다.
@@ -100,12 +100,12 @@ EXPECTED_CODEX_ROLE = {
     'implement-med.toml': ('gpt-6-luna', 'max'),
     'implement-xhigh.toml': ('gpt-6-luna', 'max'),
     'core-xhigh.toml': ('gpt-6-luna', 'max'),
-    'plan-high.toml': ('gpt-6.1-sol', 'high'),
-    'plan-xhigh.toml': ('gpt-6.1-sol', 'high'),
-    'plan-adversary-xhigh.toml': ('gpt-6.1-sol', 'high'),
-    'review-pr-high.toml': ('gpt-6.1-sol', 'low'),
-    'review-pr-xhigh.toml': ('gpt-6.1-sol', 'high'),
-    'security-audit.toml': ('gpt-6.1-sol', 'high'),
+    'plan-high.toml': ('gpt-6.2-sol', 'high'),
+    'plan-xhigh.toml': ('gpt-6.2-sol', 'high'),
+    'plan-adversary-xhigh.toml': ('gpt-6.2-sol', 'high'),
+    'review-pr-high.toml': ('gpt-6.2-sol', 'low'),
+    'review-pr-xhigh.toml': ('gpt-6.2-sol', 'high'),
+    'security-audit.toml': ('gpt-6.2-sol', 'high'),
 }
 EXPECTED_GLM_ROLE = {
     'coder-medium': ('glm-5.3-flash', 'max'),
