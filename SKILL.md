@@ -1,6 +1,6 @@
 ---
 name: effort-router
-description: Use when starting a task in Claude Code, Codex, or ChatGPT that needs model and reasoning effort selected by scope, complexity, or risk — fires before implementation, planning, review, or audit work begins.
+description: Use when starting a task in Gemini, Antigravity, Claude Code, Codex, or ChatGPT that needs model and reasoning effort selected by scope, complexity, or risk — fires before implementation, planning, review, or audit work begins.
 ---
 
 # Effort Router
@@ -11,7 +11,7 @@ description: Use when starting a task in Claude Code, Codex, or ChatGPT that nee
 Decision(티어 판정) → Requirement → Acceptance → Task → Evidence → Learning
 ```
 
-> OpenAI 클라이언트는 §2의 모델 정책과 `~/.codex/agents/*.toml`을 사용한다. ChatGPT 데스크톱 앱의 Codex 화면과 Codex CLI는 같은 로컬 설정을 공유한다. ChatGPT Work에서는 같은 정책을 모델 선택기에 적용하되 로컬 custom-agent TOML은 사용하지 않는다. Claude Code는 동봉 `agents/*.md`의 슬롯 매핑을 유지한다.
+> OpenAI 클라이언트는 §2의 모델 정책과 `~/.codex/agents/*.toml`을 사용한다. ChatGPT 데스크톱 앱의 Codex 화면과 Codex CLI는 같은 로컬 설정을 공유한다. ChatGPT Work에서는 같은 정책을 모델 선택기에 적용하되 로컬 custom-agent TOML은 사용하지 않는다. Claude Code는 동봉 `agents/*.md`의 슬롯 매핑을 유지한다. Google Antigravity(Gemini)는 동봉 `platforms/gemini-agents/*.md`와 `~/.gemini/config/agents/*.md`를 사용한다.
 
 ## When to Use
 
@@ -306,13 +306,13 @@ state.json 선택 필드 `tree_claim`: `{"session_id": "<id>", "claimed_utc": "<
 
 ## 2. 라우팅 테이블
 
-아래 역할만 호출한다. Codex는 `~/.codex/agents/*.toml`, Claude Code는 `~/.claude/agents/*.md`의 동명 역할을 사용한다. 테이블 밖 파일이 있어도 무시한다 — **존재 ≠ 허가**. 감시·운영 역할 `ops-supervisor`는 티어 단계 밖 구성원으로, 워치독 대상 스폰이 존재할 때만 메인 세션이 직접 호출한다(온디맨드 — 상시 배치 아니다. 근거: 결함 포착 실적 0건, r14 자아비판 K5) — 세션 토폴로지는 `platforms/CLAUDE.md`.
+아래 역할만 호출한다. Codex는 `~/.codex/agents/*.toml`, Claude Code는 `~/.claude/agents/*.md`, Gemini / Antigravity는 `~/.gemini/config/agents/*.md`(동봉 `platforms/gemini-agents/*.md`)의 동명 역할을 사용한다. 테이블 밖 파일이 있어도 무시한다 — **존재 ≠ 허가**. 감시·운영 역할 `ops-supervisor`는 티어 단계 밖 구성원으로, 워치독 대상 스폰이 존재할 때만 메인 세션이 직접 호출한다(온디맨드 — 상시 배치 아니다. 근거: 결함 포착 실적 0건, r14 자아비판 K5) — 세션 토폴로지는 `platforms/CLAUDE.md`.
 
 **테이블 확장 판정**: 신규 에이전트 등재는 독립된 권한과 별도 검증 가능한 판단을 내놓을 때만 한다.
 
-### 4케이스 허용 모델·effort 조합 (사용자 확정 2026-10-12)
+### 5케이스 허용 모델·effort 조합 (사용자 확정 2026-10-12 · r58 Gemini 추가 2026-11-18)
 
-4케이스 = ① Claude Code · ② Claude Code + GLM 백엔드 · ③ ChatGPT 앱 & Codex · ④ Z.ai 앱(ZCode). 허용 조합은 아래 9개뿐이다 — 역할 파일·어댑터·Output Contract 어디에도 이 밖의 조합을 쓰지 않는다(계약 테스트 `scripts/test_model_combos.py`로 강제).
+5케이스 = ① Claude Code · ② Claude Code + GLM 백엔드 · ③ ChatGPT 앱 & Codex · ④ Z.ai 앱(ZCode) · ⑤ Gemini / Antigravity. 허용 조합은 아래 12개뿐이다 — 역할 파일·어댑터·Output Contract 어디에도 이 밖의 조합을 쓰지 않는다(계약 테스트 `scripts/test_model_combos.py`로 강제).
 
 | 케이스 | 허용 조합 | 기본 용도 |
 |---|---|---|
@@ -326,8 +326,12 @@ state.json 선택 필드 `tree_claim`: `{"session_id": "<id>", "claimed_utc": "<
 | ② Claude Code + GLM | `glm-5.3 / high` | 일반 계획·검토 (심층 동시 상한 1) |
 | ② Claude Code + GLM | `glm-5.3-flash / max` | 반복 구현·리컨·대량 소비 |
 | ④ ZCode | 위 ② 조합과 동일 | GLM 백엔드 — ② 정책 그대로 |
+| ⑤ Gemini·Antigravity | `gemini-4-carbon-high (inherit)` | 일반 구현 기본값 (메인 · `coder-medium` · `implement-*` · `core-xhigh` · `ops-supervisor`) |
+| ⑤ Gemini·Antigravity | `gemini-4-hydrogen-xhigh (pro)` | 계획·적대검토·심층 리뷰·보안감사 (`plan-*` · `review-pr-xhigh` · `security-audit`) |
+| ⑤ Gemini·Antigravity | `gemini-4-carbon-low (flash)` | S/M 간이 리뷰 (`review-pr-high`) |
 
 - 케이스 ②·④는 모델 선택이 메인 세션 단일(스폰에 모델 인자 없음)이므로 과업 단위로 전환한다.
+- Antigravity `agents/*.md` 로더는 `model: inherit|pro|flash|flash_lite` 4종 티어만 허용하므로 정확한 슬러그(`gemini-4-hydrogen-xhigh`·`gemini-4-carbon-low`) 강제 시 `agy -p --model <슬러그>` 또는 `swarm(action="add", model="<슬러그>")`를 사용한다(`platforms/gemini.md`).
 - `gpt-6-luna / max`는 상시 기본이다 — 다른 조합은 위 용도에 해당할 때만 쓴다.
 
 ### Codex 전역 라우팅 정책
@@ -532,8 +536,9 @@ Codex와 ChatGPT는 §2의 OpenAI 모델 정책을 직접 적용한다. 다른 �
 
 - **GLM Coding Plan(Z.ai)**: 하니스가 아니라 Claude Code의 백엔드 교체다 — 적용 대상에 Claude Code가 공식 포함됨. 슬롯 실체가 프록시 매핑을 따르고 effort 강등(§3 실측)이 발생할 수 있다. 이원 모델 정책으로 모든 플랜이 GLM-5.3과 GLM-5.3-Flash를 함께 지원한다 — 치환 기준과 비전(시각 이해 MCP 번들)은 `platforms/glm.md`를 따른다(zcode.md는 동결 어댑터 — 사용 요청 시 본문에서 재생성). 심층(high급) 스폰은 백엔드 동시성 상한 내에서만 병렑한다(GLM-5.3 상한 1 — 팬아웃은 렌즈 직렬화·경량 렌즈 병렬로 치환, `platforms/glm.md`) — 직렬이 기본이며 사용자 발화로 심층 병렬 모드에 진입한다(언제든 즉시 전환·해제 발화 또는 대화 세션 종료까지 지속, 무지정 2).
 - **Claude Code 10세션 토폴로지**: 세션 1 두뇌(메인)·세션 2 감시 Ops(`ops-supervisor`)·세션 3–10 작업 슬롯(심층 1(직렬 기본 — 사용자 발화로 병렬 모드 전환·세션 한정 지속) + 경량 7)의 자율 병렬 운용 형태다 — 슬롯 배정·GLM 동시성 치환·두뇌 프로토콜은 `platforms/CLAUDE.md`를 따른다.
+- **Google Antigravity (`agy` CLI · IDE · Antigravity 2.0, Gemini)**: 전역 스킬(`~/.gemini/config/skills/effort-router/`, 호환 미러 `~/.agents/skills/effort-router/`), 전역 규칙(`~/.gemini/config/rules/effort-router.md`, `trigger: always_on`), 기본 모델(`~/.gemini/antigravity-cli/settings.json` `"model": "gemini-4-carbon-high"`), 커스텀 서브에이전트 11종(`~/.gemini/config/agents/*.md`, 전 종 `inheritCustomizations: false`·읽기 전용 4종 `edit_file`·`write_file` 제외, `invoke_subagent` 호출)을 공유한다. 로더 `model:` 4티어(`inherit|pro|flash|flash_lite`) 제약 때문에 정확한 슬러그(`gemini-4-hydrogen-xhigh`·`gemini-4-carbon-low`) 강제 시 `agy -p --model <슬러그>` 또는 `swarm(action="add", model="<슬러그>")`를 사용하며, 전역 설치 무결성은 `scripts/verify_gemini_install.py`로 검증한다(`platforms/gemini.md` 참조).
 - 표의 '미확인'은 공식 문서에서 확인하지 못한 항목이다 — 확인 전까지 단정하지 않는다.
-- 하니스별 삽입 단편과 설치 절차는 동봉 `platforms/`에 둔다 — 본문이 우선, 어댑터는 파생이다. 활성 하니스(claude·glm·codex·chat-app·zcode)는 유지 관리한다. 미사용 하니스(qwen·gemini·grok) 어댑터는 2026-10-12 삭제했다(동결 근거: 실측 통과 0건·파생 동기화 실패 1건 r11).
+- 하니스별 삽입 단편과 설치 절차는 동봉 `platforms/`에 둔다 — 본문이 우선, 어댑터는 파생이다. 활성 하니스(claude·glm·codex·chat-app·zcode·gemini)는 유지 관리한다. 미사용 하니스(qwen·grok) 어댑터는 2026-10-12 삭제했다(동결 근거: 실측 통과 0건·파생 동기화 실패 1건 r11; 2026-11-18 r58에서 `gemini`는 Antigravity 기준으로 재구축·활성화됨).
 - jev 판단 계층은 하니스 무관 계층이다(§5 파일 계약과 동일 — 셸+환경변수 하니스면 어디서나 호출, 키·감사 규칙은 jev 절 준수).
 
 ## Output Contract

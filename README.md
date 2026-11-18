@@ -45,11 +45,11 @@ python3 scripts/dashboard_autostart.py --workspace /mnt/d/DEV/acc0mplish   # 이
 
 ## 변경 이력
 
-최근 주요 변경 3건 — 전체 기록(r1~r50·jev)은 [CHANGELOG.md](CHANGELOG.md) 참조.
+최근 주요 변경 3건 — 전체 기록(r1~r58·jev)은 [CHANGELOG.md](CHANGELOG.md) 참조.
 
+- **r58** (2026-11-18) — Gemini / Antigravity 정식 어댑터·전역 검증 편입: 5케이스 12조합 확장(`gemini-4-carbon-high` [`inherit`] · `gemini-4-hydrogen-xhigh` [`pro`] · `gemini-4-carbon-low` [`flash`]) · 커스텀 서브에이전트 `platforms/gemini-agents/*.md` 11종(`inheritCustomizations: false`·읽기 전용 4종 쓰기 도구 제외) · 상시 규칙 `platforms/gemini-rules/effort-router.md`(`trigger: always_on`) · 어댑터 `platforms/gemini.md` · 전역 설치 검증 `scripts/verify_gemini_install.py`·`scripts/test_gemini_routing.py` · 배포 매니페스트 72→87(`mirror_synced` 174)
+- **r57** (2026-11-02) — 반복 상한 1회·얇은 계획 6칸: ②1회(반려 시 계획 1회 수정 후 재검토 없이 ③), ④gap 재구현 1회·재리뷰 대신 확인 명령 재실행, done의 HIGH는 발생 시나리오 있는 것만 차단, round 상한 각 1회, ① 최소 기준 = 6칸(30줄)
 - **r50** (2026-10-22) — 스폰 워치독 LOW 6건 수선: `dead_confirmed` 응답 `confirmed_at`(무활동 확정 판정 시각 — 스냅샷 timestamp와 독립) 신설 · 버스트 중 감시 신호 전량 소실 `burst.signals_lost` 병기 · 데드 조건부 제거·watch/단발 흐름 명시·SIGINT 경합 창 축소·테스트 위생(W8·W9)
-- **r49** (2026-10-22) — 프롬프트 캐시 유지 계층(선택 비용 절감): SKILL 신규 절 — 행동 계약 5규칙(프리픽스 안정·10만 토큰 미만 무시·keepalive·compact는 캐시 생존 중에만·하니스별 조건·관측 의무) · 관측 CLI `scripts/cache_probe.py`(세션 jsonl usage 숫자 화이트리스트 6필드·message.id 중복 제거·exit 0/2·보고만)
-- **r48** (2026-10-22) — 스폰 통로 판정 계약: §3 신규 불릿 — 도구 탐색(ToolSearch) 0매칭 ≠ 스폰 통로 부재, 경량 직접 호출 프로브로 판정(Claude Code 2.1.304+ Agent 도구 색인 미등록 오판 방지 — 2026-10-22 실측)
 
 ## 구조
 
@@ -58,12 +58,12 @@ python3 scripts/dashboard_autostart.py --workspace /mnt/d/DEV/acc0mplish   # 이
 | `SKILL.md` | 스킬 본체 — 티어 판정(§1)·라우팅 테이블(§2)·실행 제약(§3)·merge 권한(§4)·상태·인계 계약(§5)·타 하니스 매핑(§6)·Output Contract |
 | `AGENTS.md` | 저장소 작업의 모델·에포트 정책과 역할 템플릿 오류 예방 규칙 |
 | `agents/` | Claude Code 역할 정의 11종(역할 10 + 온디맨드 `ops-supervisor`) |
-| `platforms/` | Codex·ChatGPT 실행 어댑터와 기타 하니스 파생 문서 |
-| `scripts/` | 전역 Codex 역할 라우팅·설치 검증 스크립트 + jev 판단 계층 CLI(jev_judge.py·jev_modes.py — CLI 13종: tier·prune·escalation·memory-gate·stall·done·dup·loop·verify-run·watch·route·guard·intake) + 인테이크 게이트 CLI(intake_gate.py — 항상 켬 필수 계층) + Stagehand 게이트 CLI(stagehand_gate.py 3종) + 검증 핀 게이트 CLI(verify_pin.py + 실행 엔진 verify_exec.py) + 워크트리 수명주기 게이트 CLI(worktree_gate.py 4종: create·done·list·sweep — 디스크 보고·부산물 회수 포함) + 트리 소유 게이트 CLI(tree_gate.py 5종: claim·release·check·status·prune) + 루프 탈출 게이트 CLI(neverstuck_gate.py — 결정론 무장 판정: 무브류 3회 게이트·S7 하드 시그널·선언탐색·취향 면제) + 스폰 워치독 CLI(spawn_watchdog.py — 무진행 10분→버스트 3회→사망 확정 보고) + 프롬프트 캐시 프로브 CLI(cache_probe.py — 세션 jsonl 캐시 히트 관측: usage 숫자 화이트리스트 6필드·message.id 중복 제거·exit 0/2) |
+| `platforms/` | Codex·ChatGPT·Gemini(Antigravity) 실행 어댑터와 기타 하니스 파생 문서 |
+| `scripts/` | 전역 Codex·Gemini(Antigravity) 역할 라우팅·설치 검증 스크립트(verify_global_install.py·verify_gemini_install.py·test_gemini_routing.py 등) + jev 판단 계층 CLI(jev_judge.py·jev_modes.py — CLI 13종: tier·prune·escalation·memory-gate·stall·done·dup·loop·verify-run·watch·route·guard·intake) + 인테이크 게이트 CLI(intake_gate.py — 항상 켬 필수 계층) + Stagehand 게이트 CLI(stagehand_gate.py 3종) + 검증 핀 게이트 CLI(verify_pin.py + 실행 엔진 verify_exec.py) + 워크트리 수명주기 게이트 CLI(worktree_gate.py 4종: create·done·list·sweep — 디스크 보고·부산물 회수 포함) + 트리 소유 게이트 CLI(tree_gate.py 5종: claim·release·check·status·prune) + 루프 탈출 게이트 CLI(neverstuck_gate.py — 결정론 무장 판정: 무브류 3회 게이트·S7 하드 시그널·선언탐색·취향 면제) + 스폰 워치독 CLI(spawn_watchdog.py — 무진행 10분→버스트 3회→사망 확정 보고) + 프롬프트 캐시 프로브 CLI(cache_probe.py — 세션 jsonl 캐시 히트 관측: usage 숫자 화이트리스트 6필드·message.id 중복 제거·exit 0/2) |
 | `TESTS.md` | 검증 프로토콜·측정 결과·라운드별 개정 이력·재현 절차(방법론 원장 — r29 하드캡 분할 이후 게이트 과업 절은 TESTS-GATES.md로, r33 분할 이후 과거 라운드 r4~r17 기록은 TESTS-ARCHIVE.md로 이동) |
 | `TESTS-ARCHIVE.md` | 과거 라운드(r4~r17) 기록 아카이브(r33 내용 불변 순수 이동) |
 | `TESTS-GATES.md` | 게이트 과업별 검증 원장(r22~r28·r29) — 원 요구·계약 요지·RED/GREEN·회귀 증거 표 |
-| `CHANGELOG.md` | 라운드별 변경 이력(r1~r50·jev) 전량 |
+| `CHANGELOG.md` | 라운드별 변경 이력(r1~r58·jev) 전량 |
 | `GATES.md` | 게이트 7종·프로브 1종 CLI 전체 참조 — 플래그·종료코드·JSON 스키마·한계 |
 
 ## 설치 (Codex + ChatGPT 데스크톱 앱)
@@ -237,7 +237,7 @@ python3 scripts/dashboard_server.py --port 0   # OS 할당 포트 — stdout REA
 
 ## 모델 매핑
 
-4케이스(① Claude Code · ② Claude Code + GLM · ③ ChatGPT 앱 & Codex · ④ ZCode)에서 허용하는 조합은 9개뿐이다. 역할 파일과 어댑터는 이 밖의 조합을 쓰지 않는다(`scripts/test_model_combos.py`가 강제).
+5케이스(① Claude Code · ② Claude Code + GLM · ③ ChatGPT 앱 & Codex · ④ ZCode · ⑤ Gemini / Antigravity)에서 허용하는 조합은 12개뿐이다. 역할 파일과 어댑터는 이 밖의 조합을 쓰지 않는다(`scripts/test_model_combos.py`가 강제).
 
 | 케이스 | 허용 조합 | 역할 배분 |
 |---|---|---|
@@ -250,12 +250,15 @@ python3 scripts/dashboard_server.py --port 0   # OS 할당 포트 — stdout REA
 | ② Claude Code + GLM · ④ ZCode | `glm-5.3-flash / max` | 반복 구현 (`coder-medium`·`implement-med`) |
 | ② Claude Code + GLM · ④ ZCode | `glm-5.3 / max` | 임계경로·코어 구현, 최고 판정·보안 |
 | ② Claude Code + GLM · ④ ZCode | `glm-5.3 / high` | 일반 계획·S/M 리뷰 |
+| ⑤ Gemini·Antigravity | `gemini-4-carbon-high (inherit)` | 일반 구현·감시 기본값 (`coder-medium`·`implement-*`·`core-xhigh`·`ops-supervisor`) |
+| ⑤ Gemini·Antigravity | `gemini-4-hydrogen-xhigh (pro)` | 계획·적대검토·심층 리뷰·보안감사 (`plan-*`·`review-pr-xhigh`·`security-audit`) |
+| ⑤ Gemini·Antigravity | `gemini-4-carbon-low (flash)` | S/M 간이 리뷰 (`review-pr-high`) |
 
-`python3 scripts/configure_codex_plan.py --apply`는 Codex 역할 매핑을 백업과 함께 적용한다. 상세 설정과 검증은 [Codex adapter](platforms/codex.md)를 따른다. 역할별 GLM 조합 표는 [GLM adapter](platforms/glm.md).
+`python3 scripts/configure_codex_plan.py --apply`는 Codex 역할 매핑을 백업과 함께 적용한다. 상세 설정과 검증은 [Codex adapter](platforms/codex.md)를 따른다. Gemini / Antigravity 전역 설치 검증(`python3 scripts/verify_gemini_install.py --require-agy`)과 상세 설정은 [Gemini adapter](platforms/gemini.md)를 따른다. 역할별 GLM 조합 표는 [GLM adapter](platforms/glm.md).
 
 ## 다른 하니스에서 쓰기
 
-Claude Code와 기타 환경에서는 티어 판정·증거 계약·Output Contract를 유지하고 각 하니스의 모델 체계로 치환한다. 활성 어댑터는 4케이스 기준이다.
+Claude Code와 기타 환경에서는 티어 판정·증거 계약·Output Contract를 유지하고 각 하니스의 모델 체계로 치환한다. 활성 어댑터는 5케이스 기준이다.
 
 | 케이스 | 어댑터 | 형태 |
 |------|--------|------|
@@ -263,6 +266,7 @@ Claude Code와 기타 환경에서는 티어 판정·증거 계약·Output Contr
 | ② Claude Code + GLM 백엔드 | `platforms/glm.md` | 백엔드 교체 매핑(하니스 불변) + 역할별 GLM 조합 표. **필수 슬롯 매핑**(`ANTHROPIC_DEFAULT_*_MODEL`) 미설정 시 역할 서브에이전트가 Claude로 스폰돼 Claude 사용량을 소모한다 — 세션 시작 시 `python3 scripts/glm_slot_gate.py` exit 0 확인 |
 | ③ ChatGPT 앱 & Codex | `platforms/codex.md`, `platforms/chat-app.md` | Codex TOML role↔effort 매핑 + ChatGPT Work/Classic 조합 |
 | ④ ZCode (GLM 백엔드) | `platforms/zcode.md` | 빌트인 스폰 + 역할 계약 주입, 모델은 메인 세션이 과업 단위로 선택 |
+| ⑤ Gemini / Antigravity | `platforms/gemini.md` | `~/.gemini/config/agents/*.md` 11종 + `rules/effort-router.md`(`always_on`) + `settings.json` 기본 모델 고정 |
 
 설치·붙여넣기 절차는 `platforms/README.md`. 어댑터는 본문의 파생 축약 이식본이다 — 규칙 충돌 시 SKILL.md가 우선한다.
 

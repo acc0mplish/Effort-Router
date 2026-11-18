@@ -6,7 +6,7 @@ effort-router 본문(SKILL.md)은 Codex와 ChatGPT를 1급 대상으로 하며, 
 
 ## 단일 소스 원칙
 
-- 어댑터는 본문 규칙의 **축약 이식**이다 — 재해석·신규 서술 없음. 규칙 변경 시 SKILL.md 본문이 우선하고 어댑터는 파생 갱신한다 — 현재 활성 어댑터는 케이스 1~4(claude·glm·codex·chat-app·zcode)다. qwen·gemini·grok은 사용하지 않아 2026-10-12 삭제했다.
+- 어댑터는 본문 규칙의 **축약 이식**이다 — 재해석·신규 서술 없음. 규칙 변경 시 SKILL.md 본문이 우선하고 어댑터는 파생 갱신한다 — 현재 활성 어댑터는 케이스 1~5(claude·glm·codex·chat-app·zcode·gemini)다. qwen·grok은 사용하지 않아 2026-10-12 삭제했다(gemini는 2026-11-18 r58에서 Antigravity 어댑터로 재신설).
 - 설정 파일 병합은 사용자가 해당 하니스의 설치·업데이트를 요청한 범위에서만 수행한다. 그 외에는 삽입 단편만 제시하고 전역 파일을 임의 수정하지 않는다.
 
 ## Guide file 실패 원장
@@ -28,6 +28,7 @@ effort-router 본문(SKILL.md)은 Codex와 ChatGPT를 1급 대상으로 하며, 
 | 파일 | 대상 | 삽입처(사용자 실행) | 형태 |
 |------|------|--------------------|------|
 | codex.md + codex-agents/ | Codex CLI·IDE·ChatGPT 앱 Codex | Skill + `~/.codex/config.toml` + `~/.codex/agents/*.toml` + `~/.codex/AGENTS.md` | 전역 설치·실행 어댑터 |
+| gemini.md + gemini-agents/ + gemini-rules/ | Google Antigravity / Gemini (`agy` CLI·IDE·2.0) | Skill(`~/.gemini/config/skills/effort-router/`) + `~/.gemini/config/agents/*.md` + `~/.gemini/config/rules/effort-router.md` + `~/.gemini/antigravity-cli/settings.json` | 전역 설치·실행 어댑터 |
 | glm.md | GLM Coding Plan | 설치 불필요 — Claude Code 백엔드 교체 시 참조 | 안내 문서 |
 | claude.md | Claude Code(기준 하니스·GLM 백엔드 포함) | Skill(`~/.claude/skills/effort-router/`) + `~/.claude/agents/*.md` + `~/.claude/CLAUDE.md` 병합 | 10세션 토폴로지 어댑터 |
 | zcode.md | ZCode (GLM Coding Plan 백엔드) | Skill(`~/.zcode/skills/` 또는 `~/.agents/skills/`) + `~/.zcode/AGENTS.md` 병합 | 어댑터 문서 |

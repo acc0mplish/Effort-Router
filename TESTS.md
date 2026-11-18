@@ -257,3 +257,23 @@ mirror_synced 기대치 122. 분할 실측: TESTS.md 분할 직후 218줄 → r3
 | V6 | grep 고유 표현 3종 | 킹크랩 요약·Jake 기준·일단 깃연결부터 각 1건 존재 |
 claims 판정: ④ review-pr-xhigh — 7/7 verified·gap 0·claims 밖 결함 없음(LOW 2 — F5 회신 사항)·메인 재측정 전부 일치. 스폰 10회(①1·②6·③2·④1)·round 0/0.
 TDD 해당 없음(문서 과업) — 대체 확인 수단 V1~V6이 verify를 구성. 검증 입력 변경 없음.
+
+## r58 Gemini / Antigravity 어댑터·전역 검증 편입 (2026-11-18)
+
+원 요구: `"수정한거는 커밋 푸시해줘야지 스킬 임마"` (전역 설치에 구축·검증한 Gemini / Antigravity 어댑터·역할 템플릿·전역 규칙·검증 스크립트·문서 개정을 업스트림 `Effort-Router`에 `r58`로 정식 편입·실배포·검증 후 커밋·푸시)
+변경: 신규 15(`platforms/gemini-agents/*.md` 11종 · `platforms/gemini-rules/effort-router.md` · `platforms/gemini.md` · `scripts/verify_gemini_install.py` · `scripts/test_gemini_routing.py`) + 수정 8(`scripts/test_model_combos.py` · `scripts/deploy_global.py` · `scripts/test_deploy_global.py` · `SKILL.md` · `platforms/README.md` · `README.md` · `CHANGELOG.md` · `TESTS.md`)
+샌드박스 핵심 7종 회귀 및 정합 실측:
+| ID | 실행 명령 | 결과 |
+|---|---|---|
+| T1 | `python3 scripts/test_model_combos.py` | exit 0 — Ran 12 tests, OK (5케이스 12조합 · Claude 11 · Codex 10 · GLM 10 · Gemini 11) |
+| T2 | `python3 scripts/test_gemini_routing.py` | exit 0 — Ran 7 tests, OK (격리 `GEMINI_HOME` · 누락 · `OSError` · 도구위반 · `--require-agy`) |
+| T3 | `python3 scripts/test_deploy_global.py` | exit 0 — Ran 12 tests, OK (`MIRROR_MANIFEST == 87`, `mirror_synced == 174`) |
+| T4 | `python3 scripts/test_codex_routing.py` | exit 0 — Ran 1 test, OK (`custom agents: 10/10`) |
+| T5 | `python3 scripts/test_plan_routing.py` | exit 0 — Ran 5 tests, OK (macOS `TMPDIR` 실경로 정규화 기준; 심볼릭 `/var/folders` 환경은 `TMPDIR=$(realpath "$TMPDIR")`) |
+| T6 | `python3 scripts/test_verify_duplicate_detection.py` | exit 0 — Ran 3 tests, OK |
+| T7 | `python3 scripts/test_intake_gate.py` | exit 0 — Ran 31 tests, OK |
+| T8 | `grep -n "Gemini" SKILL.md README.md platforms/README.md CHANGELOG.md TESTS.md && test ! -e platforms/qwen.md && test ! -e platforms/grok.md` | exit 0 — 5문서 전건 히트 · 동결 `qwen.md`·`grok.md` 부재 확인 |
+| T9 | 호스트 `python3 scripts/deploy_global.py` + `python3 scripts/verify_gemini_install.py --require-agy` | exit 0 — G1~G4 PASS (`mirror_synced == 174`, 재실행 `changes_total == 0`) · Gemini `11/11 validated` (`agy plugin validate` 오류 0) · 4방향 미러 잔존 `qwen.md`·`grok.md` 정리 |
+
+검증 입력 변경 고지(§7): `scripts/test_model_combos.py`(허용 조합 9→12개 확장: `ALLOWED_GEMINI` 3종·`EXPECTED_GEMINI_ROLE` 11종·`READONLY_GEMINI_ROLES` 4종 추가 — 기존 `ALLOWED_CLAUDE`·`ALLOWED_CODEX`·`ALLOWED_GLM` 9조합 단언 불변) 및 `scripts/test_deploy_global.py:132`(`MIRROR_MANIFEST` 72→87 확장에 따른 `report['mirror_synced']` 기대치 `144→174` 정합 갱신 — 기존 `test_a`–`test_k`·`SnapshotCollisionTests` 무변경).
+역사 원기록 보존 주석: 위 r31 `R8` 행(`TESTS.md:182`, `동결 어댑터 diff(chat-app·zcode·gemini·qwen·grok) | 0행`)은 r31 당시 실측 원기록으로 바이트 무수정 보존한다. `gemini`는 2026-10-12 구형 삭제 후 2026-11-18 `r58`에서 Google Antigravity 기준으로 재구축·활성화되었으며, `qwen`·`grok`은 동결(미복원) 상태를 유지한다.

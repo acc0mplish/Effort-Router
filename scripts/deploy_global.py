@@ -34,17 +34,23 @@ _AGENT_MIRROR_FILES = (
     'review-pr-high.md', 'review-pr-xhigh.md', 'security-audit.md',
 )
 _PLATFORM_MIRROR_FILES = (
-    'CLAUDE.md', 'README.md', 'chat-app.md', 'codex.md', 'glm.md', 'zcode.md',
+    'CLAUDE.md', 'README.md', 'chat-app.md', 'codex.md', 'gemini.md', 'glm.md', 'zcode.md',
+)
+_GEMINI_RULE_MIRROR_FILES = ('effort-router.md',)
+_GEMINI_AGENT_MIRROR_FILES = (
+    'coder-medium.md', 'core-xhigh.md', 'implement-med.md', 'implement-xhigh.md',
+    'ops-supervisor.md', 'plan-adversary-xhigh.md', 'plan-high.md', 'plan-xhigh.md',
+    'review-pr-high.md', 'review-pr-xhigh.md', 'security-audit.md',
 )
 _SCRIPT_MIRROR_FILES = (
     'configure_codex_plan.py', 'intake_gate.py', 'jev_intake.py', 'jev_judge.py',
     'jev_modes.py', 'neverstuck_gate.py', 'spawn_watchdog.py', 'tree_gate.py',
     'verify_exec.py',
-    'verify_global_install.py', 'verify_pin.py', 'worktree_artifacts.py',
+    'verify_gemini_install.py', 'verify_global_install.py', 'verify_pin.py', 'worktree_artifacts.py',
     # r43: worktree_artifacts는 worktree_gate 앞(의존 역순 — gate가 import한다,
     # 복사 창 ImportError 소멸). 제거 시 gate 배선과 동반 revert(번들 §10).
     'worktree_gate.py', 'worktree_gate_lib.py', 'usage_log.py',
-    'test_codex_routing.py', 'test_intake_gate.py', 'test_jev_intake.py',
+    'test_codex_routing.py', 'test_gemini_routing.py', 'test_intake_gate.py', 'test_jev_intake.py',
     'test_jev_judge.py', 'test_jev_modes.py',
     'test_jev_modes_extra.py', 'test_neverstuck_gate.py',
     'test_spawn_watchdog.py', 'test_plan_routing.py',
@@ -59,6 +65,8 @@ MIRROR_MANIFEST = (
     _ROOT_MIRROR_FILES
     + tuple(f'agents/{name}' for name in _AGENT_MIRROR_FILES)
     + tuple(f'platforms/{name}' for name in _PLATFORM_MIRROR_FILES)
+    + tuple(f'platforms/gemini-rules/{name}' for name in _GEMINI_RULE_MIRROR_FILES)
+    + tuple(f'platforms/gemini-agents/{name}' for name in _GEMINI_AGENT_MIRROR_FILES)
     + tuple(
         f'platforms/codex-agents/{name}.toml' for name in sorted(expected_agents()))
     + tuple(f'scripts/{name}' for name in _SCRIPT_MIRROR_FILES)
