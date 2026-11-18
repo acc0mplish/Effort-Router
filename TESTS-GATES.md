@@ -353,3 +353,17 @@ L6 DrvFs 지연 기록(양측 실측 — 같은 머신 WSL2): test_worktree_gate
 | C6 파일 범위·규모 | `git status --porcelain` ∧ `wc -l SKILL.md TESTS-GATES.md` | M SKILL.md 단일(verify 시점)·SKILL.md 504→509(+5)·650 경계·800 하드캡 내 |
 | 배포 | `python3 scripts/deploy_global.py` 2회 | 1회째 미러 동기·2회째 멱등(changes_total 0) — 아래 verify 기록 |
 | 검증 입력 변경 보고 | 테스트 스크립트·게이트 무접촉 — grep 게이트·스키마 대조만 적용 | 기록 완료 |
+
+## r60 경로 claim — 워크트리 횡단 쓰기 경로 배정 (2026-11-18)
+
+원 요구: `"Hermit Gate.md 우리 에포트 라우터 프로젝트에 추가하고 싶은 내용 … 고민하고 적대 검토좀 해봐 어떻게 적용할껀지"` → `"작업해봐"` (적대검토 결론 P0 결정 기록 규율 흡수 + P1 tree_gate 경로 단위 확장. P2 PR 누적 감사는 보류)
+변경: `scripts/tree_gate.py`(서브커맨드 4종 추가 — 기존 5종 무변경)·`scripts/test_tree_gate.py`(PathClaimTests T21~T32)·SKILL.md·GATES.md·README.md·CHANGELOG.md·TESTS-GATES.md. 신규 파일 0(미러 매니페스트 불변).
+| ID | 실행 명령 | 결과 |
+|---|---|---|
+| V1 | `python3 scripts/test_tree_gate.py` | Ran 31 — 실패 1(T12 — 기준선, root 실행이라 chmod 쓰기 보호 무효. 본 과업 전에도 실패) · 신규 T21~T32 12건 OK |
+| V2 | `python3 scripts/test_tree_claim_hook.py` | Ran 19, OK (기존 훅 동작 보존) |
+| V3 | `python3 scripts/test_deploy_global.py` | Ran 12, OK (매니페스트 불변) |
+| V4 | 변이 시험 — `registry_lock`의 lock 획득을 제거(0.3초 지연 삽입)한 사본으로 T29 3회 | 2/3 FAILED(경합 검출). lock 원복 후 OK — T29는 경합을 확률적으로 검출한다 |
+검증 입력 변경 고지(§3): `scripts/test_tree_gate.py`에 PathClaimTests 추가(기존 TreeGateTests T1~T20 무변경 — 상속 테스트는 None 치환으로 재실행하지 않는다).
+④리뷰: 독립 리뷰(`codex exec` gpt-6.2-sol / high)가 인증 만료(401)로 실행 불가 → 메인 셀프 순차 검토로 치환(SKILL §2 팬아웃 불가 폴백 — 독립 보증 아님). 셀프 검토 발견 3건 수선: [HIGH] `--tree` 표기 차이로 자기 claim이 타 트리로 오인돼 자기 커밋 차단·release 누락 → git toplevel 정규화+casefold 트리 해시(T32) / [HIGH] 파손 레코드 1개가 path-check exit 1로 전 커밋 차단 → path-check는 corrupt 보고만(T31) / [LOW] GATES의 T29 drvfs 실측 과장 문구 정정.
+한계: WSL↔Windows 네이티브 혼용 lock 호환·Windows msvcrt 분기는 미실측. pre-commit 스니펫은 자동 설치하지 않는다(opt-in).

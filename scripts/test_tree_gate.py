@@ -436,5 +436,244 @@ class TreeGateTests(unittest.TestCase):
         self.assertIsNone(output['saved_to'])
 
 
+# r60 문서(GATES.md '경로 claim') 수록 pre-commit 스니펫과 같은 본문 — 게이트 경로만 치환.
+PRE_COMMIT_SNIPPET = '''#!/bin/sh
+# effort-router r60 경로 claim 대조 — exit 1(범위 밖·타 claim)만 커밋 차단, 2(게이트 오류)는 통과
+python3 "{gate}" path-check --staged 1>&2
+[ $? -eq 1 ] && {{ echo "pre-commit: 경로 claim 위반 — 위 JSON의 out_of_scope·conflicts 확인" >&2; exit 1; }}
+exit 0
+'''
+
+
+class PathClaimTests(TreeGateTests):
+    """r60 경로 claim T21~T31 — 기존 fixture 재사용(상속 테스트 중복 실행 방지는 아래 삭제)."""
+
+    def path_registry(self, repo):
+        return Path(repo) / '.git' / 'effort-router-path-claims'
+
+    def path_records(self, repo):
+        return {p.name: json.loads(p.read_text(encoding='utf-8'))
+                for p in self.path_registry(repo).glob('*.json')}
+
+    def add_worktree(self, repo, name):
+        path = self.root / name
+        result = git(repo, 'worktree', 'add', '-q', str(path), '-b', name)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return path
+
+    def pclaim(self, cwd, owner, *paths, extra=()):
+        result = run_gate(cwd, 'path-claim', '--owner', owner, '--paths', *paths, *extra)
+        output = json.loads(result.stdout) if result.stdout.strip() else None
+        return result, output
+
+    def test_t21_path_claim_basics(self):
+        repo = self.make_repo()
+        result, out = self.pclaim(repo, 't-a', './src/', 'docs', 'src', extra=('--scope', 'r60'))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(out['granted'])
+        self.assertEqual(out['paths'], ['src', 'docs'])  # 정규화·중복 제거
+        (record,) = self.path_records(repo).values()
+        self.assertEqual((record['kind'], record['owner'], record['scope']),
+                         ('path-claim', 't-a', 'r60'))
+        # 절대경로(트리 내부)는 루트 기준 상대경로로 저장된다
+        result, out = self.pclaim(repo, 't-a', str(Path(repo) / 'README2.md'))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(out['added'], ['README2.md'])
+
+    def test_t22_cross_worktree_overlap_denied_all_or_nothing(self):
+        repo = self.make_repo()
+        wt = self.add_worktree(repo, 'wt-b')
+        self.assertEqual(self.pclaim(repo, 't-a', 'src')[0].returncode, 0)
+        for paths in (['SRC/main.py'], ['.'], ['src/deep/x.py']):
+            result, out = self.pclaim(wt, 't-b', *paths)
+            self.assertEqual(result.returncode, 1, paths)
+            self.assertEqual(out['flags'], ['path_claim_denied'])
+            self.assertFalse(out['granted'])
+        # 충돌 1건 + 무관 1건 → 아무것도 기록되지 않는다
+        result, out = self.pclaim(wt, 't-b', 'docs', 'src/main.py')
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(len(self.path_records(repo)), 1)
+        # 하위 먼저 보유 → 상위 요청도 거부(양방향)
+        self.assertEqual(self.pclaim(wt, 't-b', 'docs/readme.md')[0].returncode, 0)
+        self.assertEqual(self.pclaim(repo, 't-c', 'docs')[0].returncode, 1)
+        # 접두 문자열만 같은 형제 경로는 겹침 아님
+        self.assertEqual(self.pclaim(repo, 't-c', 'src2')[0].returncode, 0)
+
+    def test_t23_incremental_add_checks_only_added(self):
+        repo = self.make_repo()
+        wt = self.add_worktree(repo, 'wt-b')
+        self.assertEqual(self.pclaim(repo, 't-a', 'src')[0].returncode, 0)
+        self.assertEqual(self.pclaim(wt, 't-b', 'docs')[0].returncode, 0)
+        result, out = self.pclaim(repo, 't-a', 'src', 'docs/readme.md')
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual([c['requested'] for c in out['conflicts']], ['docs/readme.md'])
+        self.assertEqual(out['paths'], ['src'])  # 기존 배정 유지
+        result, out = self.pclaim(repo, 't-a', 'scripts')
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(out['paths'], ['src', 'scripts'])
+
+    def test_t24_stale_does_not_block_and_prune(self):
+        repo = self.make_repo()
+        wt = self.add_worktree(repo, 'wt-b')
+        self.assertEqual(self.pclaim(repo, 't-a', 'src')[0].returncode, 0)
+        (name, record) = next(iter(self.path_records(repo).items()))
+        old = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
+        (self.path_registry(repo) / name).write_text(
+            json.dumps({**record, 'updated_utc': old}), encoding='utf-8')
+        result = run_gate(repo, 'path-status')
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(json.loads(result.stdout)['flags'], ['stale_claims_present'])
+        result, out = self.pclaim(wt, 't-b', 'src/main.py')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(out['stale_overlaps'][0]['owner'], 't-a')
+        result = run_gate(repo, 'path-status', '--prune')
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout)['removed'], 1)
+        owners = {r['owner'] for r in self.path_records(repo).values()}
+        self.assertEqual(owners, {'t-b'})  # alive 불가침
+
+    def test_t25_staged_out_of_scope_conflict_and_rename(self):
+        repo = self.make_repo()
+        wt = self.add_worktree(repo, 'wt-b')
+        self.assertEqual(self.pclaim(repo, 't-a', 'src')[0].returncode, 0)
+        self.assertEqual(self.pclaim(wt, 't-b', 'docs')[0].returncode, 0)
+        write_file(wt, 'src/main.py', 'changed\n')
+        self.assertEqual(git(wt, 'add', 'src/main.py').returncode, 0)
+        result = run_gate(wt, 'path-check', '--staged')
+        self.assertEqual(result.returncode, 1)
+        out = json.loads(result.stdout)
+        self.assertEqual(out['flags'], ['out_of_scope_paths', 'foreign_path_conflict'])
+        self.assertEqual(out['out_of_scope'], ['src/main.py'])
+        self.assertEqual(git(wt, 'reset', '-q').returncode, 0)
+        # 범위 밖으로의 이동 — 새 경로가 잡힌다
+        self.assertEqual(git(wt, 'checkout', '--', 'src/main.py').returncode, 0)
+        self.assertEqual(git(wt, 'mv', 'docs/readme.md', 'notes.md').returncode, 0)
+        out = json.loads(run_gate(wt, 'path-check', '--staged').stdout)
+        self.assertIn('docs/readme.md', out['targets'])
+        self.assertEqual(out['out_of_scope'], ['notes.md'])
+        # 범위 안 이동은 통과
+        self.assertEqual(git(wt, 'mv', 'notes.md', 'docs/notes.md').returncode, 0)
+        result = run_gate(wt, 'path-check', '--staged')
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_t26_solo_without_path_claims_passes(self):
+        repo = self.make_repo()
+        write_file(repo, 'src/main.py', 'changed\n')
+        self.assertEqual(git(repo, 'add', '-A').returncode, 0)
+        result = run_gate(repo, 'path-check', '--staged')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['flags'], [])
+        self.assertFalse(self.path_registry(repo).exists())  # 읽기 전용 — 레지스트리 미생성
+
+    def test_t27_invalid_paths_and_owner_exit2(self):
+        repo = self.make_repo()
+        for bad in ('../x', 'src/*', '.git/config', '   ', str(self.root / 'outside')):
+            result, _ = self.pclaim(repo, 't-a', bad)
+            self.assertEqual(result.returncode, 2, bad)
+            self.assertIn('FAIL tree gate', result.stderr)
+            self.assertEqual(result.stdout, '')
+        result = run_gate(repo, 'path-claim', '--paths', 'src')  # owner·env 부재
+        self.assertEqual(result.returncode, 2)
+        result = run_gate(repo, 'path-claim', '--paths', 'src', env_extra={'CLAUDE_SESSION_ID': 'env-s'})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['owner'], 'env-s')
+        self.assertEqual(run_gate(repo, 'path-check').returncode, 2)  # --staged|--paths 필수
+
+    def test_t28_release_partial_full_idempotent_refusal(self):
+        repo = self.make_repo()
+        self.assertEqual(self.pclaim(repo, 't-a', 'src', 'docs')[0].returncode, 0)
+        result = run_gate(repo, 'path-release', '--owner', 't-a', '--paths', 'DOCS')
+        self.assertEqual(json.loads(result.stdout)['paths'], ['src'])
+        result = run_gate(repo, 'path-release', '--owner', 't-a')
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(self.path_records(repo), {})
+        result = run_gate(repo, 'path-release', '--owner', 't-a')
+        self.assertTrue(json.loads(result.stdout)['already_released'])
+        self.assertEqual(self.pclaim(repo, 't-a', 'src')[0].returncode, 0)
+        (name, record) = next(iter(self.path_records(repo).items()))
+        (self.path_registry(repo) / name).write_text(
+            json.dumps({**record, 'owner': 'someone-else'}), encoding='utf-8')
+        result = run_gate(repo, 'path-release', '--owner', 't-a')
+        self.assertEqual(result.returncode, 2)
+        self.assertTrue((self.path_registry(repo) / name).exists())
+
+    def test_t29_concurrent_claims_single_grant(self):
+        repo = self.make_repo()
+        procs = [subprocess.Popen(
+            [sys.executable, str(GATE), 'path-claim', '--owner', f'c{i}', '--paths', 'src'],
+            cwd=str(repo), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env=clean_env()) for i in range(8)]
+        codes = sorted(p.wait(timeout=60) for p in procs)
+        for proc in procs:
+            proc.stdout.close()
+            proc.stderr.close()
+        self.assertEqual(codes, [0] + [1] * 7)
+        self.assertEqual(len(self.path_records(repo)), 1)
+
+    def test_t30_pre_commit_snippet_blocks_out_of_scope(self):
+        repo = self.make_repo()
+        hook = Path(repo) / '.git' / 'hooks' / 'pre-commit'
+        hook.parent.mkdir(parents=True, exist_ok=True)
+        hook.write_text(PRE_COMMIT_SNIPPET.format(gate=GATE), encoding='utf-8')
+        hook.chmod(0o755)
+        self.assertEqual(self.pclaim(repo, 't-a', 'src')[0].returncode, 0)
+        write_file(repo, 'src/main.py', 'in scope\n')
+        self.assertEqual(git(repo, 'commit', '-qam', 'in').returncode, 0)
+        write_file(repo, 'docs/readme.md', 'out of scope\n')
+        result = git(repo, 'commit', '-qam', 'out')  # -a 임시 index도 대조
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('out_of_scope_paths', result.stderr)
+        # 게이트 오류(exit 2)는 커밋을 막지 않는다 — 부재 게이트 경로로 재현
+        hook.write_text(PRE_COMMIT_SNIPPET.format(gate=self.root / 'missing.py'),
+                        encoding='utf-8')
+        self.assertEqual(git(repo, 'commit', '-qam', 'bypass').returncode, 0)
+
+    def test_t31_corrupt_records(self):
+        repo = self.make_repo()
+        reg = self.path_registry(repo)
+        reg.mkdir(parents=True)
+        (reg / 'garbage.json').write_text('{not json', encoding='utf-8')
+        result, out = self.pclaim(repo, 't-a', 'src')
+        self.assertEqual(result.returncode, 1)
+        self.assertTrue(out['granted'])
+        self.assertEqual(out['flags'], ['path_registry_corrupt'])
+        # path-check는 파손을 보고만 한다 — 무관한 파손 파일이 커밋을 막지 않는다
+        result = run_gate(repo, 'path-check', '--paths', 'src/main.py')
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(json.loads(result.stdout)['corrupt'], ['garbage.json'])
+        (name,) = [n for n in self.path_records_safe(repo) if n != 'garbage.json']
+        (reg / name).write_text(json.dumps({'owner': 't-a', 'paths': 'src'}), encoding='utf-8')
+        result, _ = self.pclaim(repo, 't-a', 'docs')
+        self.assertEqual(result.returncode, 2)  # 자기 레코드 파손 = 판단 보류
+
+    def test_t32_tree_spelling_variants_are_same_tree(self):
+        repo = self.make_repo()
+        wt = self.add_worktree(repo, 'wt-b')
+        # 메인이 표기가 다른 --tree(하위 디렉터리·..)로 위임 전 배정
+        result, out = self.pclaim(repo, 't-b', 'docs', extra=('--tree', str(wt / 'src' / '..' / 'docs')))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(out['tree'], str(wt.resolve()))
+        write_file(wt, 'docs/readme.md', 'changed\n')
+        self.assertEqual(git(wt, 'add', 'docs/readme.md').returncode, 0)
+        result = run_gate(wt, 'path-check', '--staged')  # 자기 claim을 타 claim으로 오인하지 않는다
+        self.assertEqual(result.returncode, 0, result.stdout)
+        result = run_gate(repo, 'path-release', '--owner', 't-b', '--tree', str(wt))
+        self.assertFalse(json.loads(result.stdout)['already_released'])
+        self.assertEqual(self.path_records(repo), {})
+        # 다른 저장소·비저장소 트리는 거부
+        other = self.make_repo()
+        for bad in (str(other), str(self.root)):
+            result, _ = self.pclaim(repo, 't-x', 'src', extra=('--tree', bad))
+            self.assertEqual(result.returncode, 2, bad)
+
+    def path_records_safe(self, repo):
+        return [p.name for p in self.path_registry(repo).glob('*.json')]
+
+
+# 상속한 T1~T20을 PathClaimTests에서 재실행하지 않는다(fixture만 재사용).
+for _name in [n for n in vars(TreeGateTests) if n.startswith('test_')]:
+    setattr(PathClaimTests, _name, None)
+
+
 if __name__ == '__main__':
     unittest.main()

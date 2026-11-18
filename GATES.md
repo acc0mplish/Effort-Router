@@ -315,6 +315,54 @@ python3 scripts/tree_gate.py prune
 
 deny 출력은 단일 JSON 객체(`permissionDecision: "deny"`)며 사유에 pathspec 안내(`git add <경로>… / git commit -- <경로>…`)·격리 명령 원문·유령 탈출 안내("상대 claim이 유령(세션 종료)으로 보이면 tree_gate.py status 확인 후 레지스트리 파일 수동 삭제 — prune은 alive 불가침")를 담고, 신규 침입자·corrupt와 동시 성립 시 해당 줄을 사유 말미에 병합한다(경고를 별도 emit하지 않는다 — JSON 객체 1개 원칙). dry-run(`--dry-run`·add `-n`)은 실행 안 되는 명령으로 deny 제외하며, commit 값 결합 문자(`-ma`의 `a`)는 플래그로 오인하지 않고 `git -C../x`·`--git-dir=…` 결합형 귀속 불확실 세그먼트도 deny 대상에서 제외한다(재점검 트리거는 유효). **단독 세션(claim 부재)의 `git add -A`는 허용** — 오탐 0. 긴급 회수는 env `TREE_GATE_HOOKS=0`(prebash 전체 오프 — 재시작 불요; 경고만 남기는 분리 스위치는 없으며 settings 블록 제거도 경고를 함께 소멸시킨다). **알려진 한계**: 파일 수준 소유권 판정·index.lock 재시도 범위 밖, xargs·find -exec 뒤 git·스크립트 내부 git·별칭·`$()`/백틱 치환 내부 git·괄호 그룹 내부 git·`-C` 등 트리 귀속 불확실 세그먼트(deny 한정 — 재점검 트리거는 유효)·비Bash 쓰기 도구(Edit·Write — 감지 창은 SessionStart 1회 잔존)·SessionStart 통보~첫 캐시 기록 사이 침입자의 기준선 합류(경고 영구 누락 — deny는 유지)는 미감지이며, 하니스 밖(직접 터미널) git은 무관하다. 훅 케이스 전수는 `python3 scripts/test_tree_claim_hook.py`(T19~T35)에서 검증한다 — 저장소 국소 케이스는 `.claude/hooks` 부재 환경(미러)에서 skipTest로 자동 제외된다.
 
+#### 경로 claim (r60)
+
+트리 claim(r27)은 tree_hash 키라 **서로 다른 워크트리의 같은 경로 쓰기가 보이지 않는다**(r28 한계 '파일 수준 소유권'). 경로 claim은 저장소 전역 레지스트리 `$(git rev-parse --git-common-dir)/effort-router-path-claims/`에 (owner, tree, paths)를 기록해 워크트리를 가로질러 비교한다. 근거: 2026-09 타 기록자 변경 revert 사건(AGENTS.md 원장) + Hermit Gate 설계 적대검토(P1).
+
+```bash
+# 배정 — 메인이 위임 전에 task별로(경로는 트리 루트 기준, glob 금지, . = 전체)
+python3 scripts/tree_gate.py path-claim --owner <task-id> --tree <워크트리> --paths scripts/foo.py docs/foo/ [--scope <텍스트>]
+
+# 대조 — 커밋 전(스테이징) 또는 임의 경로
+python3 scripts/tree_gate.py path-check --staged
+python3 scripts/tree_gate.py path-check --paths README.md
+
+# 해제 — 완료·취소 시(worktree_gate done 직전). --paths면 일부만
+python3 scripts/tree_gate.py path-release --owner <task-id> --tree <워크트리>
+
+# 보고 / stale만 제거(alive·corrupt 불가침)
+python3 scripts/tree_gate.py path-status [--prune]
+```
+
+| 서브커맨드 | 동작 |
+|---|---|
+| `path-claim` | 전역 lock 안에서 추가분만 겹침 확인 → 겹침 0이면 기존 배정과 병합 기록(재호출 = heartbeat). alive 타 claim과 겹치면 **아무것도 기록하지 않는다**(all-or-nothing, `granted:false`). stale 타 claim과의 겹침은 막지 않고 `stale_overlaps`로 보고 |
+| `path-release` | owner 대조 후 제거(불일치·파손 거부 exit 2). 부재 시 멱등 `already_released` |
+| `path-check` | 파손 레코드는 `corrupt`로 보고만 하고 플래그로 올리지 않는다(무관한 파손 파일이 모든 커밋을 막지 않게). `--staged`(`git diff --cached --name-status -M -z` — 이동·복사는 이전·새 경로 모두, 훅에서는 상속된 `GIT_INDEX_FILE`로 `commit -a` 임시 index도 대조) 또는 `--paths`. 이 트리 claim 범위 밖 = `out_of_scope_paths`(이 트리에 경로 claim이 있을 때만), 다른 트리 alive claim과 겹침 = `foreign_path_conflict`. 읽기 전용 |
+| `path-status` | 전체 보고, stale 잔존 시 `stale_claims_present`. `--prune`은 lock 안에서 stale만 제거 |
+
+| 종료코드 | 의미 |
+|---|---|
+| 0 | 배정·해제 성공, 대조 위반 없음(경로 claim 0건인 단독 사용 포함) |
+| 1 | attention — `path_claim_denied`·`out_of_scope_paths`·`foreign_path_conflict`·`path_registry_corrupt`(path-claim·path-status만)·`stale_claims_present`. `ok:true`(절차 성공과 경고 분리 — r27 어휘) |
+| 2 | 무효 경로(빈 값·glob·트리 밖·`.git` 내부)·owner 부재·자기 레코드 파손·lock 10초 초과·git 오류 — stderr `FAIL tree gate: <사유>`, stdout 없음 |
+
+**겹침 규칙** — 경로는 POSIX normpath로 정규화하고 원래 대소문자로 저장한다. 비교는 casefold다(`/mnt/d` 등 대소문자 무시 FS의 `SKILL.md`/`skill.md` 우회 차단 — 구분 FS에서는 보수 오탐을 수용). 같은 경로·상위·하위면 겹침이고, `src`와 `src2`처럼 접두 문자열만 같은 형제는 겹침이 아니다. 절대경로는 트리 기준 상대경로로 바꾼다(트리 밖이면 exit 2). `--tree`는 같은 저장소(common-dir 일치)의 작업 트리여야 하며 git toplevel로 정규화하고, 트리 식별은 casefold 경로 해시다(표기만 다른 같은 트리가 타 트리로 오인되어 자기 커밋이 막히는 경로 차단 — T32). alive/stale 판정은 트리 claim과 같다(TTL 24시간 — updated_utc 기준, pid 전달 시 pid 생존).
+
+**원자성** — 확인과 기록은 `<레지스트리>/.lock`의 `fcntl.flock`(Windows는 `msvcrt.locking`) 안에서 한 처리다. flock은 프로세스가 죽으면 커널이 풀어주므로 stale lock이 남지 않는다. 동시 요청 배타는 T29(/tmp ext4 — 8프로세스 동시 요청 중 1건만 배정)가 검증하고, WSL drvfs(`/mnt/d`)의 flock 배타는 두 프로세스 수동 프로브로 확인했다(2026-11-18). WSL과 Windows 네이티브 프로세스가 같은 레지스트리를 동시에 쓰는 경우의 lock 호환은 미확인이다.
+
+**opt-in pre-commit 스니펫** — 하니스 무관 차단이 필요하면 `$(git rev-parse --git-common-dir)/hooks/pre-commit`에 둔다(common-dir 훅은 모든 워크트리에 적용). 게이트는 훅을 자동 설치하지 않는다(기존 훅·`core.hooksPath` 보호). exit 1만 차단하고 게이트 오류(exit 2·게이트 부재)는 통과시킨다(T30 검증 — 본문 동일):
+
+```sh
+#!/bin/sh
+# effort-router r60 경로 claim 대조 — exit 1(범위 밖·타 claim)만 커밋 차단, 2(게이트 오류)는 통과
+python3 "<skill-dir>/scripts/tree_gate.py" path-check --staged 1>&2
+[ $? -eq 1 ] && { echo "pre-commit: 경로 claim 위반 — 위 JSON의 out_of_scope·conflicts 확인" >&2; exit 1; }
+exit 0
+```
+
+**알려진 한계** — 보장은 참여 세션이 모두 배정을 거칠 때만 성립한다. `--no-verify`·worktree_gate salvage 커밋(의도적 `--no-verify`)·훅 미설치·다른 기계의 clone(레지스트리가 로컬 `.git`에만 있다)·GitHub 웹 병합은 범위 밖이다. 커밋 단계 대조라 미커밋 편집 자체는 막지 못한다. 경로는 리터럴이라 심링크 경유 별칭은 별개 경로로 본다. 레지스트리 파손 레코드는 경로를 알 수 없어 충돌 판정에서 제외하고 `path_registry_corrupt`로만 알린다(배정 마비 방지 — 자기 레코드 파손은 exit 2). scope·owner에 시크릿을 기재하지 않는다(평문 기록). PR 누적 감사(Hermit Gate P2)는 트리거 단위 데이터(merge 5/137 커밋)가 없어 보류했다. 분기 전수는 `python3 scripts/test_tree_gate.py`의 T21~T32(PathClaimTests)가 검증한다.
+
 ### 루프 탈출 게이트 (r29)
 
 `scripts/neverstuck_gate.py`는 반복 실패 루프(같은 무브류의 증상 패치 반복 — 이슈 5개 처리가 10개로 증식)의 **결정론 무장 판정 게이트**다. 시도 이력 JSON을 받아 neverstuck 프로토콜(증상 패치 금지·메커니즘 진단 강제 — 원천 NeverStuck Protocol v1) 진입 의무(armed) 여부를 판정하고, 무장 시 `contract_reminder`(③재구현 프롬프트 주입용 고정 계약 요약)를 노출한다. stdlib만 사용하며 jev·API·git·환경·외부 파일(PROTOCOL.md 포함) 무의존 — **미러 동봉 대상**이다. 서브커맨드 없음·훅 없음(무장은 사건 기반 — 동일 무브류 3회 실패·S7 관측 시점에 호출 주체가 직접 실행한다). 사용 시점·배선·무장 시 행동 계약 전문은 SKILL.md '루프 탈출 게이트(neverstuck)' 절을 따른다.

@@ -53,11 +53,11 @@ python3 scripts/dashboard_autostart.py --workspace /mnt/d/DEV/acc0mplish   # 이
 
 ## 변경 이력
 
-최근 주요 변경 3건 — 전체 기록(r1~r59·jev)은 [CHANGELOG.md](CHANGELOG.md) 참조.
+최근 주요 변경 3건 — 전체 기록(r1~r60·jev)은 [CHANGELOG.md](CHANGELOG.md) 참조.
 
+- **r60** (2026-11-18) — 경로 claim: `tree_gate.py path-claim|path-release|path-check|path-status` — 병렬 워크트리의 같은 경로 동시 쓰기를 배정 단계(전역 lock·상하위 겹침 거부)와 커밋 단계(`--staged`·opt-in pre-commit)에서 차단, 공용 문서는 메인 단일 writer
 - **r59** (2026-11-18) — Codex · ChatGPT 계획·검토·간이리뷰 모델 `gpt-6.2-sol`(`GPT-6.2-Sol` / `Sol 6.2`) 업그레이드: `gpt-6.1-sol / high` → `gpt-6.2-sol / high`(`plan-*`·`review-pr-xhigh`·`security-audit`), `gpt-6.1-sol / low` → `gpt-6.2-sol / low`(`review-pr-high`) 일괄 전환
 - **r58** (2026-11-18) — Gemini / Antigravity 정식 어댑터·전역 검증 편입: 5케이스 13조합 확장(`gemini-4-argon-medium` [`inherit`] · `gemini-4-hydrogen-high` [`pro`] · `gemini-4-argon-high` [`pro`] · `gemini-4-carbon-high` [`pro`]) · 커스텀 서브에이전트 `platforms/gemini-agents/*.md` 11종(`inheritCustomizations: false`·읽기 전용 4종 쓰기 도구 제외) · 상시 규칙 `platforms/gemini-rules/effort-router.md`(`trigger: always_on`) · 어댑터 `platforms/gemini.md` · 전역 설치 검증 `scripts/verify_gemini_install.py`·`scripts/test_gemini_routing.py` · 배포 매니페스트 72→87(`mirror_synced` 174)
-- **r57** (2026-11-02) — 반복 상한 1회·얇은 계획 6칸: ②1회(반려 시 계획 1회 수정 후 재검토 없이 ③), ④gap 재구현 1회·재리뷰 대신 확인 명령 재실행, done의 HIGH는 발생 시나리오 있는 것만 차단, round 상한 각 1회, ① 최소 기준 = 6칸(30줄)
 
 ## 구조
 
@@ -67,7 +67,7 @@ python3 scripts/dashboard_autostart.py --workspace /mnt/d/DEV/acc0mplish   # 이
 | `AGENTS.md` | 저장소 작업의 모델·에포트 정책과 역할 템플릿 오류 예방 규칙 |
 | `agents/` | Claude Code 역할 정의 11종(역할 10 + 온디맨드 `ops-supervisor`) |
 | `platforms/` | Codex·ChatGPT·Gemini(Antigravity) 실행 어댑터와 기타 하니스 파생 문서 |
-| `scripts/` | 전역 Codex·Gemini(Antigravity) 역할 라우팅·설치 검증 스크립트(verify_global_install.py·verify_gemini_install.py·test_gemini_routing.py 등) + jev 판단 계층 CLI(jev_judge.py·jev_modes.py — CLI 13종: tier·prune·escalation·memory-gate·stall·done·dup·loop·verify-run·watch·route·guard·intake) + 인테이크 게이트 CLI(intake_gate.py — 항상 켬 필수 계층) + Stagehand 게이트 CLI(stagehand_gate.py 3종) + 검증 핀 게이트 CLI(verify_pin.py + 실행 엔진 verify_exec.py) + 워크트리 수명주기 게이트 CLI(worktree_gate.py 4종: create·done·list·sweep — 디스크 보고·부산물 회수 포함) + 트리 소유 게이트 CLI(tree_gate.py 5종: claim·release·check·status·prune) + 루프 탈출 게이트 CLI(neverstuck_gate.py — 결정론 무장 판정: 무브류 3회 게이트·S7 하드 시그널·선언탐색·취향 면제) + 스폰 워치독 CLI(spawn_watchdog.py — 무진행 10분→버스트 3회→사망 확정 보고) + 프롬프트 캐시 프로브 CLI(cache_probe.py — 세션 jsonl 캐시 히트 관측: usage 숫자 화이트리스트 6필드·message.id 중복 제거·exit 0/2) |
+| `scripts/` | 전역 Codex·Gemini(Antigravity) 역할 라우팅·설치 검증 스크립트(verify_global_install.py·verify_gemini_install.py·test_gemini_routing.py 등) + jev 판단 계층 CLI(jev_judge.py·jev_modes.py — CLI 13종: tier·prune·escalation·memory-gate·stall·done·dup·loop·verify-run·watch·route·guard·intake) + 인테이크 게이트 CLI(intake_gate.py — 항상 켬 필수 계층) + Stagehand 게이트 CLI(stagehand_gate.py 3종) + 검증 핀 게이트 CLI(verify_pin.py + 실행 엔진 verify_exec.py) + 워크트리 수명주기 게이트 CLI(worktree_gate.py 4종: create·done·list·sweep — 디스크 보고·부산물 회수 포함) + 트리 소유 게이트 CLI(tree_gate.py 9종: claim·release·check·status·prune + r60 경로 claim path-claim·path-release·path-check·path-status) + 루프 탈출 게이트 CLI(neverstuck_gate.py — 결정론 무장 판정: 무브류 3회 게이트·S7 하드 시그널·선언탐색·취향 면제) + 스폰 워치독 CLI(spawn_watchdog.py — 무진행 10분→버스트 3회→사망 확정 보고) + 프롬프트 캐시 프로브 CLI(cache_probe.py — 세션 jsonl 캐시 히트 관측: usage 숫자 화이트리스트 6필드·message.id 중복 제거·exit 0/2) |
 | `TESTS.md` | 검증 프로토콜·측정 결과·라운드별 개정 이력·재현 절차(방법론 원장 — r29 하드캡 분할 이후 게이트 과업 절은 TESTS-GATES.md로, r33 분할 이후 과거 라운드 r4~r17 기록은 TESTS-ARCHIVE.md로 이동) |
 | `TESTS-ARCHIVE.md` | 과거 라운드(r4~r17) 기록 아카이브(r33 내용 불변 순수 이동) |
 | `TESTS-GATES.md` | 게이트 과업별 검증 원장(r22~r28·r29) — 원 요구·계약 요지·RED/GREEN·회귀 증거 표 |
@@ -227,7 +227,7 @@ export TYPESAFE_API_KEY='<본인 키>'
 | Stagehand (r21) | 브라우저 자동화 실행 → jev가 통과/재시도 판정 | `scripts/stagehand_gate.py --task-file <json>` |
 | 검증 핀 (r23) | 검증에 HEAD를 핀 + 테스트 파일 약화·은닉 탐지 — "옛 검증으로 새 코드 통과" 차단 | `scripts/verify_pin.py --base <앵커> --verify-cmd <테스트명령>` |
 | 워크트리 수명주기 (r24+r43) | worktree 완료 시 강제 제거 — 미커밋분은 자동 커밋 보존·디스크 보고·ignored 부산물 무인 회수(디스크 잔여 방지) | `scripts/worktree_gate.py create\|done\|list\|sweep --task <id>` |
-| 트리 소유 (r27+r28) | 여러 세션이 같은 저장소에서 작업 중임을 서로 탐지 — 상대 claim 있으면 경고 + `git add -A`류 전체 스테이징 차단 | `scripts/tree_gate.py claim\|release\|check --session <id>` |
+| 트리 소유 (r27+r28+r60) | 여러 세션이 같은 저장소에서 작업 중임을 서로 탐지 — 상대 claim 있으면 경고 + `git add -A`류 전체 스테이징 차단. r60: 병렬 워크트리 쓰기 경로 배정·커밋 범위 대조 | `scripts/tree_gate.py claim\|release\|check --session <id>` · `path-claim\|path-check --owner <task-id>` |
 | 루프 탈출 (r29) | 같은 수정 3회 실패 → 증상 패치 금지·원인 진단 강제(neverstuck) | `scripts/neverstuck_gate.py --history <이력.json>` |
 | 스폰 워치독 (r44) | 장기 스폰 무진행 감시 — 10분 무변화 → 1분 간격 3회 버스트 → 무활동 확정 보고(자동 정지 없음 — 판정·재스폰은 메인) | `scripts/spawn_watchdog.py --watch-file <경로> --repo .` |
 

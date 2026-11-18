@@ -20,6 +20,14 @@ mkdir(parents=True, exist_ok=True)(동시 첫 claim 경합 안전).
 jev의 exit 1 폴백과 정반대) · 2 config/env/git 오류(이유가 붙은 bypass — stderr
 `FAIL tree gate: <사유>`, stdout 없음. --save 실패만 stdout JSON saved_to null
 보존). exit 3은 미사용 — 판단 계층이 없어 상향 경로 자체가 없다.
+
+r60 경로 claim(path-*) — 트리 claim은 tree_hash 키라 서로 다른 워크트리의 같은
+경로 쓰기가 보이지 않는다. 경로 claim은 저장소 전역 레지스트리
+`<common-dir>/effort-router-path-claims/`에 (owner, tree, paths)를 기록하고, 확인과
+기록을 전역 lock 안에서 한 처리로 묶는다(동시 요청 2건이 모두 배정받지 않는다).
+겹침 = 정규화 경로(POSIX normpath·casefold)의 동일·상하위 접두사. 겹치면 기록하지
+않는다(all-or-nothing — path_claim_denied). path-check --staged는 스테이징 변경의
+이전·새 경로를 같은 트리 claim(범위)·타 트리 alive claim(충돌)과 대조한다.
 """
 from __future__ import annotations
 
@@ -29,13 +37,25 @@ import json
 import math
 import os
 import re
+import posixpath
 import socket
 import subprocess
 import sys
 import tempfile
+import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
+
+try:  # 전역 lock 수단 — POSIX flock 우선, Windows msvcrt 폴백(r60)
+    import fcntl
+except ImportError:  # pragma: no cover - 비POSIX
+    fcntl = None  # type: ignore[assignment]
+try:
+    import msvcrt
+except ImportError:
+    msvcrt = None  # type: ignore[assignment]
 
 GATE = 'tree-gate'
 REGISTRY_DIRNAME = 'effort-router-tree-claims'
@@ -49,6 +69,15 @@ SESSION_SANITIZE_RE = re.compile(r'[^A-Za-z0-9._-]')
 FLAG_FOREIGN = 'foreign_claim_present'
 FLAG_STALE = 'stale_claims_present'
 IS_POSIX = os.name == 'posix'
+# r60 경로 claim
+PATH_REGISTRY_DIRNAME = 'effort-router-path-claims'
+PATH_LOCK_NAME = '.lock'
+PATH_LOCK_TIMEOUT_S = 10.0
+PATH_GLOB_CHARS = frozenset('*?[')
+FLAG_PATH_DENIED = 'path_claim_denied'
+FLAG_OUT_OF_SCOPE = 'out_of_scope_paths'
+FLAG_PATH_CONFLICT = 'foreign_path_conflict'
+FLAG_PATH_CORRUPT = 'path_registry_corrupt'
 
 
 class GateConfigError(Exception):
@@ -383,6 +412,341 @@ def cmd_prune(reg: Path, args: argparse.Namespace, now: datetime) -> dict[str, A
             'dry_run': bool(args.dry_run), 'saved_to': None}
 
 
+# ------------------------------------------------------------ r60 경로 claim
+
+def path_registry_dir(common: Path) -> Path:
+    return common / PATH_REGISTRY_DIRNAME
+
+
+def path_tree_hash(tree: Path) -> str:
+    """경로 claim의 트리 식별 — casefold 경로 해시(대소문자 무시 FS에서 표기만 다른
+    같은 트리가 타 트리로 오인되면 자기 claim이 충돌로 보여 커밋이 막힌다)."""
+    return hashlib.sha256(str(tree).casefold().encode('utf-8')).hexdigest()[:16]
+
+
+def path_claim_filename(tree: Path, owner: str) -> str:
+    return f'{path_tree_hash(tree)}-{SESSION_SANITIZE_RE.sub("_", owner)[:64]}.json'
+
+
+def resolve_path_tree(raw: str | None, common: Path) -> Path:
+    """경로 claim 대상 트리 — --tree는 같은 저장소(common-dir 일치)의 작업 트리여야
+    하며 git toplevel로 정규화한다(하위 디렉터리·`..` 표기 차이 흡수)."""
+    if raw is None:
+        return resolve_tree(None)
+    top = run_git('-C', raw, 'rev-parse', '--path-format=absolute', '--show-toplevel')
+    other = run_git('-C', raw, 'rev-parse', '--path-format=absolute', '--git-common-dir')
+    if top.returncode != 0 or other.returncode != 0:
+        raise GateConfigError(f'--tree가 git 작업 트리가 아니다: {raw!r} — '
+                              + git_reason(top if top.returncode else other))
+    if str(Path(other.stdout.strip()).resolve()).casefold() != str(common).casefold():
+        raise GateConfigError(f'--tree가 다른 저장소의 트리다: {raw!r}')
+    return Path(top.stdout.strip()).resolve()
+
+
+def normalize_claim_path(raw: str, tree: Path) -> str:
+    """claim 경로 정규화 — 트리 루트 기준 POSIX 상대경로(원래 대소문자 보존).
+    '.'은 트리 전체. 빈 값·glob 문자·트리 밖(..·절대경로)·.git 내부는 거부한다."""
+    text = raw.strip()
+    if not text:
+        raise GateConfigError('빈 경로는 claim할 수 없다')
+    if PATH_GLOB_CHARS & set(text):
+        raise GateConfigError(f'glob 문자는 금지다(디렉터리 접두사로 지정): {raw!r}')
+    if os.path.isabs(text):
+        text = os.path.relpath(os.path.realpath(text), str(tree))
+    text = text.replace('\\', '/')
+    norm = posixpath.normpath(text)
+    if norm == '..' or norm.startswith('../') or norm.startswith('/'):
+        raise GateConfigError(f'트리 밖 경로는 claim할 수 없다: {raw!r}')
+    if norm.split('/', 1)[0].casefold() == '.git':
+        raise GateConfigError(f'.git 내부 경로는 claim할 수 없다: {raw!r}')
+    return norm
+
+
+def _key(path: str) -> str:
+    """비교 키 — casefold(대소문자 무시 FS의 우회 차단. 구분 FS에서는 보수 오탐)."""
+    return path.casefold()
+
+
+def path_contains(outer: str, inner: str) -> bool:
+    """outer가 inner와 같거나 상위 경로인가('.' = 트리 전체)."""
+    ko, ki = _key(outer), _key(inner)
+    return ko == '.' or ko == ki or ki.startswith(ko + '/')
+
+
+def paths_overlap(left: str, right: str) -> bool:
+    return path_contains(left, right) or path_contains(right, left)
+
+
+def _try_lock(fd: int) -> bool:
+    """비차단 lock 1회 시도 — 경합이면 False, lock 수단 오류는 GateConfigError."""
+    if fcntl is not None:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        except OSError as error:
+            raise GateConfigError(f'경로 claim lock 실패 — {error}') from error
+        return True
+    if msvcrt is not None:  # pragma: no cover - Windows
+        try:
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        except OSError:
+            return False
+        return True
+    raise GateConfigError('이 플랫폼에는 파일 lock 수단이 없다(fcntl·msvcrt 부재)')
+
+
+def _unlock(fd: int) -> None:
+    try:
+        if fcntl is not None:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        elif msvcrt is not None:  # pragma: no cover - Windows
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+    except OSError:
+        pass  # close가 lock을 해제한다
+
+
+@contextmanager
+def registry_lock(reg: Path, timeout_s: float = PATH_LOCK_TIMEOUT_S) -> Iterator[None]:
+    """경로 레지스트리 전역 lock — 확인과 기록을 한 처리 단위로 묶는다. flock은
+    프로세스 종료 시 커널이 해제하므로 stale lock 파손 경로가 없다. 대기 상한 초과는
+    GateConfigError(exit 2 — 판정 불가를 배정으로 바꾸지 않는다)."""
+    try:
+        reg.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(reg / PATH_LOCK_NAME), os.O_CREAT | os.O_RDWR, 0o644)
+    except OSError as error:
+        raise GateConfigError(f'경로 claim lock 파일을 열 수 없다({reg}) — {error}') from error
+    try:
+        deadline = time.monotonic() + timeout_s
+        while not _try_lock(fd):
+            if time.monotonic() >= deadline:
+                raise GateConfigError(
+                    f'경로 claim lock 대기 {timeout_s:.0f}초 초과 — 다른 claim 처리가 '
+                    '끝나지 않았다(재시도)')
+            time.sleep(0.05)
+        try:
+            yield
+        finally:
+            _unlock(fd)
+    finally:
+        os.close(fd)
+
+
+def scan_path_claims(reg: Path, ttl_hours: float,
+                     now: datetime) -> tuple[list[dict[str, Any]], list[str]]:
+    """경로 레지스트리 전수 판독 — (레코드+판정 목록, corrupt 파일명 목록).
+    paths가 문자열 목록이 아닌 레코드는 corrupt다(판독 불가 = 판단 보류)."""
+    entries: list[dict[str, Any]] = []
+    corrupt: list[str] = []
+    if not reg.is_dir():
+        return entries, corrupt
+    for path in sorted(reg.glob('*.json')):
+        record = read_claim(path)
+        paths = record.get('paths') if record is not None else None
+        if record is None or not isinstance(paths, list) \
+                or not all(isinstance(p, str) for p in paths):
+            corrupt.append(path.name)
+            continue
+        judgement = judge_claim(record, ttl_hours, now)
+        entries.append({'file': path.name, 'record': record, **judgement})
+    return entries, corrupt
+
+
+def _entry_view(entry: dict[str, Any]) -> dict[str, Any]:
+    record = entry['record']
+    return {'owner': record.get('owner'), 'tree': record.get('tree'),
+            'paths': record.get('paths'), 'scope': record.get('scope'),
+            'updated_utc': record.get('updated_utc'), 'state': entry['state'],
+            'pid_check': entry['pid_check'], 'file': entry['file']}
+
+
+def _path_result(subcommand: str, tree: Path | None, owner: str | None,
+                 flags: list[str], corrupt: list[str], **extra: Any) -> dict[str, Any]:
+    if corrupt and FLAG_PATH_CORRUPT not in flags:
+        flags = [*flags, FLAG_PATH_CORRUPT]
+    return {'ok': True, 'gate': GATE, 'subcommand': subcommand,
+            'tree': str(tree) if tree is not None else None, 'owner': owner,
+            'flags': flags, 'corrupt': corrupt, **extra, 'saved_to': None}
+
+
+def cmd_path_claim(common: Path, args: argparse.Namespace, owner: str,
+                   now: datetime) -> dict[str, Any]:
+    """path-claim — 경로 배정. 전역 lock 안에서 (추가분) 겹침 확인 → 겹침 0이면
+    기존 배정과 병합 기록. 겹치면 아무것도 기록하지 않는다(path_claim_denied, exit 1).
+    stale 타 claim과의 겹침은 배정을 막지 않고 stale_overlaps로만 보고한다."""
+    tree = resolve_path_tree(args.tree, common)
+    requested: list[str] = []
+    for raw in args.paths:
+        norm = normalize_claim_path(raw, tree)
+        if all(_key(norm) != _key(p) for p in requested):
+            requested.append(norm)
+    reg = path_registry_dir(common)
+    own_name = path_claim_filename(tree, owner)
+    with registry_lock(reg):
+        entries, corrupt = scan_path_claims(reg, args.ttl_hours, now)
+        own_file = reg / own_name
+        existing = read_claim(own_file) if own_file.exists() else None
+        if own_file.exists() and own_name in corrupt:
+            raise GateConfigError(f'자기 경로 claim 레코드 파손 — 수동 확인 필요: {own_name}')
+        if existing is not None and existing.get('owner') != owner:
+            raise GateConfigError(f'경로 claim 파일명 충돌 — owner 불일치: {own_name}')
+        held = list(existing.get('paths', [])) if existing is not None else []
+        added = [p for p in requested if all(_key(p) != _key(h) for h in held)]
+        conflicts: list[dict[str, Any]] = []
+        stale_overlaps: list[dict[str, Any]] = []
+        for entry in entries:
+            if entry['file'] == own_name:
+                continue
+            record = entry['record']
+            for theirs in record['paths']:
+                for mine in added:
+                    if not paths_overlap(mine, theirs):
+                        continue
+                    item = {'requested': mine, 'held': theirs,
+                            'owner': record.get('owner'), 'tree': record.get('tree'),
+                            'scope': record.get('scope')}
+                    (conflicts if entry['state'] == 'alive' else stale_overlaps).append(item)
+        if conflicts:
+            return _path_result('path-claim', tree, owner, [FLAG_PATH_DENIED], corrupt,
+                                granted=False, paths=held, added=[],
+                                conflicts=conflicts, stale_overlaps=stale_overlaps)
+        stamp = utc_now()
+        if existing is not None:
+            record = {**existing, 'paths': held + added, 'updated_utc': stamp}
+            if args.scope is not None:
+                record['scope'] = args.scope
+            if args.pid is not None:
+                record['pid'] = args.pid
+        else:
+            record = {'version': 1, 'gate': GATE, 'kind': 'path-claim',
+                      'owner': owner, 'tree': str(tree), 'tree_hash': path_tree_hash(tree),
+                      'paths': added, 'scope': args.scope,
+                      'hostname': socket.gethostname(), 'pid': args.pid,
+                      'claimed_utc': stamp, 'updated_utc': stamp}
+        write_claim_atomic(own_file, record)
+    return _path_result('path-claim', tree, owner, [], corrupt, granted=True,
+                        paths=record['paths'], added=added, conflicts=[],
+                        stale_overlaps=stale_overlaps)
+
+
+def cmd_path_release(common: Path, args: argparse.Namespace,
+                     owner: str) -> dict[str, Any]:
+    """path-release — 자기 경로 배정 해제(--paths 지정 시 그 경로만). owner 대조·
+    파손 거부는 release와 같다. 부재 시 멱등 already_released."""
+    tree = resolve_path_tree(args.tree, common)
+    reg = path_registry_dir(common)
+    own_file = reg / path_claim_filename(tree, owner)
+    with registry_lock(reg):
+        record = read_claim(own_file)
+        if record is None:
+            if own_file.exists():
+                raise GateConfigError(
+                    f'path-release 거부 — 레코드 파손으로 소유를 검증할 수 없다: '
+                    f'{own_file.name}(수동 확인 후 제거)')
+            return _path_result('path-release', tree, owner, [], [],
+                                already_released=True, paths=[])
+        if record.get('owner') != owner:
+            raise GateConfigError(
+                f'path-release 거부 — 레코드 owner 불일치: {own_file.name}')
+        held = [p for p in record.get('paths', []) if isinstance(p, str)]
+        if args.paths:
+            drop = {_key(normalize_claim_path(raw, tree)) for raw in args.paths}
+            remain = [p for p in held if _key(p) not in drop]
+        else:
+            remain = []
+        try:
+            if remain:
+                write_claim_atomic(own_file, {**record, 'paths': remain,
+                                              'updated_utc': utc_now()})
+            else:
+                own_file.unlink()
+        except OSError as error:
+            raise GateConfigError(f'경로 claim 제거 실패({own_file}) — {error}') from error
+    return _path_result('path-release', tree, owner, [], [], already_released=False,
+                        paths=remain)
+
+
+def staged_paths(tree: Path) -> list[str]:
+    """스테이징 변경 경로 — 이름 변경·복사는 이전·새 경로 모두(-z 파싱).
+    훅 실행 시 상속된 GIT_INDEX_FILE(commit -a·commit <경로>의 임시 index)을 따른다."""
+    completed = run_git('diff', '--cached', '--name-status', '-M', '-z', cwd=str(tree))
+    if completed.returncode != 0:
+        raise GateConfigError('스테이징 변경 조회 실패 — ' + git_reason(completed))
+    tokens = [t for t in completed.stdout.split('\0')]
+    paths: list[str] = []
+    index = 0
+    while index < len(tokens) and tokens[index]:
+        status = tokens[index]
+        width = 2 if status[:1] in ('R', 'C') else 1
+        paths.extend(tokens[index + 1:index + 1 + width])
+        index += 1 + width
+    return [p for p in paths if p]
+
+
+def cmd_path_check(common: Path, args: argparse.Namespace,
+                   now: datetime) -> dict[str, Any]:
+    """path-check — 대상 경로(--staged 또는 --paths)를 대조한다.
+    out_of_scope_paths: 이 트리에 경로 claim이 있는데 그 범위 밖인 경로.
+    foreign_path_conflict: 다른 트리의 alive 경로 claim과 겹치는 경로.
+    경로 claim이 없는 단독 사용은 항상 통과한다(오탐 0 — opt-in). 파손 레코드는 corrupt로
+    보고만 하고 플래그로 올리지 않는다(무관한 파손 파일 1개가 모든 커밋을 막지 않게 —
+    플래그는 path-status가 낸다)."""
+    tree = resolve_path_tree(args.tree, common)
+    if args.staged:
+        targets = staged_paths(tree)
+    else:
+        targets = [normalize_claim_path(raw, tree) for raw in args.paths]
+    entries, corrupt = scan_path_claims(path_registry_dir(common), args.ttl_hours, now)
+    current = path_tree_hash(tree)
+    own = [p for e in entries if e['record'].get('tree_hash') == current
+           for p in e['record']['paths']]
+    foreign = [e for e in entries
+               if e['record'].get('tree_hash') != current and e['state'] == 'alive']
+    out_of_scope = [t for t in targets
+                    if own and not any(path_contains(p, t) for p in own)]
+    conflicts = [{'path': t, 'held': theirs, 'owner': e['record'].get('owner'),
+                  'tree': e['record'].get('tree')}
+                 for t in targets for e in foreign for theirs in e['record']['paths']
+                 if paths_overlap(t, theirs)]
+    flags = []
+    if out_of_scope:
+        flags.append(FLAG_OUT_OF_SCOPE)
+    if conflicts:
+        flags.append(FLAG_PATH_CONFLICT)
+    return {'ok': True, 'gate': GATE, 'subcommand': 'path-check', 'tree': str(tree),
+            'owner': None, 'flags': flags, 'corrupt': corrupt, 'targets': targets,
+            'own_paths': own, 'out_of_scope': out_of_scope, 'conflicts': conflicts,
+            'saved_to': None}
+
+
+def cmd_path_status(common: Path, args: argparse.Namespace,
+                    now: datetime) -> dict[str, Any]:
+    """path-status — 경로 claim 전체 보고. --prune이면 stale만 제거(alive·corrupt
+    불가침, lock 안). stale 잔존 보고는 stale_claims_present(prune 유도)."""
+    reg = path_registry_dir(common)
+    removed = 0
+    if args.prune:
+        with registry_lock(reg):
+            entries, corrupt = scan_path_claims(reg, args.ttl_hours, now)
+            for entry in entries:
+                if entry['state'] != 'stale':
+                    continue
+                try:
+                    (reg / entry['file']).unlink()
+                except OSError as error:
+                    raise GateConfigError(
+                        f"경로 claim 제거 실패({entry['file']}) — {error}") from error
+                removed += 1
+    else:
+        entries, corrupt = scan_path_claims(reg, args.ttl_hours, now)
+    claims = [_entry_view(e) for e in entries]
+    stale = [c for c in claims if c['state'] == 'stale']
+    flags = [FLAG_STALE] if stale and not args.prune else []
+    return _path_result('path-status', None, None, flags, corrupt, claims=claims,
+                        stale_claims=stale, removed=removed)
+
+
 # ------------------------------------------------------------------ CLI 출력
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -423,6 +787,39 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     prune = sub.add_parser('prune', help='stale claim만 제거(alive 불가침)')
     prune.add_argument('--dry-run', action='store_true', help='보고만(무변경)')
     add_common(prune)
+
+    # r60 경로 claim — 경로는 트리 루트 기준(cwd 기준 아님)
+    def add_path_owner(target: argparse.ArgumentParser) -> None:
+        target.add_argument('--owner', help='배정 주체 id(task-id 권장 — 미지정 시 '
+                                            'CLAUDE_SESSION_ID 폴백)')
+        target.add_argument('--tree', help='배정 대상 작업 트리(기본: cwd의 git toplevel '
+                                           '— 위임 전 메인이 워크트리 경로로 지정 가능)')
+
+    path_claim = sub.add_parser('path-claim', help='경로 배정(전역 lock·겹침 시 미기록)')
+    add_path_owner(path_claim)
+    path_claim.add_argument('--paths', nargs='+', required=True,
+                            help='트리 루트 기준 파일·디렉터리 경로(glob 금지, . = 전체)')
+    path_claim.add_argument('--scope', help='작업 스코프 설명(선택 — 시크릿 기재 금지)')
+    path_claim.add_argument('--pid', type=int, help='래퍼·세션 프로세스 pid(선택)')
+    add_common(path_claim)
+
+    path_release = sub.add_parser('path-release', help='경로 배정 해제(멱등·소유 대조)')
+    add_path_owner(path_release)
+    path_release.add_argument('--paths', nargs='+', help='일부만 해제(미지정 시 전체)')
+    add_common(path_release)
+
+    path_check = sub.add_parser('path-check', help='스테이징·지정 경로의 범위·충돌 대조')
+    path_check.add_argument('--tree', help='대조 트리(기본: cwd의 git toplevel)')
+    mode = path_check.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--staged', action='store_true',
+                      help='스테이징 변경(이동은 이전·새 경로 모두)')
+    mode.add_argument('--paths', nargs='+', help='트리 루트 기준 경로')
+    add_common(path_check)
+
+    path_status = sub.add_parser('path-status', help='경로 claim 전체 보고')
+    path_status.add_argument('--prune', action='store_true',
+                             help='stale 경로 claim만 제거(alive·corrupt 불가침)')
+    add_common(path_status)
     return parser.parse_args(argv)
 
 
@@ -474,8 +871,24 @@ def main(argv: list[str] | None = None) -> None:
                                                            required=False), now)
         elif args.subcommand == 'status':
             result = cmd_status(reg, args, now)
-        else:
+        elif args.subcommand == 'prune':
             result = cmd_prune(reg, args, now)
+        elif args.subcommand in ('path-claim', 'path-release'):
+            owner = args.owner if args.owner is not None \
+                else os.environ.get('CLAUDE_SESSION_ID')
+            if owner is None:
+                raise GateConfigError('--owner가 필요하다(task-id 권장 — '
+                                      'CLAUDE_SESSION_ID 환경변수 폴백 가능)')
+            owner = validate_session(owner, required=True)
+            if args.subcommand == 'path-claim':
+                validate_pid(args.pid)
+                result = cmd_path_claim(common, args, owner, now)
+            else:
+                result = cmd_path_release(common, args, owner)
+        elif args.subcommand == 'path-check':
+            result = cmd_path_check(common, args, now)
+        else:
+            result = cmd_path_status(common, args, now)
     except GateConfigError as error:
         fail_config(str(error))
     emit(result, args.save)
