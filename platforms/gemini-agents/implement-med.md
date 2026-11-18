@@ -1,7 +1,7 @@
 ---
 name: implement-med
-description: M티어 루틴 구현 전용 — Gemini 4 Carbon (High) 상속(inherit). 계획이 확정된 2~5파일 기능 추가·리팩터링·분기 로직 수정 실행에 사용.
-model: inherit
+description: M티어 루틴 구현 전용 — 목표 모델 Gemini 4 Hydrogen (High) / 서브에이전트 pro 티어. 계획이 확정된 2~5파일 기능 추가·리팩터링·분기 로직 수정 실행에 사용.
+model: pro
 subagent: true
 mainAgent: false
 inheritCustomizations: false

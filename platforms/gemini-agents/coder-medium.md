@@ -1,7 +1,7 @@
 ---
 name: coder-medium
-description: 코드 작성 전용 — Gemini 4 Carbon (High) 상속(inherit). 루틴한 구현, 리팩터링, 테스트 작성에 사용.
-model: inherit
+description: 코드 작성 전용 — 목표 모델 Gemini 4 Hydrogen (High) / 서브에이전트 pro 티어. 루틴한 구현, 리팩터링, 테스트 작성에 사용.
+model: pro
 subagent: true
 mainAgent: false
 inheritCustomizations: false

@@ -1,6 +1,6 @@
 ---
 name: plan-adversary-xhigh
-description: L/XL티어 계획 검토 전용 적대적 리뷰어 — 목표 모델 Gemini 4 Hydrogen (XHigh) / 서브에이전트 pro 티어(읽기 전용). 계획의 결함·누락·위험 발굴에 사용.
+description: L/XL티어 계획 검토 전용 적대적 리뷰어 — 목표 모델 Gemini 4 Carbon (High) / 서브에이전트 pro 티어(읽기 전용). 계획의 결함·누락·위험 발굴에 사용.
 model: pro
 subagent: true
 mainAgent: false

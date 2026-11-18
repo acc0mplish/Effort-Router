@@ -1,6 +1,6 @@
 ---
 name: security-audit
-description: 보안 감사·출시 검토 전용 — 목표 모델 Gemini 4 Hydrogen (XHigh) / 서브에이전트 pro 티어(읽기 전용). 취약점·데이터 노출·권한 문제 전수 점검에 사용.
+description: 보안 감사·출시 검토 전용 — 목표 모델 Gemini 4 Carbon (High) / 서브에이전트 pro 티어(읽기 전용). 취약점·데이터 노출·권한 문제 전수 점검에 사용.
 model: pro
 subagent: true
 mainAgent: false

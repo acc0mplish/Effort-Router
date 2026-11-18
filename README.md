@@ -47,7 +47,7 @@ python3 scripts/dashboard_autostart.py --workspace /mnt/d/DEV/acc0mplish   # 이
 
 최근 주요 변경 3건 — 전체 기록(r1~r58·jev)은 [CHANGELOG.md](CHANGELOG.md) 참조.
 
-- **r58** (2026-11-18) — Gemini / Antigravity 정식 어댑터·전역 검증 편입: 5케이스 12조합 확장(`gemini-4-carbon-high` [`inherit`] · `gemini-4-hydrogen-xhigh` [`pro`] · `gemini-4-carbon-low` [`flash`]) · 커스텀 서브에이전트 `platforms/gemini-agents/*.md` 11종(`inheritCustomizations: false`·읽기 전용 4종 쓰기 도구 제외) · 상시 규칙 `platforms/gemini-rules/effort-router.md`(`trigger: always_on`) · 어댑터 `platforms/gemini.md` · 전역 설치 검증 `scripts/verify_gemini_install.py`·`scripts/test_gemini_routing.py` · 배포 매니페스트 72→87(`mirror_synced` 174)
+- **r58** (2026-11-18) — Gemini / Antigravity 정식 어댑터·전역 검증 편입: 5케이스 13조합 확장(`gemini-4-argon-medium` [`inherit`] · `gemini-4-hydrogen-high` [`pro`] · `gemini-4-argon-high` [`pro`] · `gemini-4-carbon-high` [`pro`]) · 커스텀 서브에이전트 `platforms/gemini-agents/*.md` 11종(`inheritCustomizations: false`·읽기 전용 4종 쓰기 도구 제외) · 상시 규칙 `platforms/gemini-rules/effort-router.md`(`trigger: always_on`) · 어댑터 `platforms/gemini.md` · 전역 설치 검증 `scripts/verify_gemini_install.py`·`scripts/test_gemini_routing.py` · 배포 매니페스트 72→87(`mirror_synced` 174)
 - **r57** (2026-11-02) — 반복 상한 1회·얇은 계획 6칸: ②1회(반려 시 계획 1회 수정 후 재검토 없이 ③), ④gap 재구현 1회·재리뷰 대신 확인 명령 재실행, done의 HIGH는 발생 시나리오 있는 것만 차단, round 상한 각 1회, ① 최소 기준 = 6칸(30줄)
 - **r50** (2026-10-22) — 스폰 워치독 LOW 6건 수선: `dead_confirmed` 응답 `confirmed_at`(무활동 확정 판정 시각 — 스냅샷 timestamp와 독립) 신설 · 버스트 중 감시 신호 전량 소실 `burst.signals_lost` 병기 · 데드 조건부 제거·watch/단발 흐름 명시·SIGINT 경합 창 축소·테스트 위생(W8·W9)
 
@@ -237,7 +237,7 @@ python3 scripts/dashboard_server.py --port 0   # OS 할당 포트 — stdout REA
 
 ## 모델 매핑
 
-5케이스(① Claude Code · ② Claude Code + GLM · ③ ChatGPT 앱 & Codex · ④ ZCode · ⑤ Gemini / Antigravity)에서 허용하는 조합은 12개뿐이다. 역할 파일과 어댑터는 이 밖의 조합을 쓰지 않는다(`scripts/test_model_combos.py`가 강제).
+5케이스(① Claude Code · ② Claude Code + GLM · ③ ChatGPT 앱 & Codex · ④ ZCode · ⑤ Gemini / Antigravity)에서 허용하는 조합은 13개뿐이다. 역할 파일과 어댑터는 이 밖의 조합을 쓰지 않는다(`scripts/test_model_combos.py`가 강제).
 
 | 케이스 | 허용 조합 | 역할 배분 |
 |---|---|---|
@@ -250,9 +250,10 @@ python3 scripts/dashboard_server.py --port 0   # OS 할당 포트 — stdout REA
 | ② Claude Code + GLM · ④ ZCode | `glm-5.3-flash / max` | 반복 구현 (`coder-medium`·`implement-med`) |
 | ② Claude Code + GLM · ④ ZCode | `glm-5.3 / max` | 임계경로·코어 구현, 최고 판정·보안 |
 | ② Claude Code + GLM · ④ ZCode | `glm-5.3 / high` | 일반 계획·S/M 리뷰 |
-| ⑤ Gemini·Antigravity | `gemini-4-carbon-high (inherit)` | 일반 구현·감시 기본값 (`coder-medium`·`implement-*`·`core-xhigh`·`ops-supervisor`) |
-| ⑤ Gemini·Antigravity | `gemini-4-hydrogen-xhigh (pro)` | 계획·적대검토·심층 리뷰·보안감사 (`plan-*`·`review-pr-xhigh`·`security-audit`) |
-| ⑤ Gemini·Antigravity | `gemini-4-carbon-low (flash)` | S/M 간이 리뷰 (`review-pr-high`) |
+| ⑤ Gemini·Antigravity | `gemini-4-argon-medium (inherit)` | 메인 기본 세션 · 감시 (`ops-supervisor`) |
+| ⑤ Gemini·Antigravity | `gemini-4-hydrogen-high (pro)` | 루틴·일반 구현 (`coder-medium`·`implement-med`) |
+| ⑤ Gemini·Antigravity | `gemini-4-argon-high (pro)` | XL 임계경로·코어 구현 (`implement-xhigh`·`core-xhigh`) · S/M 간이 리뷰 (`review-pr-high`) |
+| ⑤ Gemini·Antigravity | `gemini-4-carbon-high (pro)` | 계획·적대검토·심층 리뷰·보안감사 (`plan-*`·`review-pr-xhigh`·`security-audit`) |
 
 `python3 scripts/configure_codex_plan.py --apply`는 Codex 역할 매핑을 백업과 함께 적용한다. 상세 설정과 검증은 [Codex adapter](platforms/codex.md)를 따른다. Gemini / Antigravity 전역 설치 검증(`python3 scripts/verify_gemini_install.py --require-agy`)과 상세 설정은 [Gemini adapter](platforms/gemini.md)를 따른다. 역할별 GLM 조합 표는 [GLM adapter](platforms/glm.md).
 

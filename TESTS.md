@@ -265,7 +265,7 @@ TDD 해당 없음(문서 과업) — 대체 확인 수단 V1~V6이 verify를 구
 샌드박스 핵심 7종 회귀 및 정합 실측:
 | ID | 실행 명령 | 결과 |
 |---|---|---|
-| T1 | `python3 scripts/test_model_combos.py` | exit 0 — Ran 12 tests, OK (5케이스 12조합 · Claude 11 · Codex 10 · GLM 10 · Gemini 11) |
+| T1 | `python3 scripts/test_model_combos.py` | exit 0 — Ran 12 tests, OK (5케이스 13조합 · Claude 11 · Codex 10 · GLM 10 · Gemini 11) |
 | T2 | `python3 scripts/test_gemini_routing.py` | exit 0 — Ran 7 tests, OK (격리 `GEMINI_HOME` · 누락 · `OSError` · 도구위반 · `--require-agy`) |
 | T3 | `python3 scripts/test_deploy_global.py` | exit 0 — Ran 12 tests, OK (`MIRROR_MANIFEST == 87`, `mirror_synced == 174`) |
 | T4 | `python3 scripts/test_codex_routing.py` | exit 0 — Ran 1 test, OK (`custom agents: 10/10`) |
@@ -275,5 +275,5 @@ TDD 해당 없음(문서 과업) — 대체 확인 수단 V1~V6이 verify를 구
 | T8 | `grep -n "Gemini" SKILL.md README.md platforms/README.md CHANGELOG.md TESTS.md && test ! -e platforms/qwen.md && test ! -e platforms/grok.md` | exit 0 — 5문서 전건 히트 · 동결 `qwen.md`·`grok.md` 부재 확인 |
 | T9 | 호스트 `python3 scripts/deploy_global.py` + `python3 scripts/verify_gemini_install.py --require-agy` | exit 0 — G1~G4 PASS (`mirror_synced == 174`, 재실행 `changes_total == 0`) · Gemini `11/11 validated` (`agy plugin validate` 오류 0) · 4방향 미러 잔존 `qwen.md`·`grok.md` 정리 |
 
-검증 입력 변경 고지(§7): `scripts/test_model_combos.py`(허용 조합 9→12개 확장: `ALLOWED_GEMINI` 3종·`EXPECTED_GEMINI_ROLE` 11종·`READONLY_GEMINI_ROLES` 4종 추가 — 기존 `ALLOWED_CLAUDE`·`ALLOWED_CODEX`·`ALLOWED_GLM` 9조합 단언 불변) 및 `scripts/test_deploy_global.py:132`(`MIRROR_MANIFEST` 72→87 확장에 따른 `report['mirror_synced']` 기대치 `144→174` 정합 갱신 — 기존 `test_a`–`test_k`·`SnapshotCollisionTests` 무변경).
+검증 입력 변경 고지(§7): `scripts/test_model_combos.py`(허용 조합 9→13개 확장: `ALLOWED_GEMINI` 4종[`gemini-4-argon-medium`·`gemini-4-hydrogen-high`·`gemini-4-argon-high`·`gemini-4-carbon-high`]·`EXPECTED_GEMINI_ROLE` 11종·`READONLY_GEMINI_ROLES` 4종 추가 — 기존 `ALLOWED_CLAUDE`·`ALLOWED_CODEX`·`ALLOWED_GLM` 9조합 단언 불변) 및 `scripts/test_deploy_global.py:132`(`MIRROR_MANIFEST` 72→87 확장에 따른 `report['mirror_synced']` 기대치 `144→174` 정합 갱신 — 기존 `test_a`–`test_k`·`SnapshotCollisionTests` 무변경).
 역사 원기록 보존 주석: 위 r31 `R8` 행(`TESTS.md:182`, `동결 어댑터 diff(chat-app·zcode·gemini·qwen·grok) | 0행`)은 r31 당시 실측 원기록으로 바이트 무수정 보존한다. `gemini`는 2026-10-12 구형 삭제 후 2026-11-18 `r58`에서 Google Antigravity 기준으로 재구축·활성화되었으며, `qwen`·`grok`은 동결(미복원) 상태를 유지한다.

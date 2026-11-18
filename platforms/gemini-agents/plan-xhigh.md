@@ -1,6 +1,6 @@
 ---
 name: plan-xhigh
-description: L/XL티어 구현 전 아키텍처 수준 계획 작성 전용 — 목표 모델 Gemini 4 Hydrogen (XHigh) / 서브에이전트 pro 티어. 코어 엔진·전면 리팩터링 계획에 사용.
+description: L/XL티어 구현 전 아키텍처 수준 계획 작성 전용 — 목표 모델 Gemini 4 Carbon (High) / 서브에이전트 pro 티어. 코어 엔진·전면 리팩터링 계획에 사용.
 model: pro
 subagent: true
 mainAgent: false

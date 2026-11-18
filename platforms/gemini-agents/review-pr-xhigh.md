@@ -1,6 +1,6 @@
 ---
 name: review-pr-xhigh
-description: L/XL티어 심층 PR·diff 리뷰 전용 — 목표 모델 Gemini 4 Hydrogen (XHigh) / 서브에이전트 pro 티어(읽기 전용). 대형 변경·고위험 코어 모듈 리뷰에 사용.
+description: L/XL티어 심층 PR·diff 리뷰 전용 — 목표 모델 Gemini 4 Carbon (High) / 서브에이전트 pro 티어(읽기 전용). 대형 변경·고위험 코어 모듈 리뷰에 사용.
 model: pro
 subagent: true
 mainAgent: false

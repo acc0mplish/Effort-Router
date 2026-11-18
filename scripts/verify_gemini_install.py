@@ -12,17 +12,17 @@ import sys
 import tempfile
 
 EXPECTED_ROLES: dict[str, tuple[str, str, bool]] = {
-    "coder-medium": ("gemini-4-carbon-high", "inherit", False),
-    "implement-med": ("gemini-4-carbon-high", "inherit", False),
-    "implement-xhigh": ("gemini-4-carbon-high", "inherit", False),
-    "core-xhigh": ("gemini-4-carbon-high", "inherit", False),
-    "ops-supervisor": ("gemini-4-carbon-high", "inherit", False),
-    "plan-high": ("gemini-4-hydrogen-xhigh", "pro", False),
-    "plan-xhigh": ("gemini-4-hydrogen-xhigh", "pro", False),
-    "plan-adversary-xhigh": ("gemini-4-hydrogen-xhigh", "pro", True),
-    "review-pr-high": ("gemini-4-carbon-low", "flash", True),
-    "review-pr-xhigh": ("gemini-4-hydrogen-xhigh", "pro", True),
-    "security-audit": ("gemini-4-hydrogen-xhigh", "pro", True),
+    "coder-medium": ("gemini-4-hydrogen-high", "pro", False),
+    "implement-med": ("gemini-4-hydrogen-high", "pro", False),
+    "implement-xhigh": ("gemini-4-argon-high", "pro", False),
+    "core-xhigh": ("gemini-4-argon-high", "pro", False),
+    "ops-supervisor": ("gemini-4-argon-medium", "inherit", False),
+    "plan-high": ("gemini-4-carbon-high", "pro", False),
+    "plan-xhigh": ("gemini-4-carbon-high", "pro", False),
+    "plan-adversary-xhigh": ("gemini-4-carbon-high", "pro", True),
+    "review-pr-high": ("gemini-4-argon-high", "pro", True),
+    "review-pr-xhigh": ("gemini-4-carbon-high", "pro", True),
+    "security-audit": ("gemini-4-carbon-high", "pro", True),
 }
 
 READONLY_TOOLS = frozenset({"read_file", "run_command", "manage_task", "search_web"})
@@ -170,10 +170,10 @@ def main(argv: list[str] | None = None) -> int:
             except json.JSONDecodeError as err:
                 failures.append(f"invalid {cli_settings_path}: {err}")
                 settings = {}
-            if not isinstance(settings, dict) or settings.get("model") != "gemini-4-carbon-high":
+            if not isinstance(settings, dict) or settings.get("model") != "gemini-4-argon-medium":
                 got_model = settings.get("model") if isinstance(settings, dict) else settings
                 failures.append(
-                    f"settings.json model expected gemini-4-carbon-high, got {got_model!r}"
+                    f"settings.json model expected gemini-4-argon-medium, got {got_model!r}"
                 )
 
     rule_path = config_root / "rules" / "effort-router.md"
@@ -184,9 +184,10 @@ def main(argv: list[str] | None = None) -> int:
             rule_ready = True
             for marker in (
                 "trigger: always_on",
+                "gemini-4-argon-medium",
+                "gemini-4-hydrogen-high",
+                "gemini-4-argon-high",
                 "gemini-4-carbon-high",
-                "gemini-4-hydrogen-xhigh",
-                "gemini-4-carbon-low",
                 "intake_gate.py",
                 "실패 기반 영구 예방 규칙",
             ):
@@ -308,9 +309,10 @@ def main(argv: list[str] | None = None) -> int:
 
     print("PASS global Gemini effort-router installation")
     print(f"- GEMINI_CONFIG: {config_root}")
-    print("- default session model: gemini-4-carbon-high")
-    print("- planning/adversary/deep-review/audit: gemini-4-hydrogen-xhigh (pro tier)")
-    print("- light S/M review: gemini-4-carbon-low (flash tier)")
+    print("- default session model: gemini-4-argon-medium")
+    print("- routine implementation: gemini-4-hydrogen-high (pro tier)")
+    print("- critical-path/core & light S/M review: gemini-4-argon-high (pro tier)")
+    print("- planning/adversary/deep-review/audit: gemini-4-carbon-high (pro tier)")
     if agy_validated:
         print(f"- custom subagents: {len(EXPECTED_ROLES)}/{len(EXPECTED_ROLES)} validated")
     else:

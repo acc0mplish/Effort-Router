@@ -1,7 +1,7 @@
 ---
 name: core-xhigh
-description: XL티어 직렬 임계경로 코어 구현 전용 — Gemini 4 Carbon (High) 상속(inherit). 시스템 전체가 의존하는 코어 모듈·직렬 경로에 사용.
-model: inherit
+description: XL티어 직렬 임계경로 코어 구현 전용 — 목표 모델 Gemini 4 Argon (High) / 서브에이전트 pro 티어. 시스템 전체가 의존하는 코어 모듈·직렬 경로에 사용.
+model: pro
 subagent: true
 mainAgent: false
 inheritCustomizations: false

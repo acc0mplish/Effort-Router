@@ -25,9 +25,10 @@ ALLOWED_GLM = {('glm-5.3', 'max'), ('glm-5.3', 'high'), ('glm-5.3-flash', 'max')
 # 주의: Gemini 쌍은 Claude/Codex/GLM의 (model, effort)가 아니라
 # 확정 목표 모델 슬러그와 Antigravity 서브에이전트 로더 티어의 (target_slug, subagent_tier) 쌍이다.
 ALLOWED_GEMINI = {
-    ('gemini-4-carbon-high', 'inherit'),
-    ('gemini-4-hydrogen-xhigh', 'pro'),
-    ('gemini-4-carbon-low', 'flash'),
+    ('gemini-4-argon-medium', 'inherit'),
+    ('gemini-4-hydrogen-high', 'pro'),
+    ('gemini-4-argon-high', 'pro'),
+    ('gemini-4-carbon-high', 'pro'),
 }
 
 FRONTMATTER_FIELD = re.compile(r'^(model|effort):\s*(\S+)\s*$', re.MULTILINE)
@@ -77,7 +78,7 @@ class CodexCombosTests(unittest.TestCase):
 class ComboSetTests(unittest.TestCase):
     def test_allowed_sets_match_user_decision(self):
         self.assertEqual(len(ALLOWED_CLAUDE | ALLOWED_CODEX | ALLOWED_GLM), 9)
-        self.assertEqual(len(ALLOWED_CLAUDE | ALLOWED_CODEX | ALLOWED_GLM | ALLOWED_GEMINI), 12)
+        self.assertEqual(len(ALLOWED_CLAUDE | ALLOWED_CODEX | ALLOWED_GLM | ALLOWED_GEMINI), 13)
 
 
 # 역할 배분 (사용자 지시 2026-10-12): haiku = 코드 구현 전용, sol low = S/M 간이 리뷰
@@ -120,17 +121,17 @@ EXPECTED_GLM_ROLE = {
 }
 # 역할 배분 (사용자 확정 2026-11-18): 값 쌍은 (target_slug, subagent_tier)
 EXPECTED_GEMINI_ROLE = {
-    'coder-medium': ('gemini-4-carbon-high', 'inherit'),
-    'implement-med': ('gemini-4-carbon-high', 'inherit'),
-    'implement-xhigh': ('gemini-4-carbon-high', 'inherit'),
-    'core-xhigh': ('gemini-4-carbon-high', 'inherit'),
-    'ops-supervisor': ('gemini-4-carbon-high', 'inherit'),
-    'plan-high': ('gemini-4-hydrogen-xhigh', 'pro'),
-    'plan-xhigh': ('gemini-4-hydrogen-xhigh', 'pro'),
-    'plan-adversary-xhigh': ('gemini-4-hydrogen-xhigh', 'pro'),
-    'review-pr-high': ('gemini-4-carbon-low', 'flash'),
-    'review-pr-xhigh': ('gemini-4-hydrogen-xhigh', 'pro'),
-    'security-audit': ('gemini-4-hydrogen-xhigh', 'pro'),
+    'coder-medium': ('gemini-4-hydrogen-high', 'pro'),
+    'implement-med': ('gemini-4-hydrogen-high', 'pro'),
+    'implement-xhigh': ('gemini-4-argon-high', 'pro'),
+    'core-xhigh': ('gemini-4-argon-high', 'pro'),
+    'ops-supervisor': ('gemini-4-argon-medium', 'inherit'),
+    'plan-high': ('gemini-4-carbon-high', 'pro'),
+    'plan-xhigh': ('gemini-4-carbon-high', 'pro'),
+    'plan-adversary-xhigh': ('gemini-4-carbon-high', 'pro'),
+    'review-pr-high': ('gemini-4-argon-high', 'pro'),
+    'review-pr-xhigh': ('gemini-4-carbon-high', 'pro'),
+    'security-audit': ('gemini-4-carbon-high', 'pro'),
 }
 READONLY_GEMINI_ROLES = {
     'plan-adversary-xhigh',
@@ -139,12 +140,13 @@ READONLY_GEMINI_ROLES = {
     'security-audit',
 }
 GEMINI_DISPLAY_BY_SLUG = {
+    'gemini-4-argon-medium': 'Gemini 4 Argon (Medium)',
+    'gemini-4-hydrogen-high': 'Gemini 4 Hydrogen (High)',
+    'gemini-4-argon-high': 'Gemini 4 Argon (High)',
     'gemini-4-carbon-high': 'Gemini 4 Carbon (High)',
-    'gemini-4-hydrogen-xhigh': 'Gemini 4 Hydrogen (XHigh)',
-    'gemini-4-carbon-low': 'Gemini 4 Carbon (Low)',
 }
 GEMINI_TIER_PHRASE = {
-    'inherit': '상속(inherit)',
+    'inherit': 'inherit 티어',
     'pro': 'pro 티어',
     'flash': 'flash 티어',
 }

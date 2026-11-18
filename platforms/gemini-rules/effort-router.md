@@ -6,17 +6,18 @@ trigger: always_on
 
 ## 1. 확정 모델·에포트 정책 (2026-11-18 사용자 확정 — 임의 변경 금지)
 
-허용 모델·에포트 조합은 아래 3개뿐이다(테이블 밖 모델 자의 배정 금지):
+허용 모델·에포트 조합은 아래 4개뿐이다(테이블 밖 모델 자의 배정 금지):
 
 | 구분 | 확정 모델 슬러그 (표시명) | 배정 대상 | `agents/*.md` 티어 |
 |---|---|---|---|
-| **일반 구현 (상시 기본값)** | `gemini-4-carbon-high` (`Gemini 4 Carbon (High)`) | 메인 기본 세션 · `coder-medium` · `implement-med` · `implement-xhigh` · `core-xhigh` · `ops-supervisor` | `inherit` (메인 상속) |
-| **계획·적대검토·심층 리뷰·보안감사** | `gemini-4-hydrogen-xhigh` (`Gemini 4 Hydrogen (XHigh)`) | `plan-high` · `plan-xhigh` · `plan-adversary-xhigh` · `review-pr-xhigh` · `security-audit` | `pro` |
-| **S/M 간이 리뷰** | `gemini-4-carbon-low` (`Gemini 4 Carbon (Low)`) | `review-pr-high` | `flash` |
+| **메인 기본 세션 · 감시(Ops)** | `gemini-4-argon-medium` (`Gemini 4 Argon (Medium)`) | 메인 기본 세션 · `ops-supervisor` | `inherit` (메인 상속) |
+| **루틴·일반 구현** | `gemini-4-hydrogen-high` (`Gemini 4 Hydrogen (High)`) | `coder-medium` · `implement-med` | `pro` |
+| **XL 임계경로·코어 구현 · S/M 간이 리뷰** | `gemini-4-argon-high` (`Gemini 4 Argon (High)`) | `implement-xhigh` · `core-xhigh` · `review-pr-high` | `pro` |
+| **계획·적대검토·심층 리뷰·보안감사** | `gemini-4-carbon-high` (`Gemini 4 Carbon (High)`) | `plan-high` · `plan-xhigh` · `plan-adversary-xhigh` · `review-pr-xhigh` · `security-audit` | `pro` |
 
-- 전역 CLI 기본값은 `~/.gemini/antigravity-cli/settings.json`의 `"model": "gemini-4-carbon-high"`다.
+- 전역 CLI 기본값은 `~/.gemini/antigravity-cli/settings.json`의 `"model": "gemini-4-argon-medium"`다.
 - 현재 활성 세션 모델이 권장 조합과 다를 경우 설정 파일 수정만으로 전환됐다고 주장하지 말고 UI 모델 선택기 또는 `/model` 전환을 안내한다.
-- 동일 접근 2회 실패 시 `gemini-4-hydrogen-xhigh`로 원인을 진단하고, 해결 방향이 확정된 일반 구현은 `gemini-4-carbon-high`로 진행한다(3회 반복 실패 시 `neverstuck_gate.py` 적용).
+- 동일 접근 2회 실패 시 `gemini-4-carbon-high`로 원인을 진단하고, 해결 방향이 확정된 루틴 구현은 `gemini-4-hydrogen-high`, 임계·코어 구현은 `gemini-4-argon-high`로 진행한다(3회 반복 실패 시 `neverstuck_gate.py` 적용).
 
 ## 2. 작업 착수 발동 및 서브에이전트 호출 규칙 (필수)
 
@@ -27,7 +28,7 @@ trigger: always_on
 3. 실질 작업·스폰 전에 `[Effort Router]` **Output Contract**를 먼저 출력한다.
 4. 보조 작업 위임은 `~/.gemini/config/agents/*.md`에 등록된 화이트리스트 에이전트(역할 10종 + 온디맨드 `ops-supervisor`)만 `invoke_subagent(TypeName="<역할명>")`로 호출한다(`Model` 인자는 생략하거나 에이전트 정의와 일치시킨다).
    - 구현·계획·운영(`coder-medium`, `implement-*`, `core-xhigh`, `plan-*`, `ops-supervisor`)만 쓰기 도구를 가지며, 검토·리뷰·감사(`plan-adversary-xhigh`, `review-pr-*`, `security-audit`)는 `edit_file`·`write_file`이 제거된 읽기 전용 에이전트로 분리 스폰한다(자기 산출물 셀프 리뷰 금지).
-   - **정확한 슬러그 핀 고정 보완**: Antigravity `agents/*.md` 로더는 `inherit|pro|flash|flash_lite` 4종만 허용하므로, 고위험 L/XL 계획·적대검토·심층 리뷰·보안감사 또는 2회 실패 진단에서 `gemini-4-hydrogen-xhigh` / `gemini-4-carbon-low` 정확한 슬러그 고정이 필수일 때는 `agy -p --model <슬러그>` 또는 `swarm(action="add", model="<슬러그>")`로 핀 고정 실행할 수 있다.
+   - **정확한 슬러그 핀 고정 보완**: Antigravity `agents/*.md` 로더는 `inherit|pro|flash|flash_lite` 4종만 허용하므로, 고위험 L/XL 계획·적대검토·심층 리뷰·보안감사, XL 임계·코어 구현, 또는 2회 실패 진단에서 역할별 목표 슬러그(`gemini-4-hydrogen-high` / `gemini-4-argon-high` / `gemini-4-carbon-high`) 정확한 슬러그 고정이 필수일 때는 `agy -p --model <슬러그>` 또는 `swarm(action="add", model="<슬러그>")`로 핀 고정 실행할 수 있다.
 
 ## 3. 과업 상태 및 실패 기반 영구 예방 규칙
 

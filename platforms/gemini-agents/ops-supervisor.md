@@ -1,6 +1,6 @@
 ---
 name: ops-supervisor
-description: 감시·Ops 전용 — Gemini 4 Carbon (High) 상속(inherit). 두뇌(메인 세션)의 서브에이전트 워치독 감시·보고, GitHub issue·커밋·푸시 운영 담당.
+description: 감시·Ops 전용 — 목표 모델 Gemini 4 Argon (Medium) / 서브에이전트 inherit 티어. 두뇌(메인 세션)의 서브에이전트 워치독 감시·보고, GitHub issue·커밋·푸시 운영 담당.
 model: inherit
 subagent: true
 mainAgent: false

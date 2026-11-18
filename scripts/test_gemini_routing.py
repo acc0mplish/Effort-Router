@@ -50,7 +50,7 @@ def _build_fixture(base: Path) -> tuple[Path, Path, Path]:
     )
     shutil.copytree(ROOT / "platforms" / "gemini-agents", gemini_home / "config" / "agents")
     (gemini_home / "antigravity-cli" / "settings.json").write_text(
-        json.dumps({"model": "gemini-4-carbon-high"}) + "\n",
+        json.dumps({"model": "gemini-4-argon-medium"}) + "\n",
         encoding="utf-8",
     )
     return gemini_home, fake_home, bin_dir
@@ -212,13 +212,13 @@ sys.exit(2)
             )
 
             agent.write_text(
-                original.replace("model: inherit", "model: gemini-4-carbon-high", 1),
+                original.replace("model: pro", "model: gemini-4-hydrogen-high", 1),
                 encoding="utf-8",
             )
             res_slug = _run_verifier(gemini_home, fake_home, bin_dir)
             self.assertEqual(res_slug.returncode, 1, res_slug.stdout + res_slug.stderr)
             self.assertIn(
-                "agent coder-medium expected model tier 'inherit', got 'gemini-4-carbon-high'",
+                "agent coder-medium expected model tier 'pro', got 'gemini-4-hydrogen-high'",
                 res_slug.stdout,
             )
 

@@ -1,7 +1,7 @@
 ---
 name: review-pr-high
-description: S/M티어 간이 PR·diff 리뷰 전용 — 목표 모델 Gemini 4 Carbon (Low) / 서브에이전트 flash 티어(읽기 전용). 일반 규모 변경사항의 코드 리뷰에 사용.
-model: flash
+description: S/M티어 간이 PR·diff 리뷰 전용 — 목표 모델 Gemini 4 Argon (High) / 서브에이전트 pro 티어(읽기 전용). 일반 규모 변경사항의 코드 리뷰에 사용.
+model: pro
 subagent: true
 mainAgent: false
 inheritCustomizations: false

@@ -1,6 +1,6 @@
 ---
 name: plan-high
-description: M/L티어 구현 전 구현계획 작성 전용 — 목표 모델 Gemini 4 Hydrogen (XHigh) / 서브에이전트 pro 티어. 2~5파일 및 L티어 계획 수립에 사용.
+description: M/L티어 구현 전 구현계획 작성 전용 — 목표 모델 Gemini 4 Carbon (High) / 서브에이전트 pro 티어. 2~5파일 및 L티어 계획 수립에 사용.
 model: pro
 subagent: true
 mainAgent: false
