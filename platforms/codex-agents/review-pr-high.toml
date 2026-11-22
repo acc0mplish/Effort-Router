@@ -1,5 +1,5 @@
 name = "review-pr-high"
-description = "S/M-tier diff reviewer and problem judge; findings only."
+description = "M-tier diff reviewer and problem judge; findings only."
 model = "gpt-6.1-sol"
 model_reasoning_effort = "low"
 developer_instructions = """

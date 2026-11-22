@@ -267,7 +267,7 @@ state.json 선택 필드 `tree_claim`: `{"session_id": "<id>", "claimed_utc": "<
 |---|---|---|
 | ③ ChatGPT·Codex | `gpt-6-luna / max` | **일반 작업 — 항상 기본값** |
 | ③ ChatGPT·Codex | `gpt-6.1-sol / high` | 계획·검토·고난도·보안 판정 |
-| ③ ChatGPT·Codex | `gpt-6.1-sol / low` | S/M 간이 리뷰 (`review-pr-high`) |
+| ③ ChatGPT·Codex | `gpt-6.1-sol / low` | M 간이 리뷰 (`review-pr-high`) |
 | ① Claude Code | `opus-5.5 / high` | 계획·검토·리뷰·보안 (opus 슬롯) |
 | ① Claude Code | `haiku-5.5 / high` | 코드 구현 전용 (`coder-medium`·`implement-med`) |
 | ① Claude Code | `sonnet / high` | 임계경로 구현·코어 (`implement-xhigh`·`core-xhigh`·`ops-supervisor`) |
@@ -295,7 +295,7 @@ state.json 선택 필드 `tree_claim`: `{"session_id": "<id>", "claimed_utc": "<
 - ① 계획: 생략
 - ② 검토: 셀프 재실행 확인(§3)
 - ③ 구현: 메인 세션 직접 또는 `coder-medium` (`gpt-6-luna / max`)
-- ④ 리뷰: `review-pr-high` (`gpt-6.1-sol / low`, 텍스트·스타일만 변경 시 생략)
+- ④ 리뷰: 생략 — 리뷰 에이전트 스폰 금지(스폰 부팅 비용이 S 변경 검토 비용을 역전 — 30줄 스크립트에 리뷰 세션 7분+ 지연 실측). ② 셀프 재실행 확인(§3)이 유일한 검증 단계다. 보안 통제·인증 등 은닉 변수 양성 변경은 S 정의상 제외되므로 본 생략의 예외는 없다.
 - 완료 기록: 메인이 최소 state.json 1회 기록(§5 'S티어 최소 기록')
 
 ### M
