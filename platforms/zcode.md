@@ -17,7 +17,7 @@ ZCode는 Claude Code가 아닌 별도 하니스다 → 백엔드 교체 매핑(g
 
 - 작업 착수 전 티어 판정·실행 지침 요약을 먼저 출력한다.
 - 적용 에이전트 라인 = `general-purpose (주입 역할: plan-high 상당)` 형태 또는 `없음(메인 세션 직접)`. 팬아웃 라인은 실제 실행 구성을 적는다(예: `ON: 심층 general-purpose ×1 + 경량 Explore ×2 병렬 (완전성/기술적오류/위험)`). 단계 상태 라인은 인계를 실제 운반할 때만 기입.
-- **스폰 타입 화이트리스트 = 라우팅 테이블 역할만** — `~/.zcode/agents/*.md`에 설치된 동명 역할(`plan-high`, `implement-med`, `review-pr-high` 등) + 빌트인 `general-purpose`·`Explore`(경량 검증 렌즈)·`judge`(렌더링 산출물 시각 검수). 테이블 밖 에이전트명은 지목하지 않는다 — 존재 ≠ 허가(2026-10-17 실측: `~/.zcode/agents/` 커스텀 에이전트 로드 확인).
+- **스폰 타입 화이트리스트 = 라우팅 테이블 역할만** — `~/.zcode/agents/*.md`에 설치된 동명 역할(`plan-high`, `implement-med` 등) + 빌트인 `general-purpose`·`Explore`(경량 검증 렌즈)·`judge`(렌더링 산출물 시각 검수). 테이블 밖 에이전트명은 지목하지 않는다 — 존재 ≠ 허가(2026-10-17 실측: `~/.zcode/agents/` 커스텀 에이전트 로드 확인).
 - **judge는 시각 검수 전용** — 계획 적대 검증·PR 리뷰에 쓰지 않는다(②검토의 심층 렌즈·④리뷰는 `general-purpose`, ②검토의 경량 렌즈는 `Explore`).
 - 증거기반 보고·§5 state.json 계약은 하니스 무관 — 그대로 적용한다.
 
@@ -54,7 +54,7 @@ ZCode는 Claude Code가 아닌 별도 하니스다 → 백엔드 교체 매핑(g
 | ②검토(L/XL) | 심층 `general-purpose` ×1 + 경량 `Explore` ×2/×4 (렌즈 1개씩 주입) | 심층 동시 1 — 병합=메인. 문서 산출 과제: 초안(③, `plan-*` 계약 주입) 대상 |
 | ③구현 | 메인 / `general-purpose` + `implement-med` 계약 주입 | 보존 제약 verbatim 복사 |
 | ③구현(XL 임계경로) | `general-purpose` + `implement-xhigh`/`core-xhigh` 계약 주입 | |
-| ④리뷰 | `general-purpose` + `review-pr-*` 계약·claims 전문 주입 | merge 권위는 메인 |
+| ④리뷰(XL만) | `general-purpose` + `review-pr-xhigh` 계약·claims 전문 주입 | S·M·L은 ④리뷰 스폰 생략 — merge 권위는 메인 |
 | 보안감사 | `general-purpose` + `security-audit` 계약 주입 + 교차 검증 1건 이상 | CRITICAL 즉시 최상단 |
 
 - 역할별 권장 조합은 `glm.md`의 「역할별 권장 조합」 표를 따른다(케이스 4 = ZCode, 같은 GLM 백엔드). ZCode 스폰은 모델 인자가 없으므로 메인 세션이 과업 시작 시 역할 묶음 단위로 모델을 맞춘다.

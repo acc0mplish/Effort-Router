@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 ALLOWED_CLAUDE = {('opus', 'high'), ('sonnet', 'high'), ('haiku', 'high')}
-ALLOWED_CODEX = {('gpt-6-luna', 'max'), ('gpt-6.1-sol', 'high'), ('gpt-6.1-sol', 'low')}
+ALLOWED_CODEX = {('gpt-6-luna', 'max'), ('gpt-6.1-sol', 'high')}
 ALLOWED_GLM = {('glm-5.3', 'max'), ('glm-5.3', 'high'), ('glm-5.3-flash', 'max')}
 
 FRONTMATTER_FIELD = re.compile(r'^(model|effort):\s*(\S+)\s*$', re.MULTILINE)
@@ -63,10 +63,10 @@ class CodexCombosTests(unittest.TestCase):
 
 class ComboSetTests(unittest.TestCase):
     def test_allowed_sets_match_user_decision(self):
-        self.assertEqual(len(ALLOWED_CLAUDE | ALLOWED_CODEX | ALLOWED_GLM), 9)
+        self.assertEqual(len(ALLOWED_CLAUDE | ALLOWED_CODEX | ALLOWED_GLM), 8)
 
 
-# 역할 배분 (사용자 지시 2026-10-12): haiku = 코드 구현 전용, sol low = S/M 간이 리뷰
+# 역할 배분 (사용자 지시 2026-10-12, 갱신 2026-11-22): haiku = 코드 구현 전용. sol low는 review-pr-high 폐기로 미사용이 됐다(4케이스 표의 해당 행도 제거 — S·M·L ④리뷰 스폰 생략)
 EXPECTED_CLAUDE_ROLE = {
     'coder-medium.md': ('haiku', 'high'),
     'implement-med.md': ('haiku', 'high'),
@@ -76,7 +76,6 @@ EXPECTED_CLAUDE_ROLE = {
     'plan-high.md': ('opus', 'high'),
     'plan-xhigh.md': ('opus', 'high'),
     'plan-adversary-xhigh.md': ('opus', 'high'),
-    'review-pr-high.md': ('opus', 'high'),
     'review-pr-xhigh.md': ('opus', 'high'),
     'security-audit.md': ('opus', 'high'),
 }
@@ -88,7 +87,6 @@ EXPECTED_CODEX_ROLE = {
     'plan-high.toml': ('gpt-6.1-sol', 'high'),
     'plan-xhigh.toml': ('gpt-6.1-sol', 'high'),
     'plan-adversary-xhigh.toml': ('gpt-6.1-sol', 'high'),
-    'review-pr-high.toml': ('gpt-6.1-sol', 'low'),
     'review-pr-xhigh.toml': ('gpt-6.1-sol', 'high'),
     'security-audit.toml': ('gpt-6.1-sol', 'high'),
 }
@@ -100,7 +98,6 @@ EXPECTED_GLM_ROLE = {
     'plan-high': ('glm-5.3', 'high'),
     'plan-xhigh': ('glm-5.3', 'high'),
     'plan-adversary-xhigh': ('glm-5.3', 'max'),
-    'review-pr-high': ('glm-5.3', 'high'),
     'review-pr-xhigh': ('glm-5.3', 'max'),
     'security-audit': ('glm-5.3', 'max'),
 }

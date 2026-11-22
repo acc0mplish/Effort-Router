@@ -267,7 +267,6 @@ state.json 선택 필드 `tree_claim`: `{"session_id": "<id>", "claimed_utc": "<
 |---|---|---|
 | ③ ChatGPT·Codex | `gpt-6-luna / max` | **일반 작업 — 항상 기본값** |
 | ③ ChatGPT·Codex | `gpt-6.1-sol / high` | 계획·검토·고난도·보안 판정 |
-| ③ ChatGPT·Codex | `gpt-6.1-sol / low` | M 간이 리뷰 (`review-pr-high`) |
 | ① Claude Code | `opus-5.5 / high` | 계획·검토·리뷰·보안 (opus 슬롯) |
 | ① Claude Code | `haiku-5.5 / high` | 코드 구현 전용 (`coder-medium`·`implement-med`) |
 | ① Claude Code | `sonnet / high` | 임계경로 구현·코어 (`implement-xhigh`·`core-xhigh`·`ops-supervisor`) |
@@ -287,7 +286,7 @@ state.json 선택 필드 `tree_claim`: `{"session_id": "<id>", "claimed_utc": "<
 |---|---|---|
 | 모든 일반 구현·조사·테스트·검증 | `gpt-6-luna / max` | `coder-medium`, `implement-med`, `implement-xhigh`, `core-xhigh` |
 | 계획·명세·아키텍처 | `gpt-6.1-sol / high` | `plan-high`, `plan-xhigh` |
-| 계획 검토·리뷰·고난도 추론·보안 판정 | `gpt-6.1-sol / high` | `plan-adversary-xhigh`, `review-pr-*`, `security-audit` |
+| 계획 검토·리뷰·고난도 추론·보안 판정 | `gpt-6.1-sol / high` | `plan-adversary-xhigh`, `review-pr-xhigh`, `security-audit` |
 
 `python3 <skill-dir>/scripts/configure_codex_plan.py --apply`는 요금제를 조회하지 않고 고정 전역 매핑을 적용한다. 변경 뒤 Codex를 재시작하고 `verify_global_install.py`를 실행한다.
 
@@ -302,13 +301,13 @@ state.json 선택 필드 `tree_claim`: `{"session_id": "<id>", "claimed_utc": "<
 - ① 계획: `plan-high` (`gpt-6.1-sol / high`)
 - ② 검토: `plan-adversary-xhigh` (`gpt-6.1-sol / high`)
 - ③ 구현: `implement-med` (`gpt-6-luna / max`)
-- ④ 리뷰: `review-pr-high` (`gpt-6.1-sol / low`)
+- ④ 리뷰: 생략 — 리뷰 에이전트 스폰 금지. M 과업의 독립 검증은 ② `plan-adversary-xhigh` 적대검토가 이미 수행하며, 산출물 확인은 메인 세션의 §3 증거기반 검증(재실행·교차 대조)이 담당한다. ④에 별도 세션을 띄우는 고정비용(~7분, 세션 부팅+대형 프롬프트+백엔드 지연 실측)은 M 변경 규모(≤10파일·~1000줄) 대비 비용 과잉이다.
 
 ### L
 - ① 계획: `plan-high` (`gpt-6.1-sol / high`, Phase 분해)
 - ② 검토: `plan-adversary-xhigh` (`gpt-6.1-sol / high`)
 - ③ 구현: `implement-med` (`gpt-6-luna / max`, Phase당 ≤5파일)
-- ④ 리뷰: `review-pr-xhigh` (`gpt-6.1-sol / high`)
+- ④ 리뷰: 생략 — 리뷰 에이전트 스폰 금지. L 과업은 ② `plan-adversary-xhigh` 적대검토(Phase별 계획)와 §3 증거기반 검증으로 커버한다. Phase당 ≤5파일 구현 단위에 리뷰 세션 고정비용(~7분 실측)을 매 단계 지불하는 것은 비용 과잉이므로 생략한다. 다만 보안 통제·은닉 변수 양성 항목이 포함된 L은 ④ 대신 `security-audit` 스폰 1회로 대체한다(고위험 항목에만 고정비용 지불).
 
 ### XL
 - ① 계획: `plan-xhigh` (`gpt-6.1-sol / high`)
@@ -457,7 +456,7 @@ verify(검증) = ④리뷰 통과 후 done 전 **메인 세션의 핵심 테스�
 
 ④리뷰 CRITICAL·HIGH regression 판정 시 순서: (a) **상위 세션이 핵심 테스트 1회 재실행으로 확인**한다(②의 교차확인 원칙과 동일 — 리뷰 에이전트 단독 판정으로 롤백하지 않는다). (b) 확인되면 **앵커가 있을 때만** 물러난다 — 앵커 = 구현 착수 전 커밋 또는 worktree 스냅샷. **앵커가 없으면(미커밋 트리) 롤백하지 않고 fix-forward**로 재구현한다 — 무관한 미커밋 변경을 파괴하지 않고, 사용자의 커밋 정책을 대신하지 않는다. rollback 시 패치: `phase: implement`, `next: review`(재구현 완료 후 재리뷰). 앵커로 돌아가도 gap이 남으면 계획 결함이므로 ①로 회귀해 번들을 갱신한다. 롤백 수단은 `git revert` 계열로 한정(`reset --hard`·강제 체크아웃 금지). 앵커 이후 무관 커밋이 있으면 앵커 회귀 대신 fix-forward(폭발 반경이 회귀보다 크다).
 
-¹ Harness-of-Harness (Shanghai AI Lab, 2026) — 계획자/개발자/QA 3역할·증거번들·계보. ² ④리뷰(review-pr 2종)·보안감사(security-audit)는 Edit·Write 미부여 — Bash 포함이라 절대적 차단은 아니며 메인의 무결성 확인이 보완한다. 상태계약 원형: SKILL.state (arXiv 2608.26263).
+¹ Harness-of-Harness (Shanghai AI Lab, 2026) — 계획자/개발자/QA 3역할·증거번들·계보. ² ④리뷰(review-pr-xhigh — XL만)·보안감사(security-audit)는 Edit·Write 미부여 — Bash 포함이라 절대적 차단은 아니며 메인의 무결성 확인이 보완한다. 상태계약 원형: SKILL.state (arXiv 2608.26263).
 
 ## 6. 환경 매핑
 

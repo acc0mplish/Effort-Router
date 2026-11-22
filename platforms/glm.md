@@ -23,8 +23,7 @@
 | `plan-high` | `glm-5.3 / high` | 계획(M/L) |
 | `plan-xhigh` | `glm-5.3 / high` | 계획(XL) — 심층 동시 상한 1 |
 | `plan-adversary-xhigh` | `glm-5.3 / max` | 적대 검토 — 판정 |
-| `review-pr-high` | `glm-5.3 / high` | M 리뷰 |
-| `review-pr-xhigh` | `glm-5.3 / max` | L/XL 리뷰 |
+| `review-pr-xhigh` | `glm-5.3 / max` | XL 리뷰 |
 | `security-audit` | `glm-5.3 / max` | 보안 판정 |
 
 ## GLM-5.3 동시성 상한 (본문 §6 단서)

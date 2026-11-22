@@ -213,13 +213,12 @@ python3 scripts/dashboard_server.py --port 0   # OS 할당 포트 — stdout REA
 |---|---|---|
 | ③ ChatGPT·Codex | `gpt-6-luna / max` | **일반 구현 — 항상 기본값** (`coder-medium`·`implement-med`·`implement-xhigh`·`core-xhigh`) |
 | ③ ChatGPT·Codex | `gpt-6.1-sol / high` | 계획·검토·보안 판정 (`plan-*`·`review-pr-xhigh`·`security-audit`) |
-| ③ ChatGPT·Codex | `gpt-6.1-sol / low` | M 간이 리뷰 (`review-pr-high`) |
 | ① Claude Code | `haiku-5.5 / high` | 코드 구현 전용 (`coder-medium`·`implement-med`) |
 | ① Claude Code | `sonnet / high` | 임계경로 구현·코어 (`implement-xhigh`·`core-xhigh`·`ops-supervisor`) |
-| ① Claude Code | `opus-5.5 / high` | 계획·검토·보안 (`plan-*`·`review-pr-*`·`security-audit`) |
+| ① Claude Code | `opus-5.5 / high` | 계획·검토·보안 (`plan-*`·`review-pr-xhigh`·`security-audit`) |
 | ② Claude Code + GLM · ④ ZCode | `glm-5.3-flash / max` | 반복 구현 (`coder-medium`·`implement-med`) |
 | ② Claude Code + GLM · ④ ZCode | `glm-5.3 / max` | 임계경로·코어 구현, 최고 판정·보안 |
-| ② Claude Code + GLM · ④ ZCode | `glm-5.3 / high` | 일반 계획·M 리뷰 |
+| ② Claude Code + GLM · ④ ZCode | `glm-5.3 / high` | 일반 계획·검토 |
 
 `python3 scripts/configure_codex_plan.py --apply`는 Codex 역할 매핑을 백업과 함께 적용한다. 상세 설정과 검증은 [Codex adapter](platforms/codex.md)를 따른다. 역할별 GLM 조합 표는 [GLM adapter](platforms/glm.md).
 
