@@ -23,14 +23,14 @@ Source: Effort-Router SKILL.md. Full tier and gate rules live upstream. This fil
 - Emergency hotfix only when the user explicitly says so: implement first, review after.
 
 ## Step 2 — Stage and model (Devin)
-Confirmed slug: `devin/swe-2` (effort suffix `:low|:high|:max`).
-- Routine implementation (S/M): devin/swe-2, high. Writes code.
-- Critical path or core (L/XL): devin/swe-2, max. Writes code.
-- Planning: devin/swe-2, high. Read-only. Writes the plan only.
-- Adversarial plan review: devin/swe-2, high. Read-only.
-- Light review (S/M): devin/swe-2, low. Read-only.
-- Deep review or security audit: devin/swe-2, high. Read-only.
-Current harness routes every stage to `devin/swe-2:max` (OMP config.yml modelRoles) — flat routing is the fallback until per-role subagent profiles exist.
+Confirmed slug: `devin/swe-2.1` (effort suffix `:low|:high|:max`).
+- Routine implementation (S/M): devin/swe-2.1, high. Writes code.
+- Critical path or core (L/XL): devin/swe-2.1, max. Writes code.
+- Planning: devin/swe-2.1, high. Read-only. Writes the plan only.
+- Adversarial plan review: devin/swe-2.1, high. Read-only.
+- Light review (S/M): devin/swe-2.1, low. Read-only.
+- Deep review or security audit: devin/swe-2.1, high. Read-only.
+Current harness routes every stage to `devin/swe-2.1:max` (OMP config.yml modelRoles) — flat routing is the fallback until per-role subagent profiles exist.
 Do not use names outside Devin's list. Confirm with /model. Adaptive or Fusion overrides this table only if the user chose them.
 
 ## Step 3 — Evidence contract

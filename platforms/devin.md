@@ -2,7 +2,7 @@
 
 Status: draft derived from Effort-Router SKILL.md §1 (tiers), §2 (roles), §3 (constraints), §5 (state contract). Rules conflict -> SKILL.md wins.
 Verified from docs.devin.ai: Skills (SKILL.md, .devin/skills/ or ~/.config/devin/skills/), subagent profiles via `agent:`, per-skill `model:`, AGENTS.md / AGENTS.local.md / .devin/rules, Bot instructions + memory + modes.
-Verified from live OMP harness (`~/.omp/agent/config.yml`): model slug `devin/swe-2` exists; `modelRoles.default/task: devin/swe-2:max` routes every role to swe-2 at `:max` effort — this is the confirmed routing this adapter targets.
+Verified from live OMP harness (`~/.omp/agent/config.yml`): model slug `devin/swe-2` exists; `modelRoles.default/task: devin/swe-2.1:max` routes every role to swe-2.1 at `:max` effort — this is the confirmed routing this adapter targets.
 NOT verified (confirm in the Devin app before relying on it): exact subagent profile file location and format, whether Cloud Bot sessions load repo Skills, whether Bot instructions accept a file or only pasted text, and whether the model short names below exist in your plan.
 
 ## 1. Where things go
@@ -34,19 +34,19 @@ allowed-tools is only auto-approval, not a restriction (docs). Do not rely on it
 
 ## 3. Role -> Devin mapping (proposal)
 
-Confirmed model slug: `devin/swe-2` (effort as suffix `:low|:high|:max`). Docs also list opus, sonnet, gpt, codex, gemini — not confirmed in this environment. Effort-Router's role model names (GPT-6-Luna, GPT-6.2-Sol, Gemini 4 Argon/Hydrogen/Carbon, Claude 5.5) are NOT Devin model names and must not be copied as-is.
+Confirmed model slug: `devin/swe-2.1` (effort as suffix `:low|:high|:max`; `devin/swe-2` prior, superseded 2026-11-25). Docs also list opus, sonnet, gpt, codex, gemini — not confirmed in this environment. Effort-Router's role model names (GPT-6-Luna, GPT-6.2-Sol, Gemini 4 Argon/Hydrogen/Carbon, Claude 5.5) are NOT Devin model names and must not be copied as-is.
 
 | Effort-Router role | Stage | Devin model | Effort | Read-only |
 |---|---|---|---|---|
-| coder-medium, implement-med | routine implementation | devin/swe-2 | high | no |
-| implement-xhigh, core-xhigh | critical path / core | devin/swe-2 | max | no |
-| plan-high, plan-xhigh | planning | devin/swe-2 | high | yes (planning writes docs only) |
-| plan-adversary-xhigh | adversarial plan review | devin/swe-2 | high | yes |
-| review-pr-high | S/M light review | devin/swe-2 | low | yes |
-| review-pr-xhigh, security-audit | deep review / security | devin/swe-2 | high | yes |
-| ops-supervisor | monitoring | devin/swe-2 | high | no |
+| coder-medium, implement-med | routine implementation | devin/swe-2.1 | high | no |
+| implement-xhigh, core-xhigh | critical path / core | devin/swe-2.1 | max | no |
+| plan-high, plan-xhigh | planning | devin/swe-2.1 | high | yes (planning writes docs only) |
+| plan-adversary-xhigh | adversarial plan review | devin/swe-2.1 | high | yes |
+| review-pr-high | S/M light review | devin/swe-2.1 | low | yes |
+| review-pr-xhigh, security-audit | deep review / security | devin/swe-2.1 | high | yes |
+| ops-supervisor | monitoring | devin/swe-2.1 | high | no |
 
-Current OMP harness routing is flat: `modelRoles.default` and `.task` both `devin/swe-2:max` — every stage swe-2 max. Per-stage rows above are the role mapping once distinct subagent profiles exist; flat routing is the fallback until then.
+Current OMP harness routing is flat: `modelRoles.default` and `.task` both `devin/swe-2.1:max` — every stage swe-2.1 max. Per-stage rows above are the role mapping once distinct subagent profiles exist; flat routing is the fallback until then.
 
 Setting model per stage: use `model:` on a skill, or `agent:` pointing at a subagent profile whose model is set. Profile model is inherited unless the skill sets `model:` (docs). Effort is not in the skill frontmatter; set it with Alt+T or the mode picker and record it in state.json.
 
@@ -85,6 +85,6 @@ Before any coding work, apply the effort-router skill (name: effort-router).
 
 ## 7. Open questions for you
 
-1. ~~Which Devin plan and model list do you have?~~ Confirmed: `devin/swe-2` (OMP config.yml). Remaining: whether opus/gpt/codex slugs exist in this plan (`/model` in the Devin app).
+1. ~~Which Devin plan and model list do you have?~~ Confirmed: `devin/swe-2.1` (OMP config.yml, updated 2026-11-25 from swe-2). Remaining: whether opus/gpt/codex slugs exist in this plan (`/model` in the Devin app).
 2. Do you want Adaptive or Fusion instead of fixed per-stage models? Adaptive would override the role table.
 3. Should the Bot run the whole pipeline, or only the planning and review stages while coding stays in CLI sessions?
