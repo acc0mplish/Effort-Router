@@ -301,8 +301,8 @@ python3 scripts/dashboard_server.py --port 0   # OS 할당 포트 — stdout REA
 | ① Claude Code | `sonnet / high` | 임계경로 구현·코어 (`implement-xhigh`·`core-xhigh`·`ops-supervisor`) |
 | ① Claude Code | `opus-5.5 / high` | 계획·검토·보안 (`plan-*`·`review-pr-*`·`security-audit`) |
 | ② Claude Code + GLM · ④ ZCode | `glm-5.3-flash / max` | 반복 구현 (`coder-medium`·`implement-med`) |
-| ② Claude Code + GLM · ④ ZCode | `glm-5.3 / max` | 임계경로·코어 구현, 최고 판정·보안 |
-| ② Claude Code + GLM · ④ ZCode | `glm-5.3 / high` | 일반 계획·S/M 리뷰 |
+| ② Claude Code + GLM · ④ ZCode | `glm-5.4 / max` | 임계경로·코어 구현, 최고 판정·보안 |
+| ② Claude Code + GLM · ④ ZCode | `glm-5.4 / high` | 일반 계획·S/M 리뷰 |
 | ⑤ Gemini·Antigravity | `gemini-4-argon-medium (inherit)` | 메인 기본 세션 · 감시 (`ops-supervisor`) |
 | ⑤ Gemini·Antigravity | `gemini-4-hydrogen-high (pro)` | 루틴·일반 구현 (`coder-medium`·`implement-med`) |
 | ⑤ Gemini·Antigravity | `gemini-4-argon-high (pro)` | XL 임계경로·코어 구현 (`implement-xhigh`·`core-xhigh`) · S/M 간이 리뷰 (`review-pr-high`) |

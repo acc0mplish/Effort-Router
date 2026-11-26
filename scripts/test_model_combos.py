@@ -21,7 +21,7 @@ import verify_gemini_install  # noqa: E402
 
 ALLOWED_CLAUDE = {('opus', 'high'), ('sonnet', 'high'), ('haiku', 'high')}
 ALLOWED_CODEX = {('gpt-6-luna', 'max'), ('gpt-6.2-sol', 'high'), ('gpt-6.2-sol', 'low')}
-ALLOWED_GLM = {('glm-5.3', 'max'), ('glm-5.3', 'high'), ('glm-5.3-flash', 'max')}
+ALLOWED_GLM = {('glm-5.4', 'max'), ('glm-5.4', 'high'), ('glm-5.3-flash', 'max')}
 # 주의: Gemini 쌍은 Claude/Codex/GLM의 (model, effort)가 아니라
 # 확정 목표 모델 슬러그와 Antigravity 서브에이전트 로더 티어의 (target_slug, subagent_tier) 쌍이다.
 ALLOWED_GEMINI = {
@@ -110,14 +110,14 @@ EXPECTED_CODEX_ROLE = {
 EXPECTED_GLM_ROLE = {
     'coder-medium': ('glm-5.3-flash', 'max'),
     'implement-med': ('glm-5.3-flash', 'max'),
-    'implement-xhigh': ('glm-5.3', 'max'),
-    'core-xhigh': ('glm-5.3', 'max'),
-    'plan-high': ('glm-5.3', 'high'),
-    'plan-xhigh': ('glm-5.3', 'high'),
-    'plan-adversary-xhigh': ('glm-5.3', 'max'),
-    'review-pr-high': ('glm-5.3', 'high'),
-    'review-pr-xhigh': ('glm-5.3', 'max'),
-    'security-audit': ('glm-5.3', 'max'),
+    'implement-xhigh': ('glm-5.4', 'max'),
+    'core-xhigh': ('glm-5.4', 'max'),
+    'plan-high': ('glm-5.4', 'high'),
+    'plan-xhigh': ('glm-5.4', 'high'),
+    'plan-adversary-xhigh': ('glm-5.4', 'max'),
+    'review-pr-high': ('glm-5.4', 'high'),
+    'review-pr-xhigh': ('glm-5.4', 'max'),
+    'security-audit': ('glm-5.4', 'max'),
 }
 # 역할 배분 (사용자 확정 2026-11-18): 값 쌍은 (target_slug, subagent_tier)
 EXPECTED_GEMINI_ROLE = {

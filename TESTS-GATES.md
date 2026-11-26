@@ -348,7 +348,7 @@ L6 DrvFs 지연 기록(양측 실측 — 같은 머신 WSL2): test_worktree_gate
 | C1 phase 8값 | `grep -c 'plan\|adversary\|implement\|review\|verify\|done\|blocked\|cancelled' SKILL.md` | 1건(L414) exit 0 — ④ word-diff로 기존 6값 접두사 byte 일치·말미 삽입만 확인 |
 | C2 기존 문구 보존 | ④ word-diff @@ -421,8·@@ -388,7 | 순수 삽입·appending — 실제 문구 삭제 0(라인 diff - 6행은 전부 치환 원행 라인 표시) |
 | C3 게이트 무수정 | `git diff --name-only fd45770` | SKILL.md 단일 — scripts/·README·platforms 미포함(옵션 b — 게이트 스크립트 계약 require_done_phase 준수) |
-| C4 상한 라인·우회 금지 | `grep -n '실행 상한' SKILL.md` ∧ `grep -c '재스폰은 동일 역할 2회까지\|GLM-5.3 상한 1' SKILL.md` | L358·L470·L479·L481 4곳·산재 상한 grep 2 — 통합 선언만·값 무수정 |
+| C4 상한 라인·우회 금지 | `grep -n '실행 상한' SKILL.md` ∧ `grep -c '재스폰은 동일 역할 2회까지\|GLM-5.4 상한 1' SKILL.md` | L358·L470·L479·L481 4곳·산재 상한 grep 2 — 통합 선언만·값 무수정 (r63 패턴 갱신) |
 | C5 비종착 치환 | `grep -c '비종착' SKILL.md` | 0건(S3(b) 치환 잔존 없음 — '완료 아님 표시' 계열) |
 | C6 파일 범위·규모 | `git status --porcelain` ∧ `wc -l SKILL.md TESTS-GATES.md` | M SKILL.md 단일(verify 시점)·SKILL.md 504→509(+5)·650 경계·800 하드캡 내 |
 | 배포 | `python3 scripts/deploy_global.py` 2회 | 1회째 미러 동기·2회째 멱등(changes_total 0) — 아래 verify 기록 |
