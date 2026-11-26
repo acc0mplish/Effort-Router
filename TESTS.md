@@ -277,3 +277,28 @@ TDD 해당 없음(문서 과업) — 대체 확인 수단 V1~V6이 verify를 구
 
 검증 입력 변경 고지(§7): `scripts/test_model_combos.py`(허용 조합 9→13개 확장: `ALLOWED_GEMINI` 4종[`gemini-4-argon-medium`·`gemini-4-hydrogen-high`·`gemini-4-argon-high`·`gemini-4-carbon-high`]·`EXPECTED_GEMINI_ROLE` 11종·`READONLY_GEMINI_ROLES` 4종 추가 — 기존 `ALLOWED_CLAUDE`·`ALLOWED_CODEX`·`ALLOWED_GLM` 9조합 단언 불변) 및 `scripts/test_deploy_global.py:132`(`MIRROR_MANIFEST` 72→87 확장에 따른 `report['mirror_synced']` 기대치 `144→174` 정합 갱신 — 기존 `test_a`–`test_k`·`SnapshotCollisionTests` 무변경).
 역사 원기록 보존 주석: 위 r31 `R8` 행(`TESTS.md:182`, `동결 어댑터 diff(chat-app·zcode·gemini·qwen·grok) | 0행`)은 r31 당시 실측 원기록으로 바이트 무수정 보존한다. `gemini`는 2026-10-12 구형 삭제 후 2026-11-18 `r58`에서 Google Antigravity 기준으로 재구축·활성화되었으며, `qwen`·`grok`은 동결(미복원) 상태를 유지한다.
+
+## r63 GLM 심층 계약 glm-5.4 전환 (2026-11-26)
+
+원 요구: `"glm 이 업데이트됐는데  이건 클로드 하네스에 glm 사용중임 확인좀해 우리 에포트 라우터"` · `"이제 5.4 비전됨"` · `"glm zcode도고쳐"` (심층 모델 표기 glm-5.3 → glm-5.4 전환·게이트 정규화·비전 실측 반영)
+변경: 수정 11(`scripts/test_model_combos.py` · `scripts/test_glm_slot_gate.py` · `scripts/glm_slot_gate.py` · `platforms/glm.md` · `platforms/zcode.md` · `SKILL.md` · `README.md` · `platforms/CLAUDE.md` · `CHANGELOG.md` · `TESTS.md` · `TESTS-GATES.md`)
+
+RED 실측(테스트 선수정 — Phase 1 시점 S1, exit 1·Ran 33·failures=10):
+`test_glm_role_table_in_adapter_matches_distribution` · `test_pass_exits_0_with_pass_prefix` · `test_deep_slot_rejects_flash_and_legacy_value` · `test_lookalike_names_are_mismatch`(subTest 3건) · `test_suffix_and_case_are_normalized` · `test_repo_roles_pass_with_documented_mapping` · `test_full_mapping_passes` · `test_unused_slot_is_not_checked`
+
+검증 결과:
+| ID | 실행 명령 | 결과 |
+|---|---|---|
+| S1 | `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_model_combos.py scripts/test_glm_slot_gate.py scripts/test_codex_routing.py scripts/test_verify_duplicate_detection.py` | exit 0 — Ran 33 tests, OK (기준선 27 + 신규 6) |
+| S2(a) | `ANTHROPIC_DEFAULT_SONNET_MODEL=glm-5.4[1m] python3 scripts/glm_slot_gate.py` | exit 0 — `glm-slot-gate: PASS — 모든 역할 별칭이 GLM 모델로 매핑됨` |
+| S2(b) | `bash -i -c 'glm >/dev/null 2>&1; python3 /mnt/d/DEV/acc0mplish/Effort-Router/scripts/glm_slot_gate.py'` | exit 0 — `glm-slot-gate: PASS` (nvm 안내 줄 제외) |
+| S2(c) | `ANTHROPIC_BASE_URL=https://api.anthropic.com python3 scripts/glm_slot_gate.py` | exit 2 — `glm-slot-gate: bypass — GLM 세션 아님(ANTHROPIC_BASE_URL 부재 또는 Anthropic 호스트)` |
+| S3 | `git grep -niP 'glm-5\.3(?![-\s]?flash)' -- SKILL.md README.md platforms scripts TESTS-GATES.md` | exit 1 — 출력 없음(변경 전 43줄 → 0줄) |
+| S3b | `git grep -cE 'glm-5\.4 / (max|high)' -- SKILL.md README.md platforms/glm.md platforms/zcode.md` | exit 0 — `SKILL.md:2`·`README.md:2`·`platforms/glm.md:10`·`platforms/zcode.md:3` (번들 기대치와 일치) |
+| P1 | `git diff --numstat HEAD -- TESTS-ARCHIVE.md CHANGELOG.md TESTS-GATES.md` | exit 0 — `1 0 CHANGELOG.md`·`1 1 TESTS-GATES.md` 2행만 (과거 기록 불변) |
+
+검증 입력 변경 고지(§7): 테스트 2파일의 기대값 갱신 — 사유는 모델 ID 전환(glm-5.3 심층 → glm-5.4)이다. `scripts/test_model_combos.py`(`ALLOWED_GLM` 3쌍 중 심층 2쌍 glm-5.4·`EXPECTED_GLM_ROLE` 심층 8행 glm-5.4 — 조합 수 단언 9·13 불변) 및 `scripts/test_glm_slot_gate.py`(`GOOD_ENV` 실 env 꼴 갱신 + 신규 테스트 6메서드: 정규화 통과 1·유사명 불일치 1·음성 3건 1·`main()` 종료 어휘 3건 — 총 33테스트로 증가).
+
+②적대검토(3렌즈 — 완전성·기술적 오류·위험): 3렌즈 모두 조건부 승인(HIGH 8·MEDIUM 15·LOW 9·CRITICAL 0). 발견은 전부 확정 번들에 반영했다 — 검사식 S3을 lookahead형으로 교체·S3b `-E`와 기대값 정정·비전 실측 문장·크레딧 배율 공식값·음성 테스트·`main()` 종료 어휘 테스트·배포 보류 고지. 렌즈 2·3은 사용자 발화 "병렬"로 동시 실행했다.
+④리뷰(`review-pr-xhigh`): CONDITIONAL PASS — claims 4/4 verified · CRITICAL 0·HIGH 0·MEDIUM 1·LOW 8. 메인 후속 수정 2건(문서 전용 — 수정 뒤 S1~P1 재실행 통과): `SKILL.md`:540에 "5.4는 미실측 보수 기본값" 단서 추가, `platforms/glm.md` 슬롯 매핑 문구를 "임의의 `[...]` 접미사"로 정정. 미조치 LOW(유사명 haiku subTest·불일치 메시지 원값 보존 단언·`TESTS-GATES.md`:351 행번 노후·접미사만 있는 값의 메시지 구분)는 과업 번들 후속 개선으로 이월했다.
+검증 핀(`python3 scripts/verify_pin.py --base 55d89e8 --verify-cmd <S1과 동일 명령> --save docs/task-id/r63-glm-54/`): exit 1 — 플래그 `verification_input_modified` 1건. 정당화: 검증 입력 변경 = 위 고지의 테스트 2파일 기대값 갱신 + 신규 테스트 6메서드다(모델 ID 전환의 필수 수반 변경). 감사 파일 = `docs/task-id/r63-glm-54/verify-pin-*.json`(gitignore 대상).

@@ -7,7 +7,9 @@
 
 검사 계약 (환경변수 기준):
 - `ANTHROPIC_BASE_URL`이 없거나 `api.anthropic.com`이면 Claude 세션 → 대상 아님(exit 2, bypass).
-- GLM 세션이면 역할 파일에 쓰인 slot별 `ANTHROPIC_DEFAULT_<SLOT>_MODEL`이 SLOT_MODEL과 정확히 일치해야 한다.
+- GLM 세션이면 역할 파일에 쓰인 slot별 `ANTHROPIC_DEFAULT_<SLOT>_MODEL`이 SLOT_MODEL과
+  기저 모델명 완전일치 + `[...]` 접미사·대소문자 무시로 일치해야 한다.
+  임의 `[...]` 접미사를 허용한다 — 프록시 수용 여부는 게이트 범위 밖이다(미검증).
   누락·불일치·Claude 모델 ID는 위반(exit 1).
 
 종료코드: 0 통과 / 1 위반 / 2 대상 아님(bypass).
@@ -22,15 +24,21 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# 사용자 확정 배분(2026-10-12, platforms/glm.md 이원 모델 정책).
-# haiku 슬롯 = 반복 구현 경량 모델, sonnet·opus 슬롯 = GLM-5.3 고정.
+# 배분은 2026-10-12 사용자 확정, 모델명은 2026-11-26 r63 갱신(심층 GLM-5.4).
+# haiku 슬롯 = 반복 구현 경량 모델, sonnet·opus 슬롯 = 심층 고정.
 SLOT_MODEL = {
     'haiku': 'glm-5.3-flash',
-    'sonnet': 'glm-5.3',
-    'opus': 'glm-5.3',
+    'sonnet': 'glm-5.4',
+    'opus': 'glm-5.4',
 }
 ANTHROPIC_HOST = 'api.anthropic.com'
 FRONTMATTER_MODEL = re.compile(r'^model:\s*(\S+)\s*$', re.MULTILINE)
+SUFFIX = re.compile(r'\[[^\]]*\]\s*$')
+
+
+def normalize_model(value):
+    """기저 모델명 판정용 정규화 — `[...]` 접미사 제거·양끝 공백 제거·대소문자 무시."""
+    return SUFFIX.sub('', (value or '').strip()).strip().casefold()
 
 
 def is_glm_session(env):
@@ -57,12 +65,13 @@ def violations(env, agents_dir):
             found.append(f'slot `{slot}`: 매핑 정책 밖 별칭 — GLM 세션에서 Claude로 해석될 수 있다')
             continue
         key = f'ANTHROPIC_DEFAULT_{slot.upper()}_MODEL'
-        got = (env.get(key) or '').strip()
+        got_raw = env.get(key) or ''
         want = SLOT_MODEL[slot]
+        got = normalize_model(got_raw)
         if not got:
             found.append(f'{key} 미설정 — `{slot}` 역할이 Claude {slot}로 스폰된다 (기대 {want})')
-        elif got != want:
-            found.append(f'{key}={got} — 기대값 {want}과 불일치')
+        elif got != normalize_model(want):
+            found.append(f'{key}={got_raw} — 기대값 {want} 불일치')
     return found
 
 

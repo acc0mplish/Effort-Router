@@ -2,9 +2,13 @@
 """glm_slot_gate 계약 테스트 — GLM 세션에서 Claude 별칭 누수(2026-10-18 사고) 재발 방지."""
 from __future__ import annotations
 
+import contextlib
+import io
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import glm_slot_gate as gate
 
@@ -12,9 +16,9 @@ ROOT = Path(__file__).resolve().parents[1]
 GLM_BASE = 'https://glm.example.invalid/api/anthropic'  # 호스트는 검사 대상이 아니다(비-Anthropic이면 충분)
 GOOD_ENV = {
     'ANTHROPIC_BASE_URL': GLM_BASE,
-    'ANTHROPIC_DEFAULT_HAIKU_MODEL': 'glm-5.3-flash',
-    'ANTHROPIC_DEFAULT_SONNET_MODEL': 'glm-5.3',
-    'ANTHROPIC_DEFAULT_OPUS_MODEL': 'glm-5.3',
+    'ANTHROPIC_DEFAULT_HAIKU_MODEL': 'glm-5.3-Flash[1m]',
+    'ANTHROPIC_DEFAULT_SONNET_MODEL': 'glm-5.4[1m]',
+    'ANTHROPIC_DEFAULT_OPUS_MODEL': 'glm-5.4[1m]',
 }
 
 
@@ -90,6 +94,94 @@ class DocumentedMappingTests(unittest.TestCase):
         for slot, model in gate.SLOT_MODEL.items():
             with self.subTest(slot=slot):
                 self.assertIn(f'ANTHROPIC_DEFAULT_{slot.upper()}_MODEL": "{model}"', text)
+
+
+class NormalizationTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.dir = self._tmp.name
+
+    def test_suffix_and_case_are_normalized(self):
+        # (i) 정규화 통과 — `[...]` 접미사·대소문자는 기저 모델명 판정에서 무시된다.
+        write_roles(self.dir, {'a.md': 'haiku', 'b.md': 'sonnet', 'c.md': 'opus'})
+        env = dict(
+            GOOD_ENV,
+            ANTHROPIC_DEFAULT_SONNET_MODEL='GLM-5.4 [1m]',
+            ANTHROPIC_DEFAULT_OPUS_MODEL='GLM-5.4 [1m]',
+            ANTHROPIC_DEFAULT_HAIKU_MODEL='glm-5.3-flash',
+        )
+        self.assertEqual(gate.violations(env, self.dir), [])
+
+    def test_lookalike_names_are_mismatch(self):
+        # (ii) 유사명은 정규화로도 통과하지 못한다 — '불일치'여야 한다.
+        write_roles(self.dir, {'a.md': 'sonnet', 'b.md': 'opus', 'c.md': 'haiku'})
+        for value in ('glm-5.3-flashx', 'glm-5.4-flash', 'claude-opus-5-5[1m]'):
+            with self.subTest(value=value):
+                env = dict(GOOD_ENV, ANTHROPIC_DEFAULT_SONNET_MODEL=value)
+                found = gate.violations(env, self.dir)
+                self.assertEqual(len(found), 1)
+                self.assertIn('불일치', found[0])
+
+    def test_deep_slot_rejects_flash_and_legacy_value(self):
+        # (iii) 음성 3건 — 심층 슬롯에 Flash·haiku 슬롯에 심층·구값 모두 위반이어야 한다.
+        # 아래 `'glm-5.' + '3[1m]'` 결합은 S3 grep(구 세대 표기 잔존 0)을 회피하기 위한 것이다.
+        write_roles(self.dir, {'a.md': 'sonnet', 'b.md': 'opus', 'c.md': 'haiku'})
+
+        deep_with_flash = dict(
+            GOOD_ENV,
+            ANTHROPIC_DEFAULT_SONNET_MODEL='glm-5.3-Flash[1m]',
+            ANTHROPIC_DEFAULT_OPUS_MODEL='glm-5.3-Flash[1m]',
+        )
+        found = gate.violations(deep_with_flash, self.dir)
+        self.assertEqual(len(found), 2)
+        self.assertTrue(all('불일치' in f for f in found))
+
+        haiku_with_deep = dict(GOOD_ENV, ANTHROPIC_DEFAULT_HAIKU_MODEL='glm-5.4[1m]')
+        found = gate.violations(haiku_with_deep, self.dir)
+        self.assertEqual(len(found), 1)
+        self.assertIn('불일치', found[0])
+
+        legacy = 'glm-5.' + '3[1m]'  # 리터럴 결합 — S3 grep 회피(구값 회귀 검출용)
+        env = dict(GOOD_ENV, ANTHROPIC_DEFAULT_SONNET_MODEL=legacy)
+        found = gate.violations(env, self.dir)
+        self.assertEqual(len(found), 1)
+        self.assertIn('불일치', found[0])
+
+
+class ExitVocabularyTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.dir = self._tmp.name
+
+    def _run_main(self, env):
+        buffer = io.StringIO()
+        with mock.patch.dict(os.environ, env, clear=True):
+            with contextlib.redirect_stdout(buffer):
+                code = gate.main(['--agents-dir', self.dir])
+        return code, buffer.getvalue()
+
+    def test_anthropic_host_exits_2_with_bypass_prefix(self):
+        # (iv) main() 종료 어휘 — bypass는 2·'glm-slot-gate: bypass'.
+        code, out = self._run_main({'ANTHROPIC_BASE_URL': 'https://api.anthropic.com'})
+        self.assertEqual(code, 2)
+        self.assertTrue(out.startswith('glm-slot-gate: bypass'))
+
+    def test_violation_exits_1_with_fail_prefix(self):
+        write_roles(self.dir, {'a.md': 'sonnet', 'b.md': 'opus', 'c.md': 'haiku'})
+        code, out = self._run_main(dict(
+            GOOD_ENV,
+            ANTHROPIC_DEFAULT_SONNET_MODEL='claude-sonnet-5-5',
+        ))
+        self.assertEqual(code, 1)
+        self.assertTrue(out.startswith('glm-slot-gate: FAIL'))
+
+    def test_pass_exits_0_with_pass_prefix(self):
+        write_roles(self.dir, {'a.md': 'sonnet', 'b.md': 'opus', 'c.md': 'haiku'})
+        code, out = self._run_main(GOOD_ENV)
+        self.assertEqual(code, 0)
+        self.assertTrue(out.startswith('glm-slot-gate: PASS'))
 
 
 if __name__ == '__main__':
